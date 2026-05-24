@@ -1,6 +1,6 @@
 import json
 
-from actions import answer, read_file, write_file, list_files
+from actions import answer, read_file, run_command, write_file, list_files
 from llm import ask_chatgpt
 from prompts import SYSTEM_PROMPT
 
@@ -30,6 +30,9 @@ def execute_action(action_data: dict) -> str:
 
     if action == "list_files":
         return list_files(arguments.get("path", "."))
+
+    if action == "run_command":
+        return run_command(arguments.get("command", "."))
 
     return f"Неизвестное действие: {action}"
 

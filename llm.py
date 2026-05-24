@@ -1,16 +1,15 @@
-import os
 from openai import OpenAI
 
 
-client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+client = OpenAI(
+    base_url="http://localhost:1234/v1",
+    api_key="lm-studio",  # любое значение, LM Studio обычно не проверяет ключ
+)
 
 
 def ask_chatgpt(system_prompt: str, user_input: str) -> str:
-    if not os.getenv("OPENAI_API_KEY"):
-        raise RuntimeError("Не найден OPENAI_API_KEY в переменных окружения")
-
     response = client.chat.completions.create(
-        model="gpt-4.1-mini",
+        model="local-model",
         messages=[
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_input},
