@@ -52,7 +52,7 @@ def run_command(command: list[str], cwd: str = ".") -> dict:
     try:
         result = subprocess.run(
             command,
-            cwd=Path(cwd).resolve(),
+            cwd=safe_path(cwd),
             capture_output=True,
             text=True,
             timeout=10,

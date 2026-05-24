@@ -1,4 +1,5 @@
 from openai import OpenAI
+from openai.types.chat import ChatCompletionMessageParam
 
 
 client = OpenAI(
@@ -7,14 +8,9 @@ client = OpenAI(
 )
 
 
-def ask_chatgpt(system_prompt: str, user_input: str) -> str:
+def ask_chatgpt(messages: list[ChatCompletionMessageParam]) -> str:
     response = client.chat.completions.create(
-        model="local-model",
-        messages=[
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_input},
-        ],
-        temperature=0.2,
+        model="local-model", messages=messages, temperature=0.2
     )
 
-    return response.choices[0].message.content
+    return response.choices[0].message.content or ""

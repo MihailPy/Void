@@ -1,8 +1,13 @@
 import json
 
-from actions import answer, read_file, run_command, write_file, list_files
+from openai.types.chat import ChatCompletionMessageParam
+
+from actions import read_file, run_command, write_file, list_files
 from llm import ask_chatgpt
 from prompts import SYSTEM_PROMPT
+
+
+MAX_STEPS = 6
 
 
 def parse_llm_response(raw_response: str) -> dict:
@@ -12,12 +17,12 @@ def parse_llm_response(raw_response: str) -> dict:
         raise ValueError(f"LLM вернула невалидный JSON:\n{raw_response}")
 
 
-def execute_action(action_data: dict) -> str:
+def execute_action(action_data: dict):
     action = action_data.get("action")
     arguments = action_data.get("arguments", {})
 
-    if action == "answer":
-        return answer(arguments.get("text", ""))
+    if action == "final_answer":
+        return arguments.get("text", "")
 
     if action == "read_file":
         return read_file(arguments["path"])
@@ -32,22 +37,67 @@ def execute_action(action_data: dict) -> str:
         return list_files(arguments.get("path", "."))
 
     if action == "run_command":
-        return run_command(arguments.get("command", "."))
+        return run_command(
+            arguments.get("command", []),
+            arguments.get("cwd", "."),
+        )
 
     return f"Неизвестное действие: {action}"
 
 
 def run_agent(user_input: str) -> str:
-    raw_response = ask_chatgpt(SYSTEM_PROMPT, user_input)
+    messages: list[ChatCompletionMessageParam] = [
+        {
+            "role": "system",
+            "content": SYSTEM_PROMPT,
+        },
+        {
+            "role": "user",
+            "content": user_input,
+        },
+    ]
 
-    print("\n--- RAW LLM RESPONSE ---")
-    print(raw_response)
+    for step in range(1, MAX_STEPS + 1):
+        print(f"\n--- STEP {step} ---")
 
-    action_data = parse_llm_response(raw_response)
+        raw_response = ask_chatgpt(messages)
 
-    print("\n--- ACTION ---")
-    print(action_data["action"])
+        print("\n--- RAW LLM RESPONSE ---")
+        print(raw_response)
 
-    result = execute_action(action_data)
+        action_data = parse_llm_response(raw_response)
 
-    return result
+        action = action_data.get("action")
+        reason = action_data.get("reason")
+
+        print("\n--- ACTION ---")
+        print(action)
+
+        print("\n--- REASON ---")
+        print(reason)
+
+        result = execute_action(action_data)
+
+        if action == "final_answer":
+            return str(result)
+
+        observation = str(result)
+
+        print("\n--- OBSERVATION ---")
+        print(observation)
+
+        messages.append(
+            {
+                "role": "assistant",
+                "content": raw_response,
+            }
+        )
+
+        messages.append(
+            {
+                "role": "user",
+                "content": f"Observation:\n{observation}",
+            }
+        )
+
+    return "Void остановился: достигнут лимит шагов."
