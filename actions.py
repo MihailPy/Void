@@ -1,6 +1,7 @@
-from pathlib import Path
 import subprocess
+from pathlib import Path
 
+from self_tools import create_self_tool, list_self_tools, run_self_tool
 
 BASE_DIR = Path(__file__).parent.resolve()
 
@@ -134,3 +135,15 @@ def list_files(path: str) -> str:
         items.append(f"{prefix} {item.name}")
 
     return "\n".join(items) if items else "Папка пустая"
+
+
+def create_tool(name: str, code: str) -> dict:
+    return create_self_tool(name, code)
+
+
+def list_tools() -> dict:
+    return list_self_tools()
+
+
+def run_tool(name: str, args: dict | None = None) -> dict:
+    return run_self_tool(name, args)
