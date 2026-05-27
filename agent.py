@@ -2,10 +2,17 @@ import json
 
 from openai.types.chat import ChatCompletionMessageParam
 
-from actions import read_file, run_command, write_file, list_files
+from actions import (
+    create_tool,
+    list_files,
+    list_tools,
+    read_file,
+    run_command,
+    run_tool,
+    write_file,
+)
 from llm import ask_chatgpt
 from prompts import SYSTEM_PROMPT
-
 
 MAX_STEPS = 6
 
@@ -40,6 +47,21 @@ def execute_action(action_data: dict):
         return run_command(
             arguments.get("command", []),
             arguments.get("cwd", "."),
+        )
+
+    if action == "create_tool":
+        return create_tool(
+            arguments["name"],
+            arguments["code"],
+        )
+
+    if action == "list_tools":
+        return list_tools()
+
+    if action == "run_tool":
+        return run_tool(
+            arguments["name"],
+            arguments.get("args", {}),
         )
 
     return f"Неизвестное действие: {action}"
