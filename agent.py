@@ -15,6 +15,7 @@ from actions import (
     write_file,
 )
 from llm import ask_chatgpt
+from memory_manager import append_short_memory, read_short_memory
 from planner import has_unfinished_steps
 from prompts import SYSTEM_PROMPT
 
