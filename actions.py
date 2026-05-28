@@ -2,6 +2,7 @@ import subprocess
 from pathlib import Path
 
 from self_tools import create_self_tool, list_self_tools, run_self_tool
+from planner import save_plan, read_plan, mark_plan_step_done
 
 BASE_DIR = Path(__file__).parent.resolve()
 
@@ -147,3 +148,15 @@ def list_tools() -> dict:
 
 def run_tool(name: str, args: dict | None = None) -> dict:
     return run_self_tool(name, args)
+
+
+def create_plan(steps: list[str]) -> str:
+    return save_plan(steps)
+
+
+def get_plan() -> str:
+    return read_plan()
+
+
+def complete_plan_step(step_number: int) -> str:
+    return mark_plan_step_done(step_number)
