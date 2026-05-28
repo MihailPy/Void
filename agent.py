@@ -29,7 +29,7 @@ def parse_llm_response(raw_response: str) -> dict:
         raise ValueError(f"LLM вернула невалидный JSON:\n{raw_response}")
 
 
-def execute_action(action_data: dict):
+def execute_action(action_data: dict) -> str | dict:
     action = action_data.get("action")
     arguments = action_data.get("arguments", {})
 
@@ -82,10 +82,21 @@ def execute_action(action_data: dict):
 
 
 def run_agent(user_input: str) -> str:
+    short_memory = read_short_memory()
+
+    append_short_memory(
+        "User Request",
+        user_input,
+    )
+
     messages: list[ChatCompletionMessageParam] = [
         {
             "role": "system",
             "content": SYSTEM_PROMPT,
+        },
+        {
+            "role": "user",
+            "content": f"MEMORY:\n{short_memory}",
         },
         {
             "role": "user",
@@ -157,14 +168,22 @@ def run_agent(user_input: str) -> str:
         debug_log("REASON", reason)
 
         result = execute_action(action_data)
+        observation = str(result)
+
+        append_short_memory(
+            "Agent Action",
+            f"Action: {action}\nReason: {reason}\nResult:\n{result}",
+        )
 
         if action == "read_file":
             file_was_read = True
 
         if action == "final_answer":
-            return str(result)
-
-        observation = str(result)
+            append_short_memory(
+                "Final Answer",
+                observation,
+            )
+            return observation
 
         debug_log("OBSERVATION", observation)
 
