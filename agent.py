@@ -16,7 +16,13 @@ from actions import (
 )
 from llm import ask_chatgpt
 from memory_manager import append_short_memory, read_short_memory
-from planner import has_unfinished_steps
+from planner import (
+    clear_plan,
+    get_unfinished_steps,
+    has_unfinished_steps,
+    is_final_step,
+    mark_next_step_done,
+)
 from prompts import SYSTEM_PROMPT
 
 MAX_STEPS = 12
@@ -106,6 +112,7 @@ def run_agent(user_input: str) -> str:
     ]
 
     plan_required = task_requires_plan(user_input)
+    clear_plan()
     plan_created = False
     file_read_required = task_requires_file_read(user_input)
     file_was_read = False
@@ -171,6 +178,20 @@ def run_agent(user_input: str) -> str:
         result = execute_action(action_data)
         observation = str(result)
 
+        WORK_ACTIONS = {
+            "read_file",
+            "write_file",
+            "list_files",
+            "run_command",
+            "create_tool",
+            "list_tools",
+            "run_tool",
+        }
+
+        if plan_created and action in WORK_ACTIONS:
+            plan_result = mark_next_step_done()
+            observation += f"\n\nPlan update: {plan_result}"
+
         append_short_memory(
             "Agent Action",
             f"Action: {action}\nReason: {reason}\nResult:\n{result}",
@@ -180,11 +201,33 @@ def run_agent(user_input: str) -> str:
             file_was_read = True
 
         if action == "final_answer":
+            unfinished_steps = get_unfinished_steps()
+
+            if unfinished_steps:
+                if len(unfinished_steps) == 1 and is_final_step(unfinished_steps[0][1]):
+                    mark_next_step_done()
+                else:
+                    messages.append(
+                        {
+                            "role": "user",
+                            "content": (
+                                "Ошибка управления: план ещё не завершён. "
+                                "Сначала выполни следующий рабочий шаг плана."
+                            ),
+                        }
+                    )
+                    continue
+
+            final_text = observation
+
             append_short_memory(
                 "Final Answer",
-                observation,
+                final_text,
             )
-            return observation
+
+            clear_plan()
+
+            return final_text
 
         debug_log("OBSERVATION", observation)
 
