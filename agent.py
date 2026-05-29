@@ -1,4 +1,5 @@
 import json
+import re
 
 from openai.types.chat import ChatCompletionMessageParam
 
@@ -29,11 +30,24 @@ MAX_STEPS = 12
 DEBUG = True
 
 
+def extract_json(text: str) -> str:
+
+    text = text.strip()
+
+    if text.startswith("{") and text.endswith("}"):
+        return text
+
+    match = re.search(r"\{.*\}", text, flags=re.DOTALL)
+
+    if not match:
+        raise ValueError(f"JSON не найден:\n{text}")
+
+    return match.group(0)
+
+
 def parse_llm_response(raw_response: str) -> dict:
-    try:
-        return json.loads(raw_response)
-    except json.JSONDecodeError:
-        raise ValueError(f"LLM вернула невалидный JSON:\n{raw_response}")
+    json_text = extract_json(raw_response)
+    return json.loads(json_text)
 
 
 def execute_action(action_data: dict) -> str | dict:
@@ -124,7 +138,31 @@ def run_agent(user_input: str) -> str:
 
         debug_log("RAW LLM RESPONSE", raw_response)
 
-        action_data = parse_llm_response(raw_response)
+        try:
+            action_data = parse_llm_response(raw_response)
+        except json.JSONDecodeError:
+            messages.append(
+                {
+                    "role": "user",
+                    "content": (
+                        "Твой предыдущий ответ был невалидным JSON. "
+                        "Повтори тот же самый action, но верни только корректный JSON без markdown и пояснений."
+                    ),
+                }
+            )
+            continue
+        except ValueError:
+            messages.append(
+                {
+                    "role": "user",
+                    "content": (
+                        "Твой предыдущий ответ не содержал JSON. "
+                        "Верни только JSON в формате: "
+                        '{"action": "...", "arguments": {}, "reason": "..."}'
+                    ),
+                }
+            )
+            continue
 
         action = action_data.get("action")
 
