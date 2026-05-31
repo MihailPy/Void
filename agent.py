@@ -11,6 +11,7 @@ from actions import (
     list_files,
     list_tools,
     read_file,
+    request_capability,
     run_command,
     run_tool,
     write_file,
@@ -98,6 +99,15 @@ def execute_action(action_data: dict) -> str | dict:
 
     if action == "complete_plan_step":
         return complete_plan_step(arguments["step_number"])
+    if action == "request_capability":
+        return request_capability(
+            name=arguments["name"],
+            problem=arguments["problem"],
+            why_self_tool_not_enough=arguments["why_self_tool_not_enough"],
+            suggested_function_signature=arguments["suggested_function_signature"],
+            suggested_behavior=arguments["suggested_behavior"],
+            usage_example=arguments["usage_example"],
+        )
 
     return f"Неизвестное действие: {action}"
 
@@ -215,6 +225,16 @@ def run_agent(user_input: str) -> str:
 
         result = execute_action(action_data)
         observation = str(result)
+
+        if action == "request_capability":
+            append_short_memory(
+                "Capability Request",
+                observation,
+            )
+
+            clear_plan()
+
+            return observation
 
         WORK_ACTIONS = {
             "read_file",

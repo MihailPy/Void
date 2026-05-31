@@ -164,3 +164,34 @@ def complete_plan_step(step_number: int) -> str:
 
 def delete_plan() -> str:
     return clear_plan()
+
+
+def request_capability(
+    name: str,
+    problem: str,
+    why_self_tool_not_enough: str,
+    suggested_function_signature: str,
+    suggested_behavior: str,
+    usage_example: str,
+) -> str:
+    return f"""
+Void запрашивает новую built-in capability.
+
+Название:
+{name}
+
+Проблема:
+{problem}
+
+Почему self-tool не подходит:
+{why_self_tool_not_enough}
+
+Предлагаемая сигнатура:
+{suggested_function_signature}
+
+Поведение:
+{suggested_behavior}
+
+Пример использования:
+{usage_example}
+"""
