@@ -10,14 +10,20 @@ from actions import (
     get_plan,
     list_files,
     list_tools,
+    read_facts,
     read_file,
+    remember_fact,
     request_capability,
     run_command,
     run_tool,
     write_file,
 )
 from llm import ask_chatgpt
-from memory_manager import append_short_memory, read_short_memory
+from memory_manager import (
+    append_short_memory,
+    read_medium_memory,
+    read_short_memory,
+)
 from planner import (
     clear_plan,
     get_unfinished_steps,
@@ -109,11 +115,18 @@ def execute_action(action_data: dict) -> str | dict:
             usage_example=arguments["usage_example"],
         )
 
+    if action == "remember_fact":
+        return remember_fact(arguments["fact"])
+
+    if action == "read_facts":
+        return read_facts()
+
     return f"Неизвестное действие: {action}"
 
 
 def run_agent(user_input: str) -> str:
     short_memory = read_short_memory()
+    medium_memory = read_medium_memory()
 
     append_short_memory(
         "User Request",
@@ -128,6 +141,10 @@ def run_agent(user_input: str) -> str:
         {
             "role": "user",
             "content": f"MEMORY:\n{short_memory}",
+        },
+        {
+            "role": "user",
+            "content": f"MEDIUM MEMORY:\n{medium_memory}",
         },
         {
             "role": "user",
@@ -226,9 +243,14 @@ def run_agent(user_input: str) -> str:
         result = execute_action(action_data)
         observation = str(result)
 
-        if action == "request_capability":
+        TERMINAL_ACTIONS = {
+            "remember_fact",
+            "request_capability",
+        }
+
+        if action in TERMINAL_ACTIONS:
             append_short_memory(
-                "Capability Request",
+                "Terminal Action",
                 observation,
             )
 

@@ -3,6 +3,7 @@ from pathlib import Path
 
 from planner import clear_plan, mark_plan_step_done, read_plan, save_plan
 from self_tools import create_self_tool, list_self_tools, run_self_tool
+from memory_manager import read_medium_memory, append_medium_memory
 
 BASE_DIR = Path(__file__).parent.resolve()
 
@@ -195,3 +196,11 @@ Void запрашивает новую built-in capability.
 Пример использования:
 {usage_example}
 """
+
+
+def remember_fact(fact: str) -> str:
+    return append_medium_memory(fact)
+
+
+def read_facts() -> str:
+    return read_medium_memory()
