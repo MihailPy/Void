@@ -3,7 +3,12 @@ from pathlib import Path
 
 from planner import clear_plan, mark_plan_step_done, read_plan, save_plan
 from self_tools import create_self_tool, list_self_tools, run_self_tool
-from memory_manager import read_medium_memory, append_medium_memory
+from memory_manager import (
+    read_medium_memory,
+    append_medium_memory,
+    read_project_memory,
+    update_project_memory,
+)
 
 BASE_DIR = Path(__file__).parent.resolve()
 
@@ -204,3 +209,11 @@ def remember_fact(fact: str) -> str:
 
 def read_facts() -> str:
     return read_medium_memory()
+
+
+def read_project() -> str:
+    return read_project_memory()
+
+
+def update_project(content: str) -> str:
+    return update_project_memory(content)

@@ -12,10 +12,12 @@ from actions import (
     list_tools,
     read_facts,
     read_file,
+    read_project,
     remember_fact,
     request_capability,
     run_command,
     run_tool,
+    update_project,
     write_file,
 )
 from llm import ask_chatgpt
@@ -23,6 +25,7 @@ from memory_manager import (
     append_short_memory,
     read_medium_memory,
     read_short_memory,
+    read_project_memory,
 )
 from planner import (
     clear_plan,
@@ -121,12 +124,19 @@ def execute_action(action_data: dict) -> str | dict:
     if action == "read_facts":
         return read_facts()
 
+    if action == "read_project":
+        return read_project()
+
+    if action == "update_project":
+        return update_project(arguments["content"])
+
     return f"Неизвестное действие: {action}"
 
 
 def run_agent(user_input: str) -> str:
     short_memory = read_short_memory()
     medium_memory = read_medium_memory()
+    project_memory = read_project_memory()
 
     append_short_memory(
         "User Request",
@@ -145,6 +155,10 @@ def run_agent(user_input: str) -> str:
         {
             "role": "user",
             "content": f"MEDIUM MEMORY:\n{medium_memory}",
+        },
+        {
+            "role": "user",
+            "content": f"PROJECT MEMORY:\n{project_memory}",
         },
         {
             "role": "user",
@@ -246,6 +260,7 @@ def run_agent(user_input: str) -> str:
         TERMINAL_ACTIONS = {
             "remember_fact",
             "request_capability",
+            "update_project",
         }
 
         if action in TERMINAL_ACTIONS:

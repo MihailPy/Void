@@ -1,149 +1,112 @@
 # Session Memory
 
+
 ## User Request
 
-Time: 2026-06-01 14:34:09
+Time: 2026-06-02 18:26:17
 
-Запомни: я хочу, чтобы Void всегда сначала искал существующие tools перед созданием новых.
+Что сейчас реализовано в проекте Void?
 
 ---
 
 ## Agent Action
 
-Time: 2026-06-01 14:34:34
+Time: 2026-06-02 18:26:43
 
-Action: remember_fact
-Reason: Пользователь явно попросил запомнить это правило работы с self-tools
+Action: read_project
+Reason: Пользователь спрашивает о том, что реализовано в проекте Void — нужно прочитать project memory для получения актуальной информации
 Result:
-Факт сохранён в medium-term memory.
+# Project Memory
 
----
+## Current Version
+Void v0.3
 
-## User Request
+## Implemented
+- Agent Loop
+- Structured JSON output
+- Short-term memory
+- Medium-term memory
+- Self-tools
+- Planning
+- request_capability
 
-Time: 2026-06-01 14:39:08
+## Known Problems
+- Local model sometimes returns invalid JSON
+- Long JSON fields can be truncated
 
-Запомни, меня зовут Шевченко Михаил Романович, если же ты хочешь обращатся ко мне, то зови меня Мастер
+## Decisions
+- Self-tools must be pure functions
+- Built-in tools are required for filesystem/network access
+- Always check existing tools before creating new ones
 
----
-
-## Terminal Action
-
-Time: 2026-06-01 14:39:21
-
-Факт сохранён в medium-term memory.
-
----
-
-## User Request
-
-Time: 2026-06-01 14:40:03
-
-Как меня зовут, обратись ко мне
+## Next Tasks
+- Add project_stats built-in tool
+- Add tool registry
+- Improve JSON retry
 
 ---
 
 ## Agent Action
 
-Time: 2026-06-01 14:40:16
+Time: 2026-06-02 18:27:12
 
 Action: final_answer
-Reason: Простой вопрос пользователя, не требующий выполнения дополнительных действий
+Reason: None
 Result:
-Меня зовут Шевченко Михаил Романович, и вы можете обращаться ко мне как Мастер.
+В проекте Void v0.3 реализовано:
+
+**Основные функции:**
+- Agent Loop — цикл работы агента
+- Structured JSON output — структурированный вывод в JSON
+- Short-term memory — краткосрочная память сессии
+- Medium-term memory — среднесрочная память для важных фактов
+- Self-tools — пользовательские инструменты
+- Planning — создание и выполнение планов
+- request_capability — запрос новых возможностей
+
+**Принятые решения:**
+- Self-tools должны быть чистыми функциями
+- Для доступа к файловой системе/сети требуются built-in tools
+- Всегда проверять существующие tools перед созданием новых
+
+**Известные проблемы:**
+- Локальная модель иногда возвращает невалидный JSON
+- Длинные поля JSON могут обрезаться
+
+**Планируемые задачи:**
+- Добавить project_stats built-in tool
+- Добавить tool registry
+- Улучшить JSON retry
 
 ---
 
 ## Final Answer
 
-Time: 2026-06-01 14:40:16
+Time: 2026-06-02 18:27:12
 
-Меня зовут Шевченко Михаил Романович, и вы можете обращаться ко мне как Мастер.
+В проекте Void v0.3 реализовано:
 
----
+**Основные функции:**
+- Agent Loop — цикл работы агента
+- Structured JSON output — структурированный вывод в JSON
+- Short-term memory — краткосрочная память сессии
+- Medium-term memory — среднесрочная память для важных фактов
+- Self-tools — пользовательские инструменты
+- Planning — создание и выполнение планов
+- request_capability — запрос новых возможностей
 
-## User Request
+**Принятые решения:**
+- Self-tools должны быть чистыми функциями
+- Для доступа к файловой системе/сети требуются built-in tools
+- Всегда проверять существующие tools перед созданием новых
 
-Time: 2026-06-01 14:41:05
+**Известные проблемы:**
+- Локальная модель иногда возвращает невалидный JSON
+- Длинные поля JSON могут обрезаться
 
-Нет тебя зовут Void, а меня ты должен называть Мастер
-
----
-
-## Terminal Action
-
-Time: 2026-06-01 14:41:23
-
-Факт сохранён в medium-term memory.
-
----
-
-## User Request
-
-Time: 2026-06-01 14:41:53
-
-Как меня зовут? Представь меня.
-
----
-
-## Agent Action
-
-Time: 2026-06-01 14:42:06
-
-Action: read_facts
-Reason: Пользователь спрашивает о своём имени и предпочтениях обращения, эта информация должна быть в medium-term memory
-Result:
-# Medium-Term Memory
-
-- Пользователь хочет, чтобы Void всегда сначала искал существующие tools перед созданием новых. _(saved: 2026-06-01 14:34:34)_
-- Пользователя зовут Шевченко Михаил Романович, предпочитает обращаться к AI как Мастер _(saved: 2026-06-01 14:39:21)_
-- Пользователя зовут Шевченко Михаил Романович, предпочитает обращаться к AI как Мастер _(saved: 2026-06-01 14:41:23)_
-
-
----
-
-## Agent Action
-
-Time: 2026-06-01 14:42:21
-
-Action: final_answer
-Reason: Простой вопрос пользователя, вся информация есть в medium-term memory
-Result:
-Меня зовут Шевченко Михаил Романович, и вы можете обращаться ко мне как Мастер.
-
----
-
-## Final Answer
-
-Time: 2026-06-01 14:42:21
-
-Меня зовут Шевченко Михаил Романович, и вы можете обращаться ко мне как Мастер.
-
----
-
-## User Request
-
-Time: 2026-06-01 14:43:33
-
-Я ждал что ты скажешь, "Моего мастера зовут Шевченко Михаил".
-
----
-
-## Agent Action
-
-Time: 2026-06-01 14:43:52
-
-Action: final_answer
-Reason: Пользователь попросил меня сказать фразу в определённой форме, это простой ответ без необходимости выполнения дополнительных действий
-Result:
-Моего мастера зовут Шевченко Михаил.
-
----
-
-## Final Answer
-
-Time: 2026-06-01 14:43:52
-
-Моего мастера зовут Шевченко Михаил.
+**Планируемые задачи:**
+- Добавить project_stats built-in tool
+- Добавить tool registry
+- Улучшить JSON retry
 
 ---

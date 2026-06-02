@@ -72,3 +72,52 @@ def append_medium_memory(fact: str) -> str:
 def clear_medium_memory() -> None:
     MEMORY_DIR.mkdir(exist_ok=True)
     FACTS_PATH.write_text("# Medium-Term Memory\n\n", encoding="utf-8")
+
+
+PROJECT_PATH = MEMORY_DIR / "project.md"
+
+
+def ensure_project_memory() -> None:
+    MEMORY_DIR.mkdir(exist_ok=True)
+
+    if not PROJECT_PATH.exists():
+        PROJECT_PATH.write_text(
+            """# Project Memory
+
+## Current Version
+
+Void v0.3
+
+## Implemented
+
+- Agent Loop
+- Structured JSON output
+- Short-term memory
+- Medium-term memory
+
+## Known Problems
+
+- 
+
+## Decisions
+
+- 
+
+## Next Tasks
+
+- 
+
+""",
+            encoding="utf-8",
+        )
+
+
+def read_project_memory() -> str:
+    ensure_project_memory()
+    return PROJECT_PATH.read_text(encoding="utf-8")
+
+
+def update_project_memory(content: str) -> str:
+    ensure_project_memory()
+    PROJECT_PATH.write_text(content, encoding="utf-8")
+    return "Project memory обновлена."
