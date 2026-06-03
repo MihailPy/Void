@@ -1,0 +1,2 @@
+"""Void local assistant package."""
+
