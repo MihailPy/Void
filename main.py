@@ -1,5 +1,5 @@
 from agent import run_agent
-from memory_manager import clear_short_memory
+from memory_manager import clear_short_memory, clear_medium_memory
 
 
 class Color:
@@ -29,6 +29,8 @@ def print_help():
     print(f"{Color.CYAN}/help{Color.RESET}   показать команды")
     print(f"{Color.CYAN}/exit{Color.RESET}   выйти")
     print(f"{Color.CYAN}/quit{Color.RESET}   выйти")
+    print(f"{Color.CYAN}/clear-facts{Color.RESET} очистить medium-term memory")
+    print(f"{Color.CYAN}/clear-memory{Color.RESET} очистить short-term memory")
     print()
 
 
@@ -67,6 +69,11 @@ def main():
             if user_input == "/clear-memory":
                 clear_short_memory()
                 print(f"{Color.GRAY}Short-term memory cleared.{Color.RESET}")
+                continue
+
+            if user_input == "/clear-facts":
+                clear_medium_memory()
+                print(f"{Color.GRAY}Medium-term memory cleared.{Color.RESET}")
                 continue
 
             result = run_agent(user_input)

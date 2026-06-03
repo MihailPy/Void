@@ -1,4 +1,5 @@
 import json
+import re
 
 from openai.types.chat import ChatCompletionMessageParam
 
@@ -9,25 +10,54 @@ from actions import (
     get_plan,
     list_files,
     list_tools,
+    read_facts,
     read_file,
+    read_project,
+    remember_fact,
+    request_capability,
     run_command,
     run_tool,
+    update_project,
     write_file,
 )
 from llm import ask_chatgpt
-from memory_manager import append_short_memory, read_short_memory
-from planner import has_unfinished_steps
+from memory_manager import (
+    append_short_memory,
+    read_medium_memory,
+    read_short_memory,
+    read_project_memory,
+)
+from planner import (
+    clear_plan,
+    get_unfinished_steps,
+    has_unfinished_steps,
+    is_final_step,
+    mark_next_step_done,
+)
 from prompts import SYSTEM_PROMPT
 
 MAX_STEPS = 12
 DEBUG = True
 
 
+def extract_json(text: str) -> str:
+
+    text = text.strip()
+
+    if text.startswith("{") and text.endswith("}"):
+        return text
+
+    match = re.search(r"\{.*\}", text, flags=re.DOTALL)
+
+    if not match:
+        raise ValueError(f"JSON не найден:\n{text}")
+
+    return match.group(0)
+
+
 def parse_llm_response(raw_response: str) -> dict:
-    try:
-        return json.loads(raw_response)
-    except json.JSONDecodeError:
-        raise ValueError(f"LLM вернула невалидный JSON:\n{raw_response}")
+    json_text = extract_json(raw_response)
+    return json.loads(json_text)
 
 
 def execute_action(action_data: dict) -> str | dict:
@@ -78,12 +108,35 @@ def execute_action(action_data: dict) -> str | dict:
 
     if action == "complete_plan_step":
         return complete_plan_step(arguments["step_number"])
+    if action == "request_capability":
+        return request_capability(
+            name=arguments["name"],
+            problem=arguments["problem"],
+            why_self_tool_not_enough=arguments["why_self_tool_not_enough"],
+            suggested_function_signature=arguments["suggested_function_signature"],
+            suggested_behavior=arguments["suggested_behavior"],
+            usage_example=arguments["usage_example"],
+        )
+
+    if action == "remember_fact":
+        return remember_fact(arguments["fact"])
+
+    if action == "read_facts":
+        return read_facts()
+
+    if action == "read_project":
+        return read_project()
+
+    if action == "update_project":
+        return update_project(arguments["content"])
 
     return f"Неизвестное действие: {action}"
 
 
 def run_agent(user_input: str) -> str:
     short_memory = read_short_memory()
+    medium_memory = read_medium_memory()
+    project_memory = read_project_memory()
 
     append_short_memory(
         "User Request",
@@ -101,11 +154,20 @@ def run_agent(user_input: str) -> str:
         },
         {
             "role": "user",
+            "content": f"MEDIUM MEMORY:\n{medium_memory}",
+        },
+        {
+            "role": "user",
+            "content": f"PROJECT MEMORY:\n{project_memory}",
+        },
+        {
+            "role": "user",
             "content": user_input,
         },
     ]
 
     plan_required = task_requires_plan(user_input)
+    clear_plan()
     plan_created = False
     file_read_required = task_requires_file_read(user_input)
     file_was_read = False
@@ -117,7 +179,31 @@ def run_agent(user_input: str) -> str:
 
         debug_log("RAW LLM RESPONSE", raw_response)
 
-        action_data = parse_llm_response(raw_response)
+        try:
+            action_data = parse_llm_response(raw_response)
+        except json.JSONDecodeError:
+            messages.append(
+                {
+                    "role": "user",
+                    "content": (
+                        "Твой предыдущий ответ был невалидным JSON. "
+                        "Повтори тот же самый action, но верни только корректный JSON без markdown и пояснений."
+                    ),
+                }
+            )
+            continue
+        except ValueError:
+            messages.append(
+                {
+                    "role": "user",
+                    "content": (
+                        "Твой предыдущий ответ не содержал JSON. "
+                        "Верни только JSON в формате: "
+                        '{"action": "...", "arguments": {}, "reason": "..."}'
+                    ),
+                }
+            )
+            continue
 
         action = action_data.get("action")
 
@@ -171,6 +257,36 @@ def run_agent(user_input: str) -> str:
         result = execute_action(action_data)
         observation = str(result)
 
+        TERMINAL_ACTIONS = {
+            "remember_fact",
+            "request_capability",
+            "update_project",
+        }
+
+        if action in TERMINAL_ACTIONS:
+            append_short_memory(
+                "Terminal Action",
+                observation,
+            )
+
+            clear_plan()
+
+            return observation
+
+        WORK_ACTIONS = {
+            "read_file",
+            "write_file",
+            "list_files",
+            "run_command",
+            "create_tool",
+            "list_tools",
+            "run_tool",
+        }
+
+        if plan_created and action in WORK_ACTIONS:
+            plan_result = mark_next_step_done()
+            observation += f"\n\nPlan update: {plan_result}"
+
         append_short_memory(
             "Agent Action",
             f"Action: {action}\nReason: {reason}\nResult:\n{result}",
@@ -180,11 +296,33 @@ def run_agent(user_input: str) -> str:
             file_was_read = True
 
         if action == "final_answer":
+            unfinished_steps = get_unfinished_steps()
+
+            if unfinished_steps:
+                if len(unfinished_steps) == 1 and is_final_step(unfinished_steps[0][1]):
+                    mark_next_step_done()
+                else:
+                    messages.append(
+                        {
+                            "role": "user",
+                            "content": (
+                                "Ошибка управления: план ещё не завершён. "
+                                "Сначала выполни следующий рабочий шаг плана."
+                            ),
+                        }
+                    )
+                    continue
+
+            final_text = observation
+
             append_short_memory(
                 "Final Answer",
-                observation,
+                final_text,
             )
-            return observation
+
+            clear_plan()
+
+            return final_text
 
         debug_log("OBSERVATION", observation)
 

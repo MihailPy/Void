@@ -10,9 +10,7 @@ client = OpenAI(
 
 def ask_chatgpt(messages: list[ChatCompletionMessageParam]) -> str:
     response = client.chat.completions.create(
-        model="local-model",
-        messages=messages,
-        temperature=0.2,
+        model="local-model", messages=messages, temperature=0.2, max_tokens=1000
     )
 
     content = response.choices[0].message.content

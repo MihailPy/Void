@@ -1,8 +1,14 @@
 import subprocess
 from pathlib import Path
 
+from planner import clear_plan, mark_plan_step_done, read_plan, save_plan
 from self_tools import create_self_tool, list_self_tools, run_self_tool
-from planner import save_plan, read_plan, mark_plan_step_done
+from memory_manager import (
+    read_medium_memory,
+    append_medium_memory,
+    read_project_memory,
+    update_project_memory,
+)
 
 BASE_DIR = Path(__file__).parent.resolve()
 
@@ -160,3 +166,54 @@ def get_plan() -> str:
 
 def complete_plan_step(step_number: int) -> str:
     return mark_plan_step_done(step_number)
+
+
+def delete_plan() -> str:
+    return clear_plan()
+
+
+def request_capability(
+    name: str,
+    problem: str,
+    why_self_tool_not_enough: str,
+    suggested_function_signature: str,
+    suggested_behavior: str,
+    usage_example: str,
+) -> str:
+    return f"""
+Void запрашивает новую built-in capability.
+
+Название:
+{name}
+
+Проблема:
+{problem}
+
+Почему self-tool не подходит:
+{why_self_tool_not_enough}
+
+Предлагаемая сигнатура:
+{suggested_function_signature}
+
+Поведение:
+{suggested_behavior}
+
+Пример использования:
+{usage_example}
+"""
+
+
+def remember_fact(fact: str) -> str:
+    return append_medium_memory(fact)
+
+
+def read_facts() -> str:
+    return read_medium_memory()
+
+
+def read_project() -> str:
+    return read_project_memory()
+
+
+def update_project(content: str) -> str:
+    return update_project_memory(content)
