@@ -77,7 +77,7 @@ def main() -> None:
 
             print_response(agent.handle(user_input))
 
-        except KeyboardInterrupt:
+        except (KeyboardInterrupt, EOFError):
             print()
             print(f"{Color.GRAY}Void stopped.{Color.RESET}")
             break
@@ -87,4 +87,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

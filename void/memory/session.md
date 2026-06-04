@@ -470,3 +470,67 @@ File written: Лохи.txt
 
 ---
 
+## User Request
+
+Time: 2026-06-04 17:47:01
+
+Отправь запрос на добавление функции сетевых запросов.
+
+---
+
+## Routed Action
+
+Time: 2026-06-04 17:47:01
+
+Action: request_capability
+Reason: User asks to request a new capability.
+OK: True
+Terminal: True
+
+Void requests a new built-in capability.
+
+Name:
+network_requests
+
+Problem:
+Отправь запрос на добавление функции сетевых запросов.
+
+Why existing tools are not enough:
+Existing safe built-in tools do not provide this capability.
+
+Suggested function signature:
+network_requests(...) -> ToolResult
+
+Suggested behavior:
+Implement the capability as a safe, registered built-in tool with bounded inputs and clear errors.
+
+Usage example:
+Отправь запрос на добавление функции сетевых запросов.
+
+---
+
+## User Request
+
+Time: 2026-06-04 18:00:03
+
+Что ты помнишь?
+
+---
+
+## Routed Action
+
+Time: 2026-06-04 18:00:03
+
+Action: read_facts
+Reason: User asks to read remembered facts.
+OK: True
+Terminal: False
+
+# Facts Memory
+
+- Void должен сначала искать существующие tools перед созданием новых. _(saved: 2026-06-03 16:48:28)_
+- Void всегда сначала ищет существующие tools. _(saved: 2026-06-03 17:08:37)_
+
+
+---
+
