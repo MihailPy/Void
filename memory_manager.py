@@ -121,3 +121,17 @@ def update_project_memory(content: str) -> str:
     ensure_project_memory()
     PROJECT_PATH.write_text(content, encoding="utf-8")
     return "Project memory обновлена."
+
+
+def append_project_note(note: str) -> str:
+    ensure_project_memory()
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    if PROJECT_PATH.exists() and PROJECT_PATH.stat().st_size > 0:
+        with PROJECT_PATH.open("rb+") as file:
+            file.seek(-1, 2)
+            if file.read(1) != b"\n":
+                file.write(b"\n")
+
+    with PROJECT_PATH.open("a", encoding="utf-8") as file:
+        file.write(f"- {note} _(saved: {timestamp})_\n")
+    return "Project note добавлена."

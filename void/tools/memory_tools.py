@@ -35,6 +35,20 @@ def update_project(content: str) -> ToolResult:
     return ToolResult(ok=True, content="Project memory updated.", terminal=True)
 
 
+def append_project_note(note: str) -> ToolResult:
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    path = _path("project.md")
+    if path.exists() and path.stat().st_size > 0:
+        with path.open("rb+") as file:
+            file.seek(-1, 2)
+            if file.read(1) != b"\n":
+                file.write(b"\n")
+
+    with path.open("a", encoding="utf-8") as file:
+        file.write(f"- {note} _(saved: {timestamp})_\n")
+    return ToolResult(ok=True, content="Project note appended.", terminal=True)
+
+
 def read_project() -> ToolResult:
     return ToolResult(ok=True, content=_path("project.md").read_text(encoding="utf-8"))
 
@@ -62,9 +76,14 @@ def definitions() -> list[ToolDefinition]:
         ToolDefinition("remember_fact", "Save a medium-term fact.", remember_fact, terminal=True),
         ToolDefinition("read_facts", "Read saved facts.", read_facts),
         ToolDefinition("update_project", "Replace project memory.", update_project, terminal=True),
+        ToolDefinition(
+            "append_project_note",
+            "Append a note to project memory.",
+            append_project_note,
+            terminal=True,
+        ),
         ToolDefinition("read_project", "Read project memory.", read_project),
         ToolDefinition("append_session", "Append an entry to session memory.", append_session),
         ToolDefinition("clear_session", "Clear session memory.", clear_session, terminal=True),
         ToolDefinition("clear_facts", "Clear facts memory.", clear_facts, terminal=True),
     ]
-

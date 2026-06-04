@@ -62,6 +62,11 @@ update_project:
   "content": "new project memory markdown"
 }
 
+append_project_note:
+{
+  "note": "project memory note to append"
+}
+
 append_session:
 {
   "title": "title",
@@ -86,9 +91,10 @@ request_capability:
 
 Правила выбора:
 - Если задача может быть решена project_stats, используй project_stats.
+- Если пользователь говорит "запомни в памяти проекта: ...", используй append_project_note.
+- update_project используй только для явной команды "полностью перезапиши память проекта: ...".
 - Если задача требует tool, не используй final_answer.
 - Если нужна новая возможность, используй request_capability.
 - request_capability не имеет поля example_code.
 - Не придумывай несуществующие actions.
 """
-

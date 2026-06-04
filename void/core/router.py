@@ -32,8 +32,24 @@ class Router:
                 ),
             )
 
+        project_note_match = re.match(
+            r"^запомни\s+в\s+памяти\s+проекта\s*[:：]\s*(.+)$",
+            text,
+            re.IGNORECASE | re.DOTALL,
+        )
+        if project_note_match:
+            return RouteResult(
+                matched=True,
+                confidence=0.95,
+                action=AgentAction(
+                    action="append_project_note",
+                    arguments={"note": _clean(project_note_match.group(1))},
+                    reason="User explicitly asked to append a project memory note.",
+                ),
+            )
+
         project_update_match = re.match(
-            r"^(?:обнови память проекта|update project memory)\s*[:：]\s*(.+)$",
+            r"^полностью\s+перезапиши\s+память\s+проекта\s*[:：]\s*(.+)$",
             text,
             re.IGNORECASE | re.DOTALL,
         )
@@ -59,9 +75,16 @@ class Router:
                 ),
             )
 
-        if any(
+        if lowered == "память проекта" or any(
             phrase in lowered
-            for phrase in ("что реализовано", "состояние проекта", "что дальше", "память проекта")
+            for phrase in (
+                "что реализовано",
+                "состояние проекта",
+                "что дальше",
+                "покажи память проекта",
+                "прочитай память проекта",
+                "что в памяти проекта",
+            )
         ):
             return RouteResult(
                 matched=True,
