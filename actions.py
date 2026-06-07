@@ -6,6 +6,7 @@ from self_tools import create_self_tool, list_self_tools, run_self_tool
 from memory_manager import (
     read_medium_memory,
     append_medium_memory,
+    append_project_note as append_project_memory_note,
     read_project_memory,
     update_project_memory,
 )
@@ -217,3 +218,7 @@ def read_project() -> str:
 
 def update_project(content: str) -> str:
     return update_project_memory(content)
+
+
+def append_project_note(note: str) -> str:
+    return append_project_memory_note(note)

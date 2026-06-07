@@ -17,6 +17,7 @@ from actions import (
     request_capability,
     run_command,
     run_tool,
+    append_project_note,
     update_project,
     write_file,
 )
@@ -129,6 +130,9 @@ def execute_action(action_data: dict) -> str | dict:
 
     if action == "update_project":
         return update_project(arguments["content"])
+
+    if action == "append_project_note":
+        return append_project_note(arguments["note"])
 
     return f"Неизвестное действие: {action}"
 
@@ -261,6 +265,7 @@ def run_agent(user_input: str) -> str:
             "remember_fact",
             "request_capability",
             "update_project",
+            "append_project_note",
         }
 
         if action in TERMINAL_ACTIONS:
