@@ -12,6 +12,9 @@ from void.core.registry import ToolRegistry
 from void.core.router import Router
 from void.core.types import AgentAction, RouteResult, ToolResult
 from void.prompts import SYSTEM_PROMPT
+from void.skills import build_skill_registry
+from void.skills.registry import SkillRegistry
+from void.skills.types import SkillMatch, SkillResult
 from void.tools.memory_tools import append_session, read_facts, read_project
 
 DIRECT_ROUTE_CONFIDENCE = 0.85
@@ -55,10 +58,12 @@ class Agent:
         self,
         registry: ToolRegistry,
         router: Router | None = None,
+        skill_registry: SkillRegistry | None = None,
         debug: bool = False,
     ) -> None:
         self.registry = registry
         self.router = router or Router()
+        self.skill_registry = skill_registry or build_skill_registry()
         self.debug = debug
 
     def handle(self, user_input: str) -> str:
@@ -78,6 +83,21 @@ class Agent:
                 self._debug("action", route.action)
                 self._debug("tool result", result)
             self._save_result("Routed Action", route.action, result)
+            return result.content
+
+        skill_match = self.skill_registry.match(user_input)
+        if self.debug:
+            self._debug("skill match", skill_match)
+
+        if (
+            skill_match.matched
+            and skill_match.confidence >= DIRECT_ROUTE_CONFIDENCE
+            and skill_match.skill is not None
+        ):
+            result = self.skill_registry.execute(skill_match)
+            if self.debug:
+                self._debug("skill result", result)
+            self._save_skill_result("Skill Action", skill_match, result)
             return result.content
 
         action_or_error = self._ask_for_action(user_input)
@@ -146,9 +166,28 @@ class Agent:
             ),
         )
 
+    def _save_skill_result(
+        self,
+        title: str,
+        match: SkillMatch,
+        result: SkillResult,
+    ) -> None:
+        skill_name = match.skill.name if match.skill is not None else "unknown"
+        append_session(
+            title,
+            (
+                f"Skill: {skill_name}\n"
+                f"Reason: {match.reason}\n"
+                f"Confidence: {match.confidence:.2f}\n"
+                f"OK: {result.ok}\n"
+                f"Terminal: {result.terminal}\n\n"
+                f"{result.content}"
+            ),
+        )
+
     def _debug(self, title: str, value: object) -> None:
         print(f"\n--- {title.upper()} ---")
-        if isinstance(value, (AgentAction, RouteResult, ToolResult)):
+        if isinstance(value, (AgentAction, RouteResult, ToolResult, SkillMatch, SkillResult)):
             print(asdict(value))
         else:
             print(value)

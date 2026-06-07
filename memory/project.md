@@ -11,6 +11,12 @@ Void v0.3
 - Self-tools
 - Planning
 - request_capability
+- Skill System
+
+## Skills
+- summarize_file
+- find_text
+- project_report
 
 ## Known Problems
 - Local model sometimes returns invalid JSON

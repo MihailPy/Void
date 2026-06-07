@@ -2,6 +2,7 @@
 
 from void.core.agent import Agent
 from void.core.types import AgentAction
+from void.skills import build_skill_registry
 from void.tools.builtin import build_registry
 
 DEBUG = False
@@ -32,6 +33,7 @@ def print_help() -> None:
     print(f"{Color.CYAN}/quit{Color.RESET}          exit")
     print(f"{Color.CYAN}/clear-session{Color.RESET} clear session memory")
     print(f"{Color.CYAN}/clear-facts{Color.RESET}   clear facts memory")
+    print(f"{Color.CYAN}/skills{Color.RESET}        show available skills")
     print()
 
 
@@ -49,9 +51,20 @@ def print_error(error: Exception) -> None:
     print()
 
 
+def print_skills(agent: Agent) -> None:
+    print()
+    print(f"{Color.BOLD}Skills:{Color.RESET}")
+    for skill in agent.skill_registry.list_skills():
+        print(f"{Color.CYAN}{skill.name}{Color.RESET}")
+        print(f"  {skill.description}")
+        print(f"  keywords: {', '.join(skill.keywords)}")
+    print()
+
+
 def main() -> None:
     registry = build_registry()
-    agent = Agent(registry=registry, debug=DEBUG)
+    skill_registry = build_skill_registry()
+    agent = Agent(registry=registry, skill_registry=skill_registry, debug=DEBUG)
 
     print_header()
     while True:
@@ -73,6 +86,9 @@ def main() -> None:
             if user_input == "/clear-facts":
                 result = registry.execute(AgentAction("clear_facts", {}, "CLI command."))
                 print_response(result.content)
+                continue
+            if user_input == "/skills":
+                print_skills(agent)
                 continue
 
             print_response(agent.handle(user_input))
