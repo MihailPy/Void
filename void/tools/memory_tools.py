@@ -75,7 +75,13 @@ def definitions() -> list[ToolDefinition]:
     return [
         ToolDefinition("remember_fact", "Save a medium-term fact.", remember_fact, terminal=True),
         ToolDefinition("read_facts", "Read saved facts.", read_facts),
-        ToolDefinition("update_project", "Replace project memory.", update_project, terminal=True),
+        ToolDefinition(
+            "update_project",
+            "Replace project memory.",
+            update_project,
+            terminal=True,
+            requires_confirmation=True,
+        ),
         ToolDefinition(
             "append_project_note",
             "Append a note to project memory.",
@@ -84,6 +90,18 @@ def definitions() -> list[ToolDefinition]:
         ),
         ToolDefinition("read_project", "Read project memory.", read_project),
         ToolDefinition("append_session", "Append an entry to session memory.", append_session),
-        ToolDefinition("clear_session", "Clear session memory.", clear_session, terminal=True),
-        ToolDefinition("clear_facts", "Clear facts memory.", clear_facts, terminal=True),
+        ToolDefinition(
+            "clear_session",
+            "Clear session memory.",
+            clear_session,
+            terminal=True,
+            requires_confirmation=True,
+        ),
+        ToolDefinition(
+            "clear_facts",
+            "Clear facts memory.",
+            clear_facts,
+            terminal=True,
+            requires_confirmation=True,
+        ),
     ]

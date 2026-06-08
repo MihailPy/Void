@@ -1,5 +1,6 @@
 """Tool registry and safe dispatch for Void actions."""
 
+from void.core.permissions import create_approval
 from void.core.types import AgentAction, ToolDefinition, ToolResult
 
 
@@ -21,10 +22,21 @@ class ToolRegistry:
     def list_tools(self) -> list[ToolDefinition]:
         return list(self._tools.values())
 
-    def execute(self, action: AgentAction) -> ToolResult:
+    def execute(self, action: AgentAction, bypass_confirmation: bool = False) -> ToolResult:
         tool = self.get(action.action)
         if tool is None:
             return ToolResult(ok=False, content=f"Unknown tool: {action.action}")
+
+        if tool.requires_confirmation and not bypass_confirmation:
+            approval_id = create_approval(action)
+            return ToolResult(
+                ok=True,
+                content=(
+                    "Action requires approval. "
+                    f"Use /approve {approval_id} or /reject {approval_id}."
+                ),
+                terminal=True,
+            )
 
         try:
             result = tool.function(**action.arguments)
@@ -42,4 +54,3 @@ class ToolRegistry:
                 content=f"Tool {action.action} failed: {error}",
                 terminal=tool.terminal,
             )
-
