@@ -57,6 +57,28 @@ read_facts:
 read_project:
 {}
 
+list_capabilities:
+{}
+
+add_capability_request:
+{
+  "name": "short_name",
+  "description": "what should be added",
+  "problem": "what cannot be solved",
+  "reason": "why this capability is needed"
+}
+
+mark_capability_installed:
+{
+  "name_or_id": "capability name or id"
+}
+
+reject_capability_request:
+{
+  "name_or_id": "capability name or id",
+  "reason": "why it is rejected"
+}
+
 update_project:
 {
   "content": "new project memory markdown"
@@ -93,6 +115,8 @@ request_capability:
 - Если задача может быть решена project_stats, используй project_stats.
 - Если пользователь говорит "запомни в памяти проекта: ...", используй append_project_note.
 - update_project используй только для явной команды "полностью перезапиши память проекта: ...".
+- Если пользователь спрашивает о возможностях Void, используй list_capabilities.
+- Если пользователь просит запросить новую возможность, используй add_capability_request.
 - Если задача требует tool, не используй final_answer.
 - Если нужна новая возможность, используй request_capability.
 - request_capability не имеет поля example_code.

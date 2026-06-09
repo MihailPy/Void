@@ -1,0 +1,12 @@
+[
+  {
+    "id": "cacafc8e",
+    "name": "browser_task",
+    "status": "requested",
+    "description": "Requested capability: browser_task",
+    "problem": "Отправь запрос на добавление функции browser_task.",
+    "reason": "Existing safe built-in tools do not provide this capability.",
+    "created_at": "2026-06-09T17:49:06",
+    "updated_at": "2026-06-09T17:49:06"
+  }
+]
