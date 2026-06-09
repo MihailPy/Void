@@ -1,6 +1,9 @@
 """Void command-line interface."""
 
+import json
+
 from void.core.agent import Agent
+from void.core.permissions import approve, clear_approval, list_approvals, reject
 from void.core.types import AgentAction
 from void.skills import build_skill_registry
 from void.tools.builtin import build_registry
@@ -34,6 +37,9 @@ def print_help() -> None:
     print(f"{Color.CYAN}/clear-session{Color.RESET} clear session memory")
     print(f"{Color.CYAN}/clear-facts{Color.RESET}   clear facts memory")
     print(f"{Color.CYAN}/skills{Color.RESET}        show available skills")
+    print(f"{Color.CYAN}/approvals{Color.RESET}     show pending approvals")
+    print(f"{Color.CYAN}/approve <id>{Color.RESET}  approve and run action")
+    print(f"{Color.CYAN}/reject <id>{Color.RESET}   reject pending action")
     print()
 
 
@@ -58,6 +64,28 @@ def print_skills(agent: Agent) -> None:
         print(f"{Color.CYAN}{skill.name}{Color.RESET}")
         print(f"  {skill.description}")
         print(f"  keywords: {', '.join(skill.keywords)}")
+    print()
+
+
+def print_approvals() -> None:
+    approvals = list_approvals()
+    print()
+    print(f"{Color.BOLD}Pending approvals:{Color.RESET}")
+    if not approvals:
+        print("None.")
+        print()
+        return
+
+    for approval in approvals:
+        arguments = json.dumps(
+            approval.get("arguments", {}),
+            ensure_ascii=False,
+            sort_keys=True,
+        )
+        print(f"{Color.CYAN}{approval.get('id', '')}{Color.RESET} {approval.get('action', '')}")
+        print(f"  reason: {approval.get('reason', '')}")
+        print(f"  arguments: {arguments}")
+        print(f"  created_at: {approval.get('created_at', '')}")
     print()
 
 
@@ -89,6 +117,27 @@ def main() -> None:
                 continue
             if user_input == "/skills":
                 print_skills(agent)
+                continue
+            if user_input == "/approvals":
+                print_approvals()
+                continue
+            if user_input.startswith("/approve "):
+                approval_id = user_input.removeprefix("/approve ").strip()
+                action = approve(approval_id)
+                if action is None:
+                    print_response(f"Approval not found: {approval_id}")
+                    continue
+
+                result = registry.execute(action, bypass_confirmation=True)
+                clear_approval(approval_id)
+                print_response(result.content)
+                continue
+            if user_input.startswith("/reject "):
+                approval_id = user_input.removeprefix("/reject ").strip()
+                if reject(approval_id):
+                    print_response("Approval rejected.")
+                else:
+                    print_response(f"Approval not found: {approval_id}")
                 continue
 
             print_response(agent.handle(user_input))

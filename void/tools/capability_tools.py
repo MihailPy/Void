@@ -30,6 +30,6 @@ def definitions() -> list[ToolDefinition]:
             "Request a new safe built-in capability when current tools are insufficient.",
             request_capability,
             terminal=True,
+            requires_confirmation=True,
         )
     ]
-
