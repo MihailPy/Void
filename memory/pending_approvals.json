@@ -1,0 +1,14 @@
+[
+  {
+    "id": "0736d67298b1",
+    "action": "add_capability_request",
+    "arguments": {
+      "name": "browser_task",
+      "description": "Requested capability: browser_task",
+      "problem": "Отправь запрос на добавление функции browser_task.",
+      "reason": "Existing safe built-in tools do not provide this capability."
+    },
+    "reason": "User asks to request a new capability.",
+    "created_at": "2026-06-09T17:49:16"
+  }
+]

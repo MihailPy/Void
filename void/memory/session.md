@@ -824,3 +824,272 @@ Terminal: True
 
 ---
 
+## User Request
+
+Time: 2026-06-09 17:45:37
+
+Отправь запрос на добавление функции network_request.
+
+---
+
+## Routed Action
+
+Time: 2026-06-09 17:45:37
+
+Action: add_capability_request
+Reason: User asks to request a new capability.
+OK: True
+Terminal: True
+
+Action requires approval. Use /approve a47bc0a74380 or /reject a47bc0a74380.
+
+---
+
+## User Request
+
+Time: 2026-06-09 17:47:02
+
+/capability
+
+---
+
+## LLM Action
+
+Time: 2026-06-09 17:47:14
+
+Action: list_capabilities
+Reason: Пользователь запросил информацию о возможностях Void через команду /capability
+OK: True
+Terminal: True
+
+Installed:
+- None
+
+Requested:
+- network_request (66e344bb): Requested capability: network_request [reason: Existing safe built-in tools do not provide this capability.]
+
+Rejected:
+- None
+
+---
+
+## User Request
+
+Time: 2026-06-09 17:47:54
+
+Отметь capability network_request как установленную.
+
+---
+
+## Routed Action
+
+Time: 2026-06-09 17:47:54
+
+Action: mark_capability_installed
+Reason: User asks to mark a capability as installed.
+OK: True
+Terminal: True
+
+Action requires approval. Use /approve eb03762e5650 or /reject eb03762e5650.
+
+---
+
+## User Request
+
+Time: 2026-06-09 17:48:52
+
+Отправь запрос на добавление функции browser_task.
+
+---
+
+## Routed Action
+
+Time: 2026-06-09 17:48:52
+
+Action: add_capability_request
+Reason: User asks to request a new capability.
+OK: True
+Terminal: True
+
+Action requires approval. Use /approve 81ffd48098ee or /reject 81ffd48098ee.
+
+---
+
+## User Request
+
+Time: 2026-06-09 17:49:16
+
+Отправь запрос на добавление функции browser_task.
+
+---
+
+## Routed Action
+
+Time: 2026-06-09 17:49:16
+
+Action: add_capability_request
+Reason: User asks to request a new capability.
+OK: True
+Terminal: True
+
+Action requires approval. Use /approve 0736d67298b1 or /reject 0736d67298b1.
+
+---
+
+## User Request
+
+Time: 2026-06-09 17:49:37
+
+Что ты помнишь?
+
+---
+
+## Routed Action
+
+Time: 2026-06-09 17:49:37
+
+Action: read_facts
+Reason: User asks to read remembered facts.
+OK: True
+Terminal: False
+
+# Facts Memory
+
+- Void должен сначала искать существующие tools перед созданием новых. _(saved: 2026-06-03 16:48:28)_
+- Void всегда сначала ищет существующие tools. _(saved: 2026-06-03 17:08:37)_
+
+
+---
+
+## User Request
+
+Time: 2026-06-09 17:49:55
+
+Сделай статистику проекта
+
+---
+
+## Routed Action
+
+Time: 2026-06-09 17:49:55
+
+Action: project_stats
+Reason: User asks for project statistics.
+OK: True
+Terminal: False
+
+Project statistics
+
+Files: 53
+Folders: 9
+
+Files by extension:
+- .json: 4
+- .lock: 1
+- .md: 11
+- .py: 34
+- .toml: 1
+- [no extension]: 2
+
+Top-level structure:
+[DIR] memory
+[DIR] tools
+[DIR] void
+[DIR] workspace
+[FILE] .gitignore
+[FILE] .python-version
+[FILE] actions.py
+[FILE] agent.py
+[FILE] llm.py
+[FILE] main.py
+[FILE] memory_manager.py
+[FILE] planner.py
+[FILE] prompts.py
+[FILE] pyproject.toml
+[FILE] README.md
+[FILE] self_tools.py
+[FILE] uv.lock
+
+---
+
+## User Request
+
+Time: 2026-06-09 17:50:04
+
+сделай отчет по проекту
+
+---
+
+## Skill Action
+
+Time: 2026-06-09 17:50:04
+
+Skill: project_report
+Reason: User asks for a project overview report.
+Confidence: 0.90
+OK: True
+Terminal: True
+
+Project report
+
+Short description:
+# Void
+
+Void — локальный AI-помощник, который учится
+использовать инструменты операционной системы.
+
+Версия v0.1 умеет:
+
+- выбирать действие
+- читать файлы
+- писать файлы
+- смотреть список файлов
+
+Top-level structure:
+[DIR] memory
+[DIR] tools
+[DIR] void
+[DIR] workspace
+[FILE] .gitignore
+[FILE] .python-version
+[FILE] actions.py
+[FILE] agent.py
+[FILE] llm.py
+[FILE] main.py
+[FILE] memory_manager.py
+[FILE] planner.py
+[FILE] prompts.py
+[FILE] pyproject.toml
+[FILE] README.md
+[FILE] self_tools.py
+[FILE] uv.lock
+
+File statistics:
+- Files: 53
+- Folders: 9
+
+Files by extension:
+- .json: 4
+- .lock: 1
+- .md: 11
+- .py: 34
+- .toml: 1
+- [no extension]: 2
+
+Implemented components:
+- single-action agent runtime
+- deterministic router
+- tool registry
+- LLM fallback
+- built-in tools
+- markdown-backed memory
+- deterministic skill system
+
+Known next tasks:
+- FastAPI backend
+- Web UI
+- Browser automation capability
+- Improve JSON retry
+
+---
+

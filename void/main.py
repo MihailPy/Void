@@ -3,6 +3,7 @@
 import json
 
 from void.core.agent import Agent
+from void.core.capabilities import list_capabilities
 from void.core.permissions import approve, clear_approval, list_approvals, reject
 from void.core.types import AgentAction
 from void.skills import build_skill_registry
@@ -38,6 +39,10 @@ def print_help() -> None:
     print(f"{Color.CYAN}/clear-facts{Color.RESET}   clear facts memory")
     print(f"{Color.CYAN}/skills{Color.RESET}        show available skills")
     print(f"{Color.CYAN}/approvals{Color.RESET}     show pending approvals")
+    print(f"{Color.CYAN}/capabilities{Color.RESET}  show all capabilities")
+    print(f"{Color.CYAN}/requested{Color.RESET}     show requested capabilities")
+    print(f"{Color.CYAN}/installed{Color.RESET}     show installed capabilities")
+    print(f"{Color.CYAN}/rejected{Color.RESET}      show rejected capabilities")
     print(f"{Color.CYAN}/approve <id>{Color.RESET}  approve and run action")
     print(f"{Color.CYAN}/reject <id>{Color.RESET}   reject pending action")
     print()
@@ -89,6 +94,41 @@ def print_approvals() -> None:
     print()
 
 
+def _capability_line(record: dict) -> str:
+    name = record.get("name", "unknown")
+    record_id = record.get("id", "")
+    description = record.get("description", "")
+    reason = record.get("reason")
+    suffix = f" ({record_id})" if record_id else ""
+    line = f"- {name}{suffix}"
+    if description:
+        line += f": {description}"
+    if reason:
+        line += f" [reason: {reason}]"
+    return line
+
+
+def print_capabilities(section: str | None = None) -> None:
+    capabilities = list_capabilities()
+    sections = {
+        "installed": "Installed",
+        "requested": "Requested",
+        "rejected": "Rejected",
+    }
+    keys = [section] if section else list(sections.keys())
+
+    print()
+    for key in keys:
+        print(f"{Color.BOLD}{sections[key]}:{Color.RESET}")
+        records = capabilities[key]
+        if not records:
+            print("- None")
+        else:
+            for record in records:
+                print(_capability_line(record))
+        print()
+
+
 def main() -> None:
     registry = build_registry()
     skill_registry = build_skill_registry()
@@ -120,6 +160,18 @@ def main() -> None:
                 continue
             if user_input == "/approvals":
                 print_approvals()
+                continue
+            if user_input == "/capabilities":
+                print_capabilities()
+                continue
+            if user_input == "/requested":
+                print_capabilities("requested")
+                continue
+            if user_input == "/installed":
+                print_capabilities("installed")
+                continue
+            if user_input == "/rejected":
+                print_capabilities("rejected")
                 continue
             if user_input.startswith("/approve "):
                 approval_id = user_input.removeprefix("/approve ").strip()

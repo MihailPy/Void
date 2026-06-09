@@ -12,6 +12,7 @@ Void v0.3
 - Planning
 - request_capability
 - Skill System
+- Capability System
 
 ## Skills
 - summarize_file
@@ -28,6 +29,7 @@ Void v0.3
 - Always check existing tools before creating new ones
 
 ## Next Tasks
-- Add project_stats built-in tool
-- Add tool registry
+- FastAPI backend
+- Web UI
+- Browser automation capability
 - Improve JSON retry

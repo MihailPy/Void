@@ -1,0 +1,12 @@
+[
+  {
+    "id": "66e344bb",
+    "name": "network_request",
+    "status": "installed",
+    "description": "Requested capability: network_request",
+    "problem": "Отправь запрос на добавление функции network_request.",
+    "reason": "Existing safe built-in tools do not provide this capability.",
+    "created_at": "2026-06-09T17:46:33",
+    "updated_at": "2026-06-09T17:48:13"
+  }
+]
