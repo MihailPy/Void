@@ -1093,3 +1093,46 @@ Known next tasks:
 
 ---
 
+## User Request
+
+Time: 2026-06-10 18:12:51
+
+Сделай статистику проекта
+
+---
+
+## Routed Action
+
+Time: 2026-06-10 18:12:51
+
+Action: project_stats
+Reason: User asks for project statistics.
+OK: True
+Terminal: False
+
+Project statistics
+
+Files: 49
+Folders: 10
+
+Files by extension:
+- .json: 4
+- .lock: 1
+- .md: 11
+- .py: 30
+- .toml: 1
+- [no extension]: 2
+
+Top-level structure:
+[DIR] memory
+[DIR] tools
+[DIR] void
+[DIR] workspace
+[FILE] .gitignore
+[FILE] .python-version
+[FILE] pyproject.toml
+[FILE] README.md
+[FILE] uv.lock
+
+---
+
