@@ -37,3 +37,31 @@ Swagger UI:
 ```text
 http://127.0.0.1:8000/docs
 ```
+
+## Web UI
+
+Запуск backend:
+
+```bash
+python -m void.api.server
+```
+
+Запуск frontend:
+
+```bash
+cd web
+npm install
+npm run dev
+```
+
+По умолчанию frontend использует:
+
+```text
+http://127.0.0.1:8000
+```
+
+Можно переопределить:
+
+```bash
+VITE_VOID_API_URL=http://127.0.0.1:8000 npm run dev
+```

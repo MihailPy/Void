@@ -4,6 +4,7 @@ from typing import Any
 
 from fastapi import Depends, FastAPI, Request
 from fastapi.exceptions import RequestValidationError
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from void.api.dependencies import get_agent, get_skill_registry, get_tool_registry
@@ -29,6 +30,17 @@ API_VERSION = "0.8.0"
 app = FastAPI(
     title="Void API",
     version=API_VERSION,
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+    ],
+    allow_credentials=False,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 

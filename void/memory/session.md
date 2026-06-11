@@ -1136,3 +1136,189 @@ Top-level structure:
 
 ---
 
+## User Request
+
+Time: 2026-06-11 17:23:06
+
+Сделай обзор проекта
+
+---
+
+## Skill Action
+
+Time: 2026-06-11 17:23:06
+
+Skill: project_report
+Reason: User asks for a project overview report.
+Confidence: 0.90
+OK: True
+Terminal: True
+
+Project report
+
+Short description:
+# Void
+
+Void — локальный AI-помощник, который учится
+использовать инструменты операционной системы.
+
+Версия v0.1 умеет:
+
+- выбирать действие
+- читать файлы
+- писать файлы
+- смотреть список файлов
+
+## FastAPI Backend
+
+Запуск:
+
+```bash
+python -m void.api.server
+```
+
+Health check:
+
+```bash
+curl http://127.0.0.1:8000/health
+```
+
+Chat:
+
+```bash
+curl -X POST http://127.0.0.1:8000/chat \
+  -H "Content-Type: application/json" \
+  -d '{"message":"Сделай статистику проекта"}'
+```
+
+Swagger UI:
+
+```text
+http://127.0.0.1:8000/docs
+```
+
+## Web UI
+
+Запуск backend:
+
+```bash
+python -m void.api.server
+```
+
+Запуск frontend:
+
+```bash
+cd web
+npm install
+npm run dev
+```
+
+По умолчанию frontend использует:
+
+```text
+http://127.0.0.1:8000
+```
+
+Можно переопределить:
+
+```bash
+VITE_VOID_API_URL=http://127.0.0.1:8000 npm run dev
+```
+
+Top-level structure:
+[DIR] memory
+[DIR] tools
+[DIR] void
+[DIR] web
+[DIR] workspace
+[FILE] .gitignore
+[FILE] .python-version
+[FILE] pyproject.toml
+[FILE] README.md
+[FILE] uv.lock
+
+File statistics:
+- Files: 65
+- Folders: 12
+
+Files by extension:
+- .css: 1
+- .html: 1
+- .js: 1
+- .json: 8
+- .lock: 1
+- .md: 11
+- .py: 30
+- .toml: 1
+- .ts: 4
+- .tsbuildinfo: 2
+- .tsx: 2
+- [no extension]: 3
+
+Implemented components:
+- single-action agent runtime
+- deterministic router
+- tool registry
+- LLM fallback
+- built-in tools
+- markdown-backed memory
+- deterministic skill system
+
+Known next tasks:
+- FastAPI backend
+- Web UI
+- Browser automation capability
+- Improve JSON retry
+
+---
+
+## User Request
+
+Time: 2026-06-11 17:23:51
+
+Сколько файлов в проекте?
+
+---
+
+## Routed Action
+
+Time: 2026-06-11 17:23:51
+
+Action: project_stats
+Reason: User asks for project statistics.
+OK: True
+Terminal: False
+
+Project statistics
+
+Files: 65
+Folders: 12
+
+Files by extension:
+- .css: 1
+- .html: 1
+- .js: 1
+- .json: 8
+- .lock: 1
+- .md: 11
+- .py: 30
+- .toml: 1
+- .ts: 4
+- .tsbuildinfo: 2
+- .tsx: 2
+- [no extension]: 3
+
+Top-level structure:
+[DIR] memory
+[DIR] tools
+[DIR] void
+[DIR] web
+[DIR] workspace
+[FILE] .gitignore
+[FILE] .python-version
+[FILE] pyproject.toml
+[FILE] README.md
+[FILE] uv.lock
+
+---
+
