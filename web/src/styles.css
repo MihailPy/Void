@@ -22,6 +22,7 @@ body {
 }
 
 button,
+input,
 textarea {
   font: inherit;
 }
@@ -90,7 +91,8 @@ button:disabled {
   font-size: 0.88rem;
 }
 
-.statusPanel {
+.statusPanel,
+.authPanel {
   border: 1px solid rgba(142, 166, 194, 0.16);
   border-radius: 8px;
   padding: 1rem;
@@ -130,6 +132,38 @@ button:disabled {
   font-size: 0.84rem;
   margin: 0.65rem 0;
   overflow-wrap: anywhere;
+}
+
+.authStatus {
+  color: #ffcf8b;
+  font-size: 0.88rem;
+  font-weight: 700;
+  margin: 0.75rem 0;
+}
+
+.authStatus.saved {
+  color: #8ee4ae;
+}
+
+input {
+  width: 100%;
+  border: 1px solid rgba(142, 166, 194, 0.22);
+  border-radius: 8px;
+  background: rgba(8, 12, 18, 0.94);
+  color: #eff6ff;
+  padding: 0.65rem 0.75rem;
+}
+
+input:focus {
+  outline: 2px solid rgba(96, 186, 196, 0.35);
+  border-color: rgba(96, 186, 196, 0.65);
+}
+
+.authActions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.55rem;
+  margin-top: 0.75rem;
 }
 
 .nav {
