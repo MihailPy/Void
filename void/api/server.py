@@ -7,6 +7,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
+from void.api.auth import get_api_token, require_api_token
 from void.api.dependencies import get_agent, get_skill_registry, get_tool_registry
 from void.api.schemas import (
     ApprovalResponse,
@@ -26,6 +27,12 @@ from void.core.safety import MEMORY_DIR, ensure_memory_files
 from void.skills.registry import SkillRegistry
 
 API_VERSION = "0.8.0"
+
+if get_api_token() is None:
+    print(
+        "WARNING: VOID_API_TOKEN is not set. API token auth is disabled for local dev mode.",
+        flush=True,
+    )
 
 app = FastAPI(
     title="Void API",
@@ -88,6 +95,7 @@ def health() -> HealthResponse | ErrorResponse:
 @app.post("/chat", response_model=ChatResponse | ErrorResponse)
 def chat(
     request: ChatRequest,
+    _: None = Depends(require_api_token),
     agent: Agent = Depends(get_agent),
 ) -> ChatResponse | ErrorResponse:
     try:
@@ -99,6 +107,7 @@ def chat(
 
 @app.get("/skills", response_model=SkillsResponse | ErrorResponse)
 def skills(
+    _: None = Depends(require_api_token),
     skill_registry: SkillRegistry = Depends(get_skill_registry),
 ) -> SkillsResponse | ErrorResponse:
     try:
@@ -116,7 +125,9 @@ def skills(
 
 
 @app.get("/capabilities", response_model=CapabilitiesResponse | ErrorResponse)
-def capabilities() -> CapabilitiesResponse | ErrorResponse:
+def capabilities(
+    _: None = Depends(require_api_token),
+) -> CapabilitiesResponse | ErrorResponse:
     try:
         records = list_capabilities()
         return CapabilitiesResponse(
@@ -130,7 +141,9 @@ def capabilities() -> CapabilitiesResponse | ErrorResponse:
 
 
 @app.get("/approvals")
-def approvals() -> dict[str, Any] | ErrorResponse:
+def approvals(
+    _: None = Depends(require_api_token),
+) -> dict[str, Any] | ErrorResponse:
     try:
         return {"ok": True, "pending": list_approvals()}
     except Exception as error:
@@ -140,6 +153,7 @@ def approvals() -> dict[str, Any] | ErrorResponse:
 @app.post("/approvals/{approval_id}/approve", response_model=ApprovalResponse | ErrorResponse)
 def approve_approval(
     approval_id: str,
+    _: None = Depends(require_api_token),
     registry: ToolRegistry = Depends(get_tool_registry),
 ) -> ApprovalResponse | ErrorResponse:
     try:
@@ -155,7 +169,10 @@ def approve_approval(
 
 
 @app.post("/approvals/{approval_id}/reject", response_model=ApprovalResponse | ErrorResponse)
-def reject_approval(approval_id: str) -> ApprovalResponse | ErrorResponse:
+def reject_approval(
+    approval_id: str,
+    _: None = Depends(require_api_token),
+) -> ApprovalResponse | ErrorResponse:
     try:
         if reject(approval_id):
             return ApprovalResponse(ok=True, message="Approval rejected.")
@@ -165,21 +182,27 @@ def reject_approval(approval_id: str) -> ApprovalResponse | ErrorResponse:
 
 
 @app.get("/memory/session", response_model=MemoryResponse | ErrorResponse)
-def memory_session() -> MemoryResponse | ErrorResponse:
+def memory_session(
+    _: None = Depends(require_api_token),
+) -> MemoryResponse | ErrorResponse:
     return _read_memory_file("session.md")
 
 
 @app.get("/memory/facts", response_model=MemoryResponse | ErrorResponse)
-def memory_facts() -> MemoryResponse | ErrorResponse:
+def memory_facts(
+    _: None = Depends(require_api_token),
+) -> MemoryResponse | ErrorResponse:
     return _read_memory_file("facts.md")
 
 
 @app.get("/memory/project", response_model=MemoryResponse | ErrorResponse)
-def memory_project() -> MemoryResponse | ErrorResponse:
+def memory_project(
+    _: None = Depends(require_api_token),
+) -> MemoryResponse | ErrorResponse:
     return _read_memory_file("project.md")
 
 
 if __name__ == "__main__":
     import uvicorn
 
-    uvicorn.run("void.api.server:app", host="127.0.0.1", port=8000, reload=True)
+    uvicorn.run(app, host="127.0.0.1", port=8000)

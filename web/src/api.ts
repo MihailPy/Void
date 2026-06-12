@@ -1,6 +1,8 @@
 const API_BASE_URL =
   import.meta.env.VITE_VOID_API_URL ?? "http://127.0.0.1:8000";
 
+const TOKEN_STORAGE_KEY = "void_api_token";
+
 export type HealthResponse = {
   ok: boolean;
   service: string;
@@ -80,17 +82,38 @@ function isApiErrorResponse(data: unknown): data is ApiErrorResponse {
   );
 }
 
+export function getStoredToken() {
+  return localStorage.getItem(TOKEN_STORAGE_KEY) ?? "";
+}
+
+export function setStoredToken(token: string) {
+  localStorage.setItem(TOKEN_STORAGE_KEY, token);
+}
+
+export function clearStoredToken() {
+  localStorage.removeItem(TOKEN_STORAGE_KEY);
+}
+
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
+  const token = path === "/health" ? "" : getStoredToken().trim();
+  const headers = new Headers(options?.headers);
+  if (!headers.has("Content-Type")) {
+    headers.set("Content-Type", "application/json");
+  }
+  if (token) {
+    headers.set("Authorization", `Bearer ${token}`);
+  }
+
   const response = await fetch(`${API_BASE_URL}${path}`, {
-    headers: {
-      "Content-Type": "application/json",
-      ...options?.headers,
-    },
     ...options,
+    headers,
   });
   const data = (await response.json()) as unknown;
 
   if (!response.ok || isApiErrorResponse(data)) {
+    if (response.status === 401) {
+      throw new Error("Unauthorized. Check your API token.");
+    }
     throw new Error(
       isApiErrorResponse(data)
         ? data.error

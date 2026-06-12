@@ -6,15 +6,18 @@ import {
   MemoryResponse,
   Skill,
   approve,
+  clearStoredToken,
   getApprovals,
   getCapabilities,
   getFactsMemory,
   getProjectMemory,
   getSessionMemory,
   getSkills,
+  getStoredToken,
   health,
   reject,
   sendChatMessage,
+  setStoredToken,
 } from "./api";
 
 type Tab = "chat" | "approvals" | "capabilities" | "skills" | "memory";
@@ -78,6 +81,54 @@ function StatusPanel() {
       <button className="secondaryButton" type="button" onClick={loadStatus}>
         Refresh
       </button>
+    </section>
+  );
+}
+
+function AuthPanel() {
+  const [token, setToken] = useState(() => getStoredToken());
+  const [savedToken, setSavedToken] = useState(() => getStoredToken());
+
+  function handleSave() {
+    const nextToken = token.trim();
+    if (nextToken) {
+      setStoredToken(nextToken);
+      setToken(nextToken);
+      setSavedToken(nextToken);
+    } else {
+      clearStoredToken();
+      setSavedToken("");
+    }
+  }
+
+  function handleClear() {
+    clearStoredToken();
+    setToken("");
+    setSavedToken("");
+  }
+
+  return (
+    <section className="authPanel">
+      <div className="sectionLabel">Auth</div>
+      <div className={savedToken ? "authStatus saved" : "authStatus"}>
+        {savedToken ? "Token saved" : "No token configured"}
+      </div>
+      <input
+        aria-label="API token"
+        autoComplete="off"
+        type="password"
+        value={token}
+        onChange={(event) => setToken(event.target.value)}
+        placeholder="API token"
+      />
+      <div className="authActions">
+        <button type="button" onClick={handleSave}>
+          Save
+        </button>
+        <button className="secondaryButton" type="button" onClick={handleClear}>
+          Clear
+        </button>
+      </div>
     </section>
   );
 }
@@ -567,6 +618,7 @@ export default function App() {
           </div>
         </div>
         <StatusPanel />
+        <AuthPanel />
         <nav className="nav">
           {tabs.map((tab) => (
             <button

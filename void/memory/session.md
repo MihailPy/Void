@@ -1322,3 +1322,55 @@ Top-level structure:
 
 ---
 
+## User Request
+
+Time: 2026-06-12 16:01:40
+
+Сделай статистику проекта
+
+---
+
+## Routed Action
+
+Time: 2026-06-12 16:01:40
+
+Action: project_stats
+Reason: User asks for project statistics.
+OK: True
+Terminal: False
+
+Project statistics
+
+Files: 67
+Folders: 12
+
+Files by extension:
+- .css: 1
+- .example: 1
+- .html: 1
+- .js: 1
+- .json: 8
+- .lock: 1
+- .md: 11
+- .py: 31
+- .toml: 1
+- .ts: 4
+- .tsbuildinfo: 2
+- .tsx: 2
+- [no extension]: 3
+
+Top-level structure:
+[DIR] memory
+[DIR] tools
+[DIR] void
+[DIR] web
+[DIR] workspace
+[FILE] .env.example
+[FILE] .gitignore
+[FILE] .python-version
+[FILE] pyproject.toml
+[FILE] README.md
+[FILE] uv.lock
+
+---
+
