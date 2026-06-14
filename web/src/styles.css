@@ -23,6 +23,7 @@ body {
 
 button,
 input,
+select,
 textarea {
   font: inherit;
 }
@@ -145,7 +146,8 @@ button:disabled {
   color: #8ee4ae;
 }
 
-input {
+input,
+select {
   width: 100%;
   border: 1px solid rgba(142, 166, 194, 0.22);
   border-radius: 8px;
@@ -154,7 +156,8 @@ input {
   padding: 0.65rem 0.75rem;
 }
 
-input:focus {
+input:focus,
+select:focus {
   outline: 2px solid rgba(96, 186, 196, 0.35);
   border-color: rgba(96, 186, 196, 0.65);
 }
@@ -236,8 +239,10 @@ h1 {
 .message,
 .card,
 .memoryBlock,
+.taskForm,
 .empty,
-.error {
+.error,
+.notice {
   border: 1px solid rgba(142, 166, 194, 0.16);
   border-radius: 8px;
   background: rgba(17, 25, 36, 0.82);
@@ -295,6 +300,15 @@ textarea:focus {
   background: rgba(100, 28, 36, 0.45);
   padding: 0.8rem 1rem;
   margin-bottom: 1rem;
+  overflow-wrap: anywhere;
+}
+
+.notice {
+  color: #d9ffe7;
+  background: rgba(38, 105, 64, 0.45);
+  padding: 0.8rem 1rem;
+  margin-bottom: 1rem;
+  white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
 
@@ -404,6 +418,35 @@ textarea:focus {
 
 .memoryBlock {
   padding: 1rem;
+}
+
+.taskForm {
+  display: grid;
+  gap: 0.9rem;
+  padding: 1rem;
+  margin-bottom: 1rem;
+}
+
+.taskForm h2 {
+  font-size: 1rem;
+}
+
+.taskForm label {
+  display: grid;
+  gap: 0.4rem;
+}
+
+.taskForm label span {
+  color: #9fb4ca;
+  font-size: 0.78rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.formGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 0.75rem;
 }
 
 .memoryHeader {

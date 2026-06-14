@@ -14,16 +14,20 @@ from void.api.schemas import (
     CapabilitiesResponse,
     ChatRequest,
     ChatResponse,
+    CreateScheduledTaskRequest,
     ErrorResponse,
     HealthResponse,
     MemoryResponse,
+    ScheduledTasksResponse,
     SkillsResponse,
 )
 from void.core.agent import Agent
 from void.core.capabilities import list_capabilities
 from void.core.permissions import approve, clear_approval, list_approvals, reject
 from void.core.registry import ToolRegistry
+from void.core.scheduler import list_tasks
 from void.core.safety import MEMORY_DIR, ensure_memory_files
+from void.core.types import AgentAction
 from void.skills.registry import SkillRegistry
 
 API_VERSION = "0.8.0"
@@ -146,6 +150,100 @@ def approvals(
 ) -> dict[str, Any] | ErrorResponse:
     try:
         return {"ok": True, "pending": list_approvals()}
+    except Exception as error:
+        return _error(error)
+
+
+@app.get("/tasks", response_model=ScheduledTasksResponse | ErrorResponse)
+def tasks(
+    _: None = Depends(require_api_token),
+) -> ScheduledTasksResponse | ErrorResponse:
+    try:
+        return ScheduledTasksResponse(ok=True, tasks=list_tasks())
+    except Exception as error:
+        return _error(error)
+
+
+@app.post("/tasks", response_model=ApprovalResponse | ErrorResponse)
+def create_task(
+    request: CreateScheduledTaskRequest,
+    _: None = Depends(require_api_token),
+    registry: ToolRegistry = Depends(get_tool_registry),
+) -> ApprovalResponse | ErrorResponse:
+    try:
+        result = registry.execute(
+            AgentAction(
+                "create_scheduled_task",
+                {
+                    "title": request.title,
+                    "prompt": request.prompt,
+                    "schedule_type": request.schedule_type,
+                    "schedule_value": request.schedule_value,
+                },
+                "API request.",
+            )
+        )
+        return ApprovalResponse(ok=result.ok, message=result.content)
+    except Exception as error:
+        return _error(error)
+
+
+@app.post("/tasks/{task_id}/run", response_model=ApprovalResponse | ErrorResponse)
+def run_task(
+    task_id: str,
+    _: None = Depends(require_api_token),
+    registry: ToolRegistry = Depends(get_tool_registry),
+) -> ApprovalResponse | ErrorResponse:
+    try:
+        result = registry.execute(
+            AgentAction("run_scheduled_task", {"task_id": task_id}, "API request.")
+        )
+        return ApprovalResponse(ok=result.ok, message=result.content)
+    except Exception as error:
+        return _error(error)
+
+
+@app.post("/tasks/{task_id}/enable", response_model=ApprovalResponse | ErrorResponse)
+def enable_task(
+    task_id: str,
+    _: None = Depends(require_api_token),
+    registry: ToolRegistry = Depends(get_tool_registry),
+) -> ApprovalResponse | ErrorResponse:
+    try:
+        result = registry.execute(
+            AgentAction("enable_scheduled_task", {"task_id": task_id}, "API request.")
+        )
+        return ApprovalResponse(ok=result.ok, message=result.content)
+    except Exception as error:
+        return _error(error)
+
+
+@app.post("/tasks/{task_id}/disable", response_model=ApprovalResponse | ErrorResponse)
+def disable_task(
+    task_id: str,
+    _: None = Depends(require_api_token),
+    registry: ToolRegistry = Depends(get_tool_registry),
+) -> ApprovalResponse | ErrorResponse:
+    try:
+        result = registry.execute(
+            AgentAction("disable_scheduled_task", {"task_id": task_id}, "API request.")
+        )
+        return ApprovalResponse(ok=result.ok, message=result.content)
+    except Exception as error:
+        return _error(error)
+
+
+@app.delete("/tasks/{task_id}", response_model=ApprovalResponse | ErrorResponse)
+def delete_task(
+    task_id: str,
+    _: None = Depends(require_api_token),
+    registry: ToolRegistry = Depends(get_tool_registry),
+) -> ApprovalResponse | ErrorResponse:
+    try:
+        result = registry.execute(
+            AgentAction("delete_scheduled_task", {"task_id": task_id}, "API request.")
+        )
+        return ApprovalResponse(ok=result.ok, message=result.content)
     except Exception as error:
         return _error(error)
 

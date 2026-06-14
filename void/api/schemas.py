@@ -42,6 +42,23 @@ class SkillsResponse(BaseModel):
     skills: list[Any]
 
 
+class ScheduledTaskResponse(BaseModel):
+    ok: bool
+    task: dict[str, Any]
+
+
+class ScheduledTasksResponse(BaseModel):
+    ok: bool
+    tasks: list[dict[str, Any]]
+
+
+class CreateScheduledTaskRequest(BaseModel):
+    title: str
+    prompt: str
+    schedule_type: str
+    schedule_value: dict[str, Any]
+
+
 class ErrorResponse(BaseModel):
     ok: bool
     error: str

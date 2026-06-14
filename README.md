@@ -74,6 +74,72 @@ Swagger UI:
 http://127.0.0.1:8000/docs
 ```
 
+## Task Scheduler
+
+Void хранит запланированные задачи в `memory/scheduled_tasks.json`.
+Фонового worker на этом этапе нет: задачи можно создать, посмотреть,
+включить, отключить, удалить и запустить вручную.
+
+CLI:
+
+```bash
+python -m void.main
+```
+
+Команды:
+
+```text
+/tasks
+/run-task <id>
+/enable-task <id>
+/disable-task <id>
+/delete-task <id>
+```
+
+Примеры сообщений:
+
+```text
+Напомни через 5 минут проверить проект
+Каждый день в 09:00 покажи задачи
+Раз в 60 минут проверяй pending approvals
+Покажи scheduled tasks
+```
+
+API:
+
+```bash
+curl http://127.0.0.1:8000/tasks
+```
+
+Создание задачи:
+
+```bash
+curl -X POST http://127.0.0.1:8000/tasks \
+  -H "Content-Type: application/json" \
+  -d '{"title":"Проверить проект","prompt":"Проверь состояние проекта и покажи краткий отчёт","schedule_type":"interval","schedule_value":{"minutes":60}}'
+```
+
+Ручной запуск:
+
+```bash
+curl -X POST http://127.0.0.1:8000/tasks/<id>/run
+```
+
+State-changing API actions создают approval. Подтвердить можно через
+Approvals tab или:
+
+```bash
+curl -X POST http://127.0.0.1:8000/approvals/<approval_id>/approve
+```
+
+Web UI:
+
+* открой `http://localhost:5173`
+* перейди во вкладку Tasks
+* создай задачу
+* подтверди действие во вкладке Approvals
+* вернись во вкладку Tasks и нажми Refresh
+
 ## Web UI
 
 Запуск backend:
