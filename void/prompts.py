@@ -101,6 +101,41 @@ clear_session:
 clear_facts:
 {}
 
+list_scheduled_tasks:
+{}
+
+create_scheduled_task:
+{
+  "title": "short task title",
+  "prompt": "what Void should do when the task is run",
+  "schedule_type": "once | interval | daily",
+  "schedule_value": {
+    "run_at": "YYYY-MM-DDTHH:MM:SS for once",
+    "minutes": 60,
+    "time": "09:00"
+  }
+}
+
+delete_scheduled_task:
+{
+  "task_id": "abc12345"
+}
+
+enable_scheduled_task:
+{
+  "task_id": "abc12345"
+}
+
+disable_scheduled_task:
+{
+  "task_id": "abc12345"
+}
+
+run_scheduled_task:
+{
+  "task_id": "abc12345"
+}
+
 request_capability:
 {
   "name": "short_name",
@@ -116,6 +151,8 @@ request_capability:
 - Если пользователь говорит "запомни в памяти проекта: ...", используй append_project_note.
 - update_project используй только для явной команды "полностью перезапиши память проекта: ...".
 - Если пользователь спрашивает о возможностях Void, используй list_capabilities.
+- Если пользователь просит напомнить, запланировать задачу, выполнять регулярно или показать расписание, используй scheduler tools.
+- Не создавай расписание через memory tools.
 - Если пользователь просит запросить новую возможность, используй add_capability_request.
 - Если задача требует tool, не используй final_answer.
 - Если нужна новая возможность, используй request_capability.

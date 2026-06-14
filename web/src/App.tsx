@@ -4,23 +4,30 @@ import {
   Capability,
   HealthResponse,
   MemoryResponse,
+  ScheduledTask,
   Skill,
   approve,
   clearStoredToken,
+  createTask,
+  deleteTask,
+  disableTask,
+  enableTask,
   getApprovals,
   getCapabilities,
   getFactsMemory,
   getProjectMemory,
   getSessionMemory,
   getSkills,
+  getTasks,
   getStoredToken,
   health,
   reject,
+  runTask,
   sendChatMessage,
   setStoredToken,
 } from "./api";
 
-type Tab = "chat" | "approvals" | "capabilities" | "skills" | "memory";
+type Tab = "chat" | "approvals" | "tasks" | "capabilities" | "skills" | "memory";
 
 type Message = {
   role: "user" | "void";
@@ -30,6 +37,7 @@ type Message = {
 const tabs: { id: Tab; label: string }[] = [
   { id: "chat", label: "Chat" },
   { id: "approvals", label: "Approvals" },
+  { id: "tasks", label: "Tasks" },
   { id: "capabilities", label: "Capabilities" },
   { id: "skills", label: "Skills" },
   { id: "memory", label: "Memory" },
@@ -294,6 +302,249 @@ function ApprovalsTab() {
                   onClick={() => void handleAction(id, "reject")}
                 >
                   Reject
+                </button>
+              </div>
+            </article>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
+function TasksTab() {
+  const [tasks, setTasks] = useState<ScheduledTask[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [actionId, setActionId] = useState("");
+  const [message, setMessage] = useState("");
+  const [error, setError] = useState("");
+  const [title, setTitle] = useState("");
+  const [prompt, setPrompt] = useState("");
+  const [scheduleType, setScheduleType] =
+    useState<"once" | "interval" | "daily">("once");
+  const [runAt, setRunAt] = useState("");
+  const [minutes, setMinutes] = useState("60");
+  const [time, setTime] = useState("09:00");
+
+  async function loadTasks() {
+    try {
+      setError("");
+      setLoading(true);
+      const response = await getTasks();
+      setTasks(response.tasks);
+    } catch (currentError) {
+      setError(getErrorMessage(currentError));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleTaskAction(
+    id: string,
+    action: "run" | "enable" | "disable" | "delete",
+  ) {
+    setActionId(id);
+    setError("");
+    setMessage("");
+    try {
+      const response =
+        action === "run"
+          ? await runTask(id)
+          : action === "enable"
+            ? await enableTask(id)
+            : action === "disable"
+              ? await disableTask(id)
+              : await deleteTask(id);
+      setMessage(response.message);
+      await loadTasks();
+    } catch (currentError) {
+      setError(getErrorMessage(currentError));
+    } finally {
+      setActionId("");
+    }
+  }
+
+  async function handleCreate() {
+    const cleanTitle = title.trim();
+    const cleanPrompt = prompt.trim();
+    if (!cleanTitle || !cleanPrompt) {
+      setError("Title and prompt are required.");
+      return;
+    }
+
+    const scheduleValue =
+      scheduleType === "once"
+        ? { run_at: runAt }
+        : scheduleType === "interval"
+          ? { minutes: Number(minutes) }
+          : { time };
+
+    setError("");
+    setMessage("");
+    try {
+      const response = await createTask({
+        title: cleanTitle,
+        prompt: cleanPrompt,
+        schedule_type: scheduleType,
+        schedule_value: scheduleValue,
+      });
+      setMessage(response.message);
+      setTitle("");
+      setPrompt("");
+      await loadTasks();
+    } catch (currentError) {
+      setError(getErrorMessage(currentError));
+    }
+  }
+
+  useEffect(() => {
+    void loadTasks();
+  }, []);
+
+  return (
+    <section className="panel">
+      <div className="panelHeader">
+        <div>
+          <h1>Tasks</h1>
+          <p>Scheduled tasks stored in local memory.</p>
+        </div>
+        <button className="secondaryButton" type="button" onClick={loadTasks}>
+          Refresh
+        </button>
+      </div>
+
+      {error ? <div className="error">{error}</div> : null}
+      {message ? <div className="notice">{message}</div> : null}
+
+      <section className="taskForm">
+        <h2>Create task</h2>
+        <div className="formGrid">
+          <label>
+            <span>Title</span>
+            <input
+              value={title}
+              onChange={(event) => setTitle(event.target.value)}
+              placeholder="Check project"
+            />
+          </label>
+          <label>
+            <span>Schedule type</span>
+            <select
+              value={scheduleType}
+              onChange={(event) =>
+                setScheduleType(event.target.value as "once" | "interval" | "daily")
+              }
+            >
+              <option value="once">once</option>
+              <option value="interval">interval</option>
+              <option value="daily">daily</option>
+            </select>
+          </label>
+          {scheduleType === "once" ? (
+            <label>
+              <span>Run at</span>
+              <input
+                type="datetime-local"
+                value={runAt}
+                onChange={(event) => setRunAt(event.target.value)}
+              />
+            </label>
+          ) : null}
+          {scheduleType === "interval" ? (
+            <label>
+              <span>Minutes</span>
+              <input
+                min="1"
+                type="number"
+                value={minutes}
+                onChange={(event) => setMinutes(event.target.value)}
+              />
+            </label>
+          ) : null}
+          {scheduleType === "daily" ? (
+            <label>
+              <span>Time</span>
+              <input
+                type="time"
+                value={time}
+                onChange={(event) => setTime(event.target.value)}
+              />
+            </label>
+          ) : null}
+        </div>
+        <label>
+          <span>Prompt</span>
+          <textarea
+            value={prompt}
+            onChange={(event) => setPrompt(event.target.value)}
+            placeholder="Проверь состояние проекта и покажи краткий отчёт"
+            rows={4}
+          />
+        </label>
+        <button type="button" onClick={handleCreate}>
+          Create
+        </button>
+      </section>
+
+      {loading ? <EmptyState>Loading tasks...</EmptyState> : null}
+      {!loading && tasks.length === 0 ? <EmptyState>No scheduled tasks.</EmptyState> : null}
+
+      <div className="cardGrid">
+        {tasks.map((task) => {
+          const id = task.id ?? "";
+          return (
+            <article className="card" key={id || task.title}>
+              <div className="cardTopline">
+                <span>{id || "unknown id"}</span>
+                <span>{task.enabled ? "enabled" : "disabled"}</span>
+              </div>
+              <h2>{task.title ?? "Untitled task"}</h2>
+              <div className="field">
+                <span>Schedule</span>
+                <p>{task.schedule_type ?? "unknown"}</p>
+              </div>
+              <div className="field">
+                <span>Next run</span>
+                <p>{task.next_run_at ?? "none"}</p>
+              </div>
+              <div className="field">
+                <span>Last run</span>
+                <p>{task.last_run_at ?? "never"}</p>
+              </div>
+              <div className="buttonRow">
+                <button
+                  type="button"
+                  disabled={!id || actionId === id}
+                  onClick={() => void handleTaskAction(id, "run")}
+                >
+                  Run
+                </button>
+                {task.enabled ? (
+                  <button
+                    className="secondaryButton"
+                    type="button"
+                    disabled={!id || actionId === id}
+                    onClick={() => void handleTaskAction(id, "disable")}
+                  >
+                    Disable
+                  </button>
+                ) : (
+                  <button
+                    className="secondaryButton"
+                    type="button"
+                    disabled={!id || actionId === id}
+                    onClick={() => void handleTaskAction(id, "enable")}
+                  >
+                    Enable
+                  </button>
+                )}
+                <button
+                  className="dangerButton"
+                  type="button"
+                  disabled={!id || actionId === id}
+                  onClick={() => void handleTaskAction(id, "delete")}
+                >
+                  Delete
                 </button>
               </div>
             </article>
@@ -591,6 +842,9 @@ function MemoryTab() {
 function ActiveTab({ tab }: { tab: Tab }) {
   if (tab === "approvals") {
     return <ApprovalsTab />;
+  }
+  if (tab === "tasks") {
+    return <TasksTab />;
   }
   if (tab === "capabilities") {
     return <CapabilitiesTab />;

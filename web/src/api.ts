@@ -61,6 +61,31 @@ export type ApprovalActionResponse = {
   message: string;
 };
 
+export type ScheduledTask = {
+  id?: string;
+  title?: string;
+  prompt?: string;
+  schedule_type?: "once" | "interval" | "daily" | string;
+  schedule_value?: Record<string, unknown>;
+  enabled?: boolean;
+  created_at?: string;
+  updated_at?: string;
+  last_run_at?: string | null;
+  next_run_at?: string | null;
+};
+
+export type ScheduledTasksResponse = {
+  ok: boolean;
+  tasks: ScheduledTask[];
+};
+
+export type CreateScheduledTaskRequest = {
+  title: string;
+  prompt: string;
+  schedule_type: "once" | "interval" | "daily";
+  schedule_value: Record<string, unknown>;
+};
+
 export type MemoryResponse = {
   ok: boolean;
   content: string;
@@ -156,6 +181,41 @@ export function approve(id: string) {
 export function reject(id: string) {
   return request<ApprovalActionResponse>(`/approvals/${id}/reject`, {
     method: "POST",
+  });
+}
+
+export function getTasks() {
+  return request<ScheduledTasksResponse>("/tasks");
+}
+
+export function createTask(payload: CreateScheduledTaskRequest) {
+  return request<ApprovalActionResponse>("/tasks", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function runTask(id: string) {
+  return request<ApprovalActionResponse>(`/tasks/${id}/run`, {
+    method: "POST",
+  });
+}
+
+export function enableTask(id: string) {
+  return request<ApprovalActionResponse>(`/tasks/${id}/enable`, {
+    method: "POST",
+  });
+}
+
+export function disableTask(id: string) {
+  return request<ApprovalActionResponse>(`/tasks/${id}/disable`, {
+    method: "POST",
+  });
+}
+
+export function deleteTask(id: string) {
+  return request<ApprovalActionResponse>(`/tasks/${id}`, {
+    method: "DELETE",
   });
 }
 

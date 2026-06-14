@@ -39,12 +39,17 @@ def print_help() -> None:
     print(f"{Color.CYAN}/clear-facts{Color.RESET}   clear facts memory")
     print(f"{Color.CYAN}/skills{Color.RESET}        show available skills")
     print(f"{Color.CYAN}/approvals{Color.RESET}     show pending approvals")
+    print(f"{Color.CYAN}/tasks{Color.RESET}         show scheduled tasks")
     print(f"{Color.CYAN}/capabilities{Color.RESET}  show all capabilities")
     print(f"{Color.CYAN}/requested{Color.RESET}     show requested capabilities")
     print(f"{Color.CYAN}/installed{Color.RESET}     show installed capabilities")
     print(f"{Color.CYAN}/rejected{Color.RESET}      show rejected capabilities")
     print(f"{Color.CYAN}/approve <id>{Color.RESET}  approve and run action")
     print(f"{Color.CYAN}/reject <id>{Color.RESET}   reject pending action")
+    print(f"{Color.CYAN}/run-task <id>{Color.RESET} run scheduled task")
+    print(f"{Color.CYAN}/enable-task <id>{Color.RESET} enable scheduled task")
+    print(f"{Color.CYAN}/disable-task <id>{Color.RESET} disable scheduled task")
+    print(f"{Color.CYAN}/delete-task <id>{Color.RESET} delete scheduled task")
     print()
 
 
@@ -161,6 +166,12 @@ def main() -> None:
             if user_input == "/approvals":
                 print_approvals()
                 continue
+            if user_input == "/tasks":
+                result = registry.execute(
+                    AgentAction("list_scheduled_tasks", {}, "CLI command.")
+                )
+                print_response(result.content)
+                continue
             if user_input == "/capabilities":
                 print_capabilities()
                 continue
@@ -190,6 +201,50 @@ def main() -> None:
                     print_response("Approval rejected.")
                 else:
                     print_response(f"Approval not found: {approval_id}")
+                continue
+            if user_input.startswith("/run-task "):
+                task_id = user_input.removeprefix("/run-task ").strip()
+                result = registry.execute(
+                    AgentAction(
+                        "run_scheduled_task",
+                        {"task_id": task_id},
+                        "CLI command.",
+                    )
+                )
+                print_response(result.content)
+                continue
+            if user_input.startswith("/enable-task "):
+                task_id = user_input.removeprefix("/enable-task ").strip()
+                result = registry.execute(
+                    AgentAction(
+                        "enable_scheduled_task",
+                        {"task_id": task_id},
+                        "CLI command.",
+                    )
+                )
+                print_response(result.content)
+                continue
+            if user_input.startswith("/disable-task "):
+                task_id = user_input.removeprefix("/disable-task ").strip()
+                result = registry.execute(
+                    AgentAction(
+                        "disable_scheduled_task",
+                        {"task_id": task_id},
+                        "CLI command.",
+                    )
+                )
+                print_response(result.content)
+                continue
+            if user_input.startswith("/delete-task "):
+                task_id = user_input.removeprefix("/delete-task ").strip()
+                result = registry.execute(
+                    AgentAction(
+                        "delete_scheduled_task",
+                        {"task_id": task_id},
+                        "CLI command.",
+                    )
+                )
+                print_response(result.content)
                 continue
 
             print_response(agent.handle(user_input))

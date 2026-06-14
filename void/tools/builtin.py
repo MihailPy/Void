@@ -2,7 +2,7 @@
 
 from void.core.registry import ToolRegistry
 from void.core.types import ToolDefinition, ToolResult
-from void.tools import capability_tools, file_tools, memory_tools, project_tools
+from void.tools import capability_tools, file_tools, memory_tools, project_tools, scheduler_tools
 
 
 def final_answer(text: str) -> ToolResult:
@@ -12,7 +12,7 @@ def final_answer(text: str) -> ToolResult:
 def build_registry() -> ToolRegistry:
     registry = ToolRegistry()
 
-    for module in (file_tools, memory_tools, project_tools, capability_tools):
+    for module in (file_tools, memory_tools, project_tools, capability_tools, scheduler_tools):
         for definition in module.definitions():
             registry.register(definition)
 
@@ -25,4 +25,3 @@ def build_registry() -> ToolRegistry:
         )
     )
     return registry
-
