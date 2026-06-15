@@ -1,5 +1,7 @@
 """FastAPI server for the Void backend."""
 
+import os
+from contextlib import asynccontextmanager
 from typing import Any
 
 from fastapi import Depends, FastAPI, Request
@@ -19,6 +21,8 @@ from void.api.schemas import (
     HealthResponse,
     MemoryResponse,
     ScheduledTasksResponse,
+    SchedulerRunOnceResponse,
+    SchedulerStatusResponse,
     SkillsResponse,
 )
 from void.core.agent import Agent
@@ -26,11 +30,35 @@ from void.core.capabilities import list_capabilities
 from void.core.permissions import approve, clear_approval, list_approvals, reject
 from void.core.registry import ToolRegistry
 from void.core.scheduler import list_tasks
+from void.core.scheduler_worker import SchedulerWorker
 from void.core.safety import MEMORY_DIR, ensure_memory_files
 from void.core.types import AgentAction
 from void.skills.registry import SkillRegistry
 
 API_VERSION = "0.8.0"
+SCHEDULER_WORKER_ENABLED_ENV = "VOID_SCHEDULER_WORKER_ENABLED"
+SCHEDULER_WORKER_INTERVAL_ENV = "VOID_SCHEDULER_WORKER_INTERVAL"
+
+
+def _env_enabled(name: str, default: bool = True) -> bool:
+    value = os.getenv(name)
+    if value is None:
+        return default
+    return value.strip().lower() not in {"0", "false", "no", "off"}
+
+
+def _env_int(name: str, default: int) -> int:
+    value = os.getenv(name)
+    if value is None:
+        return default
+    try:
+        return max(1, int(value))
+    except ValueError:
+        print(
+            f"WARNING: Invalid {name}={value!r}; using {default}.",
+            flush=True,
+        )
+        return default
 
 if get_api_token() is None:
     print(
@@ -38,9 +66,37 @@ if get_api_token() is None:
         flush=True,
     )
 
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    enabled = _env_enabled(SCHEDULER_WORKER_ENABLED_ENV, True)
+    interval_seconds = _env_int(SCHEDULER_WORKER_INTERVAL_ENV, 60)
+    worker = SchedulerWorker(interval_seconds=interval_seconds)
+    app.state.scheduler_worker_enabled = enabled
+    app.state.scheduler_worker = worker
+
+    if enabled:
+        worker.start()
+        print(
+            f"Scheduler worker started with interval {interval_seconds}s.",
+            flush=True,
+        )
+    else:
+        print(
+            "WARNING: Scheduler worker disabled by VOID_SCHEDULER_WORKER_ENABLED.",
+            flush=True,
+        )
+
+    try:
+        yield
+    finally:
+        worker.stop()
+
+
 app = FastAPI(
     title="Void API",
     version=API_VERSION,
+    lifespan=lifespan,
 )
 
 app.add_middleware(
@@ -160,6 +216,41 @@ def tasks(
 ) -> ScheduledTasksResponse | ErrorResponse:
     try:
         return ScheduledTasksResponse(ok=True, tasks=list_tasks())
+    except Exception as error:
+        return _error(error)
+
+
+@app.get("/scheduler/status", response_model=SchedulerStatusResponse | ErrorResponse)
+def scheduler_status(
+    request: Request,
+    _: None = Depends(require_api_token),
+) -> SchedulerStatusResponse | ErrorResponse:
+    try:
+        worker: SchedulerWorker | None = getattr(request.app.state, "scheduler_worker", None)
+        enabled = bool(getattr(request.app.state, "scheduler_worker_enabled", False))
+        return SchedulerStatusResponse(
+            ok=True,
+            enabled=enabled,
+            running=bool(worker and worker.running),
+            interval_seconds=worker.interval_seconds if worker else 60,
+        )
+    except Exception as error:
+        return _error(error)
+
+
+@app.post("/scheduler/run-once", response_model=SchedulerRunOnceResponse | ErrorResponse)
+async def scheduler_run_once(
+    request: Request,
+    _: None = Depends(require_api_token),
+) -> SchedulerRunOnceResponse | ErrorResponse:
+    try:
+        worker: SchedulerWorker | None = getattr(request.app.state, "scheduler_worker", None)
+        if worker is None:
+            worker = SchedulerWorker()
+            request.app.state.scheduler_worker = worker
+            request.app.state.scheduler_worker_enabled = False
+        results = await worker.run_once()
+        return SchedulerRunOnceResponse(ok=True, results=results)
     except Exception as error:
         return _error(error)
 

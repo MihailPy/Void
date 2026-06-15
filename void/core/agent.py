@@ -191,3 +191,14 @@ class Agent:
             print(asdict(value))
         else:
             print(value)
+
+
+def create_default_agent(debug: bool = False) -> Agent:
+    """Create the standard Void agent used by CLI, API, and scheduler runs."""
+    from void.tools.builtin import build_registry
+
+    return Agent(
+        registry=build_registry(),
+        skill_registry=build_skill_registry(),
+        debug=debug,
+    )

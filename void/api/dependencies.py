@@ -2,7 +2,7 @@
 
 from functools import lru_cache
 
-from void.core.agent import Agent
+from void.core.agent import Agent, create_default_agent
 from void.core.registry import ToolRegistry
 from void.skills import build_skill_registry
 from void.skills.registry import SkillRegistry
@@ -24,7 +24,4 @@ def get_skill_registry() -> SkillRegistry:
 @lru_cache(maxsize=1)
 def get_agent() -> Agent:
     """Return a shared Agent configured with the standard Void registries."""
-    return Agent(
-        registry=get_tool_registry(),
-        skill_registry=get_skill_registry(),
-    )
+    return create_default_agent()

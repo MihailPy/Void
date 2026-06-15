@@ -52,6 +52,18 @@ class ScheduledTasksResponse(BaseModel):
     tasks: list[dict[str, Any]]
 
 
+class SchedulerStatusResponse(BaseModel):
+    ok: bool
+    enabled: bool
+    running: bool
+    interval_seconds: int
+
+
+class SchedulerRunOnceResponse(BaseModel):
+    ok: bool
+    results: list[dict[str, Any]]
+
+
 class CreateScheduledTaskRequest(BaseModel):
     title: str
     prompt: str
