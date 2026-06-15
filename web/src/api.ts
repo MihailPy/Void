@@ -79,6 +79,18 @@ export type ScheduledTasksResponse = {
   tasks: ScheduledTask[];
 };
 
+export type SchedulerStatusResponse = {
+  ok: boolean;
+  enabled: boolean;
+  running: boolean;
+  interval_seconds: number;
+};
+
+export type SchedulerRunOnceResponse = {
+  ok: boolean;
+  results: Array<Record<string, unknown>>;
+};
+
 export type CreateScheduledTaskRequest = {
   title: string;
   prompt: string;
@@ -186,6 +198,16 @@ export function reject(id: string) {
 
 export function getTasks() {
   return request<ScheduledTasksResponse>("/tasks");
+}
+
+export function getSchedulerStatus() {
+  return request<SchedulerStatusResponse>("/scheduler/status");
+}
+
+export function runDueTasksNow() {
+  return request<SchedulerRunOnceResponse>("/scheduler/run-once", {
+    method: "POST",
+  });
 }
 
 export function createTask(payload: CreateScheduledTaskRequest) {

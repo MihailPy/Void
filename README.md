@@ -77,8 +77,9 @@ http://127.0.0.1:8000/docs
 ## Task Scheduler
 
 Void хранит запланированные задачи в `memory/scheduled_tasks.json`.
-Фонового worker на этом этапе нет: задачи можно создать, посмотреть,
-включить, отключить, удалить и запустить вручную.
+Задачи можно создать, посмотреть, включить, отключить, удалить и запустить
+вручную. При запуске FastAPI дополнительно стартует простой asyncio worker,
+который периодически выполняет due tasks.
 
 CLI:
 
@@ -139,6 +140,42 @@ Web UI:
 * создай задачу
 * подтверди действие во вкладке Approvals
 * вернись во вкладку Tasks и нажми Refresh
+
+## Scheduler Worker
+
+По умолчанию worker запускается вместе с FastAPI:
+
+```bash
+python -m void.api.server
+```
+
+Настройки:
+
+```bash
+export VOID_SCHEDULER_WORKER_ENABLED=true
+export VOID_SCHEDULER_WORKER_INTERVAL=60
+```
+
+Отключить worker:
+
+```bash
+export VOID_SCHEDULER_WORKER_ENABLED=false
+python -m void.api.server
+```
+
+Status:
+
+```bash
+curl http://127.0.0.1:8000/scheduler/status
+```
+
+Manual run due tasks:
+
+```bash
+curl -X POST http://127.0.0.1:8000/scheduler/run-once
+```
+
+Каждый запуск scheduled task пишет запись `Scheduled Task Run` в session memory.
 
 ## Web UI
 

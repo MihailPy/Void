@@ -4,6 +4,7 @@ import {
   Capability,
   HealthResponse,
   MemoryResponse,
+  SchedulerStatusResponse,
   ScheduledTask,
   Skill,
   approve,
@@ -16,12 +17,14 @@ import {
   getCapabilities,
   getFactsMemory,
   getProjectMemory,
+  getSchedulerStatus,
   getSessionMemory,
   getSkills,
   getTasks,
   getStoredToken,
   health,
   reject,
+  runDueTasksNow,
   runTask,
   sendChatMessage,
   setStoredToken,
@@ -314,7 +317,11 @@ function ApprovalsTab() {
 
 function TasksTab() {
   const [tasks, setTasks] = useState<ScheduledTask[]>([]);
+  const [schedulerStatus, setSchedulerStatus] =
+    useState<SchedulerStatusResponse | null>(null);
   const [loading, setLoading] = useState(true);
+  const [statusLoading, setStatusLoading] = useState(true);
+  const [runDueLoading, setRunDueLoading] = useState(false);
   const [actionId, setActionId] = useState("");
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
@@ -336,6 +343,38 @@ function TasksTab() {
       setError(getErrorMessage(currentError));
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function loadSchedulerStatus() {
+    try {
+      setError("");
+      setStatusLoading(true);
+      setSchedulerStatus(await getSchedulerStatus());
+    } catch (currentError) {
+      setError(getErrorMessage(currentError));
+    } finally {
+      setStatusLoading(false);
+    }
+  }
+
+  async function handleRunDueTasks() {
+    setError("");
+    setMessage("");
+    setRunDueLoading(true);
+    try {
+      const response = await runDueTasksNow();
+      const count = response.results.length;
+      setMessage(
+        count === 0
+          ? "No due tasks."
+          : `Run due tasks completed: ${count} task${count === 1 ? "" : "s"}.`,
+      );
+      await Promise.all([loadTasks(), loadSchedulerStatus()]);
+    } catch (currentError) {
+      setError(getErrorMessage(currentError));
+    } finally {
+      setRunDueLoading(false);
     }
   }
 
@@ -398,7 +437,7 @@ function TasksTab() {
   }
 
   useEffect(() => {
-    void loadTasks();
+    void Promise.all([loadTasks(), loadSchedulerStatus()]);
   }, []);
 
   return (
@@ -415,6 +454,48 @@ function TasksTab() {
 
       {error ? <div className="error">{error}</div> : null}
       {message ? <div className="notice">{message}</div> : null}
+
+      <section className="schedulerPanel">
+        <div>
+          <div className="sectionLabel">Scheduler status</div>
+          <div
+            className={
+              schedulerStatus?.enabled && schedulerStatus.running
+                ? "status ok"
+                : "status bad"
+            }
+          >
+            <span className="statusDot" />
+            {statusLoading
+              ? "loading"
+              : schedulerStatus?.enabled
+                ? schedulerStatus.running
+                  ? "running"
+                  : "stopped"
+                : "disabled"}
+          </div>
+          <div className="muted">
+            Interval: {schedulerStatus?.interval_seconds ?? 60}s
+          </div>
+        </div>
+        <div className="buttonRow schedulerActions">
+          <button
+            className="secondaryButton"
+            type="button"
+            onClick={() => void loadSchedulerStatus()}
+            disabled={statusLoading}
+          >
+            Refresh status
+          </button>
+          <button
+            type="button"
+            onClick={() => void handleRunDueTasks()}
+            disabled={runDueLoading}
+          >
+            {runDueLoading ? "Running..." : "Run due tasks now"}
+          </button>
+        </div>
+      </section>
 
       <section className="taskForm">
         <h2>Create task</h2>

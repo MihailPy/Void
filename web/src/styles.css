@@ -239,6 +239,7 @@ h1 {
 .message,
 .card,
 .memoryBlock,
+.schedulerPanel,
 .taskForm,
 .empty,
 .error,
@@ -427,6 +428,19 @@ textarea:focus {
   margin-bottom: 1rem;
 }
 
+.schedulerPanel {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1rem;
+  margin-bottom: 1rem;
+}
+
+.schedulerActions {
+  margin-top: 0;
+}
+
 .taskForm h2 {
   font-size: 1rem;
 }
@@ -490,5 +504,10 @@ textarea:focus {
   .composer button,
   .panelHeader button {
     width: 100%;
+  }
+
+  .schedulerPanel {
+    align-items: stretch;
+    flex-direction: column;
   }
 }

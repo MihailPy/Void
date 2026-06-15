@@ -95,10 +95,9 @@ def run_scheduled_task(task_id: str) -> ToolResult:
     if task is None:
         return ToolResult(ok=False, content=f"Scheduled task not found: {task_id}", terminal=True)
 
-    from void.core.agent import Agent
-    from void.tools.builtin import build_registry
+    from void.core.agent import create_default_agent
 
-    agent = Agent(registry=build_registry())
+    agent = create_default_agent()
     result = agent.handle(task["prompt"])
     updated_task = scheduler.mark_task_ran(task_id)
     return ToolResult(
