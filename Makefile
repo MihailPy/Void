@@ -1,4 +1,4 @@
-.PHONY: cli api web web-install check clean help
+.PHONY: cli api web web-install test check clean help
 
 help:
 	@echo "Void commands:"
@@ -6,7 +6,8 @@ help:
 	@echo "  make api          Run FastAPI backend"
 	@echo "  make web          Run Web UI"
 	@echo "  make web-install  Install Web UI deps"
-	@echo "  make check        Run Python compile check"
+	@echo "  make test         Run pytest"
+	@echo "  make check        Run Python compile and test checks"
 	@echo "  make clean        Remove caches"
 
 cli:
@@ -21,8 +22,12 @@ web:
 web-install:
 	cd web && npm install
 
+test:
+	uv run pytest
+
 check:
-	uv run python -m compileall .
+	python3 -m compileall .
+	uv run pytest
 
 clean:
 	find . -type d -name "__pycache__" -prune -exec rm -rf {} +
