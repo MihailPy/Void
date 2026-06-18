@@ -13,6 +13,11 @@ from void.api.auth import get_api_token, require_api_token
 from void.api.dependencies import get_agent, get_skill_registry, get_tool_registry
 from void.api.schemas import (
     ApprovalResponse,
+    BrowserLinksRequest,
+    BrowserScreenshotRequest,
+    BrowserTaskRequest,
+    BrowserTextRequest,
+    BrowserUrlRequest,
     CapabilitiesResponse,
     ChatRequest,
     ChatResponse,
@@ -140,6 +145,18 @@ def _read_memory_file(filename: str) -> MemoryResponse | ErrorResponse:
         ensure_memory_files()
         content = (MEMORY_DIR / filename).read_text(encoding="utf-8")
         return MemoryResponse(ok=True, content=content)
+    except Exception as error:
+        return _error(error)
+
+
+def _execute_api_tool(
+    registry: ToolRegistry,
+    action: str,
+    arguments: dict[str, Any],
+) -> ApprovalResponse | ErrorResponse:
+    try:
+        result = registry.execute(AgentAction(action, arguments, "API request."))
+        return ApprovalResponse(ok=result.ok, message=result.content)
     except Exception as error:
         return _error(error)
 
@@ -277,6 +294,67 @@ def create_task(
         return ApprovalResponse(ok=result.ok, message=result.content)
     except Exception as error:
         return _error(error)
+
+
+@app.post("/browser/title", response_model=ApprovalResponse | ErrorResponse)
+def browser_title_endpoint(
+    request: BrowserUrlRequest,
+    _: None = Depends(require_api_token),
+    registry: ToolRegistry = Depends(get_tool_registry),
+) -> ApprovalResponse | ErrorResponse:
+    return _execute_api_tool(registry, "browser_title", {"url": request.url})
+
+
+@app.post("/browser/text", response_model=ApprovalResponse | ErrorResponse)
+def browser_text_endpoint(
+    request: BrowserTextRequest,
+    _: None = Depends(require_api_token),
+    registry: ToolRegistry = Depends(get_tool_registry),
+) -> ApprovalResponse | ErrorResponse:
+    return _execute_api_tool(
+        registry,
+        "browser_extract_text",
+        {"url": request.url, "max_chars": request.max_chars},
+    )
+
+
+@app.post("/browser/links", response_model=ApprovalResponse | ErrorResponse)
+def browser_links_endpoint(
+    request: BrowserLinksRequest,
+    _: None = Depends(require_api_token),
+    registry: ToolRegistry = Depends(get_tool_registry),
+) -> ApprovalResponse | ErrorResponse:
+    return _execute_api_tool(
+        registry,
+        "browser_links",
+        {"url": request.url, "limit": request.limit},
+    )
+
+
+@app.post("/browser/screenshot", response_model=ApprovalResponse | ErrorResponse)
+def browser_screenshot_endpoint(
+    request: BrowserScreenshotRequest,
+    _: None = Depends(require_api_token),
+    registry: ToolRegistry = Depends(get_tool_registry),
+) -> ApprovalResponse | ErrorResponse:
+    return _execute_api_tool(
+        registry,
+        "browser_screenshot",
+        {"url": request.url, "path": request.path},
+    )
+
+
+@app.post("/browser/task", response_model=ApprovalResponse | ErrorResponse)
+def browser_task_endpoint(
+    request: BrowserTaskRequest,
+    _: None = Depends(require_api_token),
+    registry: ToolRegistry = Depends(get_tool_registry),
+) -> ApprovalResponse | ErrorResponse:
+    return _execute_api_tool(
+        registry,
+        "browser_task",
+        {"url": request.url, "instruction": request.instruction},
+    )
 
 
 @app.post("/tasks/{task_id}/run", response_model=ApprovalResponse | ErrorResponse)

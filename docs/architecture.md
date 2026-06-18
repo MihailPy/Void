@@ -14,6 +14,7 @@ Void is organized around a deterministic local agent runtime. The CLI, API, Web 
 - Skill Registry: deterministic skill matching and execution.
 - Tool Registry: safe dispatch for executable tools.
 - LLM fallback: LM Studio or another OpenAI-compatible API is used when deterministic routing and skills do not handle a request.
+- Browser Capability: approval-gated Playwright tools for http/https page title, text extraction, links, screenshots, and read-only page inspection.
 
 ## Execution Order
 
@@ -47,9 +48,18 @@ Memory files live under `memory/` and runtime package defaults live under `void/
 - Scheduler tools create, list, run, enable, disable, and delete tasks.
 - The scheduler worker starts with FastAPI when enabled and periodically runs due tasks through the standard agent.
 
+## Browser Capability
+
+- Browser tools use Playwright with headless Chromium.
+- All browser tools are registered with `requires_confirmation=True`.
+- URL handling allows only `http` and `https`; `file`, `javascript`, and `data` schemes are blocked.
+- Screenshots are limited to `workspace/screenshots/`.
+- Browser task is read-only and does not click, log in, fill forms, submit data, run user-provided JavaScript, or persist sessions.
+
 ## Safety
 
 - File tools use safe project paths.
 - Common generated and cache directories are ignored where appropriate.
 - Protected actions require approval before execution.
 - API token auth protects endpoints when `VOID_API_TOKEN` is set.
+- Future interactive browser automation should be added as a separate capability with explicit approvals and tighter action controls.

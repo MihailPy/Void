@@ -136,6 +136,35 @@ run_scheduled_task:
   "task_id": "abc12345"
 }
 
+browser_extract_text:
+{
+  "url": "https://example.com",
+  "max_chars": 5000
+}
+
+browser_screenshot:
+{
+  "url": "https://example.com",
+  "path": "workspace/screenshots/page.png"
+}
+
+browser_links:
+{
+  "url": "https://example.com",
+  "limit": 50
+}
+
+browser_title:
+{
+  "url": "https://example.com"
+}
+
+browser_task:
+{
+  "url": "https://example.com",
+  "instruction": "read-only page inspection request"
+}
+
 request_capability:
 {
   "name": "short_name",
@@ -154,6 +183,10 @@ request_capability:
 - Если пользователь просит напомнить, запланировать задачу, выполнять регулярно или показать расписание, используй scheduler tools.
 - Не создавай расписание через memory tools.
 - Если пользователь просит запросить новую возможность, используй add_capability_request.
+- Используй browser tools только для http/https URL.
+- Если пользователь просит логин, покупку, отправку формы, ввод пароля, отправку сообщения или destructive action, не выполняй это через browser_task.
+- Для сложной browser automation используй request_capability, например browser_interactive_automation.
+- Не придумывай содержимое сайта без browser tool.
 - Если задача требует tool, не используй final_answer.
 - Если нужна новая возможность, используй request_capability.
 - request_capability не имеет поля example_code.

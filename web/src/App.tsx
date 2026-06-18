@@ -13,7 +13,11 @@ import {
   deleteTask,
   disableTask,
   enableTask,
+  extractBrowserText,
   getApprovals,
+  getBrowserLinks,
+  getBrowserScreenshot,
+  getBrowserTitle,
   getCapabilities,
   getFactsMemory,
   getProjectMemory,
@@ -24,13 +28,21 @@ import {
   getStoredToken,
   health,
   reject,
+  runBrowserTask,
   runDueTasksNow,
   runTask,
   sendChatMessage,
   setStoredToken,
 } from "./api";
 
-type Tab = "chat" | "approvals" | "tasks" | "capabilities" | "skills" | "memory";
+type Tab =
+  | "chat"
+  | "browser"
+  | "approvals"
+  | "tasks"
+  | "capabilities"
+  | "skills"
+  | "memory";
 
 type Message = {
   role: "user" | "void";
@@ -39,6 +51,7 @@ type Message = {
 
 const tabs: { id: Tab; label: string }[] = [
   { id: "chat", label: "Chat" },
+  { id: "browser", label: "Browser" },
   { id: "approvals", label: "Approvals" },
   { id: "tasks", label: "Tasks" },
   { id: "capabilities", label: "Capabilities" },
@@ -216,6 +229,121 @@ function ChatTab() {
           {loading ? "Sending..." : "Send"}
         </button>
       </div>
+    </section>
+  );
+}
+
+function BrowserTab() {
+  const [url, setUrl] = useState("https://example.com");
+  const [instruction, setInstruction] = useState("Изучи страницу кратко");
+  const [loadingAction, setLoadingAction] = useState("");
+  const [result, setResult] = useState("");
+  const [error, setError] = useState("");
+
+  async function handleBrowserAction(action: string) {
+    const cleanUrl = url.trim();
+    if (!cleanUrl) {
+      setError("URL is required.");
+      return;
+    }
+
+    setError("");
+    setResult("");
+    setLoadingAction(action);
+    try {
+      const response =
+        action === "title"
+          ? await getBrowserTitle(cleanUrl)
+          : action === "text"
+            ? await extractBrowserText(cleanUrl)
+            : action === "links"
+              ? await getBrowserLinks(cleanUrl)
+              : action === "screenshot"
+                ? await getBrowserScreenshot(cleanUrl)
+                : await runBrowserTask({
+                    url: cleanUrl,
+                    instruction: instruction.trim() || "Read-only page inspection.",
+                  });
+      setResult(response.message);
+    } catch (currentError) {
+      setError(getErrorMessage(currentError));
+    } finally {
+      setLoadingAction("");
+    }
+  }
+
+  return (
+    <section className="panel">
+      <div className="panelHeader">
+        <div>
+          <h1>Browser</h1>
+          <p>Read-only Playwright actions for http/https pages.</p>
+        </div>
+      </div>
+
+      {error ? <div className="error">{error}</div> : null}
+      {result ? <div className="notice">{result}</div> : null}
+
+      <section className="browserPanel">
+        <label>
+          <span>URL</span>
+          <input
+            value={url}
+            onChange={(event) => setUrl(event.target.value)}
+            placeholder="https://example.com"
+          />
+        </label>
+        <label>
+          <span>Browser task instruction</span>
+          <textarea
+            value={instruction}
+            onChange={(event) => setInstruction(event.target.value)}
+            rows={4}
+            placeholder="Проверь сайт и покажи краткую сводку"
+          />
+        </label>
+        <div className="buttonRow">
+          <button
+            type="button"
+            disabled={Boolean(loadingAction)}
+            onClick={() => void handleBrowserAction("title")}
+          >
+            {loadingAction === "title" ? "Requesting..." : "Get title"}
+          </button>
+          <button
+            type="button"
+            disabled={Boolean(loadingAction)}
+            onClick={() => void handleBrowserAction("text")}
+          >
+            {loadingAction === "text" ? "Requesting..." : "Extract text"}
+          </button>
+          <button
+            type="button"
+            disabled={Boolean(loadingAction)}
+            onClick={() => void handleBrowserAction("links")}
+          >
+            {loadingAction === "links" ? "Requesting..." : "Links"}
+          </button>
+          <button
+            type="button"
+            disabled={Boolean(loadingAction)}
+            onClick={() => void handleBrowserAction("screenshot")}
+          >
+            {loadingAction === "screenshot" ? "Requesting..." : "Screenshot"}
+          </button>
+          <button
+            type="button"
+            disabled={Boolean(loadingAction)}
+            onClick={() => void handleBrowserAction("task")}
+          >
+            {loadingAction === "task" ? "Requesting..." : "Browser task"}
+          </button>
+        </div>
+        <div className="muted">
+          Browser actions require approval. Open the Approvals tab after sending a
+          request to approve or reject it.
+        </div>
+      </section>
     </section>
   );
 }
@@ -921,6 +1049,9 @@ function MemoryTab() {
 }
 
 function ActiveTab({ tab }: { tab: Tab }) {
+  if (tab === "browser") {
+    return <BrowserTab />;
+  }
   if (tab === "approvals") {
     return <ApprovalsTab />;
   }
