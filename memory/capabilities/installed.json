@@ -8,5 +8,15 @@
     "reason": "Existing safe built-in tools do not provide this capability.",
     "created_at": "2026-06-09T17:46:33",
     "updated_at": "2026-06-09T17:48:13"
+  },
+  {
+    "id": "browser_basic",
+    "name": "browser_basic",
+    "status": "installed",
+    "description": "Basic browser capability using Playwright: title, text extraction, links, screenshots.",
+    "problem": null,
+    "reason": "Implemented as approval-gated read-only browser tools.",
+    "created_at": "2026-06-18T00:00:00",
+    "updated_at": "2026-06-18T00:00:00"
   }
 ]

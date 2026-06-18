@@ -98,6 +98,11 @@ export type CreateScheduledTaskRequest = {
   schedule_value: Record<string, unknown>;
 };
 
+export type BrowserTaskRequest = {
+  url: string;
+  instruction: string;
+};
+
 export type MemoryResponse = {
   ok: boolean;
   content: string;
@@ -238,6 +243,41 @@ export function disableTask(id: string) {
 export function deleteTask(id: string) {
   return request<ApprovalActionResponse>(`/tasks/${id}`, {
     method: "DELETE",
+  });
+}
+
+export function getBrowserTitle(url: string) {
+  return request<ApprovalActionResponse>("/browser/title", {
+    method: "POST",
+    body: JSON.stringify({ url }),
+  });
+}
+
+export function extractBrowserText(url: string) {
+  return request<ApprovalActionResponse>("/browser/text", {
+    method: "POST",
+    body: JSON.stringify({ url }),
+  });
+}
+
+export function getBrowserLinks(url: string) {
+  return request<ApprovalActionResponse>("/browser/links", {
+    method: "POST",
+    body: JSON.stringify({ url }),
+  });
+}
+
+export function getBrowserScreenshot(url: string) {
+  return request<ApprovalActionResponse>("/browser/screenshot", {
+    method: "POST",
+    body: JSON.stringify({ url }),
+  });
+}
+
+export function runBrowserTask(payload: BrowserTaskRequest) {
+  return request<ApprovalActionResponse>("/browser/task", {
+    method: "POST",
+    body: JSON.stringify(payload),
   });
 }
 

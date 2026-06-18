@@ -13,10 +13,11 @@
 - Web UI
 - Task Scheduler
 - Scheduler Worker
+- Browser Capability
 
 ## Next
 
-- Browser automation capability
+- Interactive browser automation
 - Git capability
 - Better web dashboards
 - Remote access hardening

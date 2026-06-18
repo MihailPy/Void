@@ -241,6 +241,7 @@ h1 {
 .memoryBlock,
 .schedulerPanel,
 .taskForm,
+.browserPanel,
 .empty,
 .error,
 .notice {
@@ -426,6 +427,24 @@ textarea:focus {
   gap: 0.9rem;
   padding: 1rem;
   margin-bottom: 1rem;
+}
+
+.browserPanel {
+  display: grid;
+  gap: 0.9rem;
+  padding: 1rem;
+}
+
+.browserPanel label {
+  display: grid;
+  gap: 0.4rem;
+}
+
+.browserPanel label span {
+  color: #9fb4ca;
+  font-size: 0.78rem;
+  font-weight: 800;
+  text-transform: uppercase;
 }
 
 .schedulerPanel {

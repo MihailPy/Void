@@ -14,6 +14,7 @@ Void — локальный AI-помощник с deterministic core, tools, sk
 - Capability System
 - Task Scheduler
 - Scheduler Worker
+- Browser Capability
 - Memory layer
 - LLM fallback through LM Studio / OpenAI-compatible API
 
@@ -94,6 +95,31 @@ make web
 
 The Vite dev server runs on `http://localhost:5173` by default.
 
+## Browser Capability
+
+Install browser runtime after installing Python dependencies:
+
+```bash
+python -m playwright install chromium
+```
+
+Examples:
+
+CLI:
+
+```text
+Получи текст со страницы https://example.com
+Сделай скриншот https://example.com
+Покажи ссылки на странице https://example.com
+```
+
+Important:
+
+* Browser actions require approval.
+* No cookies/session persistence by default.
+* No login/form submission automation yet.
+* Only http/https URLs are allowed.
+
 ## Auth
 
 If `VOID_API_TOKEN` is not set, Void runs in local dev mode and protected API endpoints do not require auth.
@@ -157,7 +183,7 @@ Current project metadata version: Void v0.1.0. The API reports version `0.8.0`.
 
 ## Roadmap
 
-- Browser capability
+- Interactive browser automation
 - Git capability
 - Better remote access
 - More skills

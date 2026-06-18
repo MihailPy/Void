@@ -71,6 +71,30 @@ class CreateScheduledTaskRequest(BaseModel):
     schedule_value: dict[str, Any]
 
 
+class BrowserUrlRequest(BaseModel):
+    url: str
+
+
+class BrowserTextRequest(BaseModel):
+    url: str
+    max_chars: int = 5000
+
+
+class BrowserLinksRequest(BaseModel):
+    url: str
+    limit: int = 50
+
+
+class BrowserScreenshotRequest(BaseModel):
+    url: str
+    path: str = "workspace/screenshots/page.png"
+
+
+class BrowserTaskRequest(BaseModel):
+    url: str
+    instruction: str
+
+
 class ErrorResponse(BaseModel):
     ok: bool
     error: str

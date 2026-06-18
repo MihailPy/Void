@@ -41,3 +41,21 @@ def test_router_read_file():
     assert route.action is not None
     assert route.action.action == "read_file"
     assert route.action.arguments == {"path": "README.md"}
+
+
+def test_router_browser_extract_text():
+    route = Router().route("Получи текст со страницы https://example.com")
+
+    assert route.matched is True
+    assert route.action is not None
+    assert route.action.action == "browser_extract_text"
+    assert route.action.arguments == {"url": "https://example.com"}
+
+
+def test_router_browser_screenshot():
+    route = Router().route("Сделай скриншот https://example.com")
+
+    assert route.matched is True
+    assert route.action is not None
+    assert route.action.action == "browser_screenshot"
+    assert route.action.arguments == {"url": "https://example.com"}
