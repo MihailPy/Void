@@ -15,6 +15,7 @@ Void is organized around a deterministic local agent runtime. The CLI, API, Web 
 - Tool Registry: safe dispatch for executable tools.
 - LLM fallback: LM Studio or another OpenAI-compatible API is used when deterministic routing and skills do not handle a request.
 - Browser Capability: approval-gated Playwright tools for http/https page title, text extraction, links, screenshots, and read-only page inspection.
+- Git Capability: safe Git status, diff, log, current branch, commit message suggestion, and approval-gated commit.
 
 ## Execution Order
 
@@ -56,6 +57,13 @@ Memory files live under `memory/` and runtime package defaults live under `void/
 - Screenshots are limited to `workspace/screenshots/`.
 - Browser task is read-only and does not click, log in, fill forms, submit data, run user-provided JavaScript, or persist sessions.
 
+## Git Capability
+
+- Read-only Git tools expose status, diff, staged diff, log, and current branch.
+- Commit message suggestions are deterministic and based on status plus staged or unstaged diff.
+- `git_commit` requires approval and never runs `git add`.
+- Git push, pull, reset, checkout, switch, merge, rebase, clean, remote, and config are blocked.
+
 ## Safety
 
 - File tools use safe project paths.
@@ -63,3 +71,4 @@ Memory files live under `memory/` and runtime package defaults live under `void/
 - Protected actions require approval before execution.
 - API token auth protects endpoints when `VOID_API_TOKEN` is set.
 - Future interactive browser automation should be added as a separate capability with explicit approvals and tighter action controls.
+- Advanced git workflows should be added only with stronger approval controls.

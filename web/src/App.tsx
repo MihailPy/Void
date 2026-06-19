@@ -9,6 +9,7 @@ import {
   Skill,
   approve,
   clearStoredToken,
+  createGitCommit,
   createTask,
   deleteTask,
   disableTask,
@@ -20,6 +21,11 @@ import {
   getBrowserTitle,
   getCapabilities,
   getFactsMemory,
+  getGitBranch,
+  getGitDiff,
+  getGitLog,
+  getGitStagedDiff,
+  getGitStatus,
   getProjectMemory,
   getSchedulerStatus,
   getSessionMemory,
@@ -33,11 +39,13 @@ import {
   runTask,
   sendChatMessage,
   setStoredToken,
+  suggestGitCommitMessage,
 } from "./api";
 
 type Tab =
   | "chat"
   | "browser"
+  | "git"
   | "approvals"
   | "tasks"
   | "capabilities"
@@ -52,6 +60,7 @@ type Message = {
 const tabs: { id: Tab; label: string }[] = [
   { id: "chat", label: "Chat" },
   { id: "browser", label: "Browser" },
+  { id: "git", label: "Git" },
   { id: "approvals", label: "Approvals" },
   { id: "tasks", label: "Tasks" },
   { id: "capabilities", label: "Capabilities" },
@@ -344,6 +353,148 @@ function BrowserTab() {
           request to approve or reject it.
         </div>
       </section>
+    </section>
+  );
+}
+
+function GitTab() {
+  const [commitMessage, setCommitMessage] = useState("");
+  const [loadingAction, setLoadingAction] = useState("");
+  const [result, setResult] = useState("");
+  const [notice, setNotice] = useState("");
+  const [error, setError] = useState("");
+
+  async function handleGitAction(action: string) {
+    setError("");
+    setNotice("");
+    setResult("");
+    setLoadingAction(action);
+    try {
+      const response =
+        action === "status"
+          ? await getGitStatus()
+          : action === "diff"
+            ? await getGitDiff()
+            : action === "staged"
+              ? await getGitStagedDiff()
+              : action === "log"
+                ? await getGitLog()
+                : action === "branch"
+                  ? await getGitBranch()
+                  : await suggestGitCommitMessage();
+      setResult(response.message || "(no output)");
+    } catch (currentError) {
+      setError(getErrorMessage(currentError));
+    } finally {
+      setLoadingAction("");
+    }
+  }
+
+  async function handleCommit() {
+    const message = commitMessage.trim();
+    if (!message) {
+      setError("Commit message is required.");
+      return;
+    }
+
+    setError("");
+    setNotice("");
+    setResult("");
+    setLoadingAction("commit");
+    try {
+      const response = await createGitCommit({ message });
+      setNotice(response.message);
+      setCommitMessage("");
+    } catch (currentError) {
+      setError(getErrorMessage(currentError));
+    } finally {
+      setLoadingAction("");
+    }
+  }
+
+  return (
+    <section className="panel">
+      <div className="panelHeader">
+        <div>
+          <h1>Git</h1>
+          <p>Safe Git helpers for the current project.</p>
+        </div>
+      </div>
+
+      {error ? <div className="error">{error}</div> : null}
+      {notice ? <div className="notice">{notice}</div> : null}
+
+      <section className="gitPanel">
+        <div className="buttonRow">
+          <button
+            type="button"
+            disabled={Boolean(loadingAction)}
+            onClick={() => void handleGitAction("status")}
+          >
+            {loadingAction === "status" ? "Loading..." : "Status"}
+          </button>
+          <button
+            type="button"
+            disabled={Boolean(loadingAction)}
+            onClick={() => void handleGitAction("diff")}
+          >
+            {loadingAction === "diff" ? "Loading..." : "Diff"}
+          </button>
+          <button
+            type="button"
+            disabled={Boolean(loadingAction)}
+            onClick={() => void handleGitAction("staged")}
+          >
+            {loadingAction === "staged" ? "Loading..." : "Staged Diff"}
+          </button>
+          <button
+            type="button"
+            disabled={Boolean(loadingAction)}
+            onClick={() => void handleGitAction("log")}
+          >
+            {loadingAction === "log" ? "Loading..." : "Log"}
+          </button>
+          <button
+            type="button"
+            disabled={Boolean(loadingAction)}
+            onClick={() => void handleGitAction("branch")}
+          >
+            {loadingAction === "branch" ? "Loading..." : "Current Branch"}
+          </button>
+          <button
+            type="button"
+            disabled={Boolean(loadingAction)}
+            onClick={() => void handleGitAction("suggest")}
+          >
+            {loadingAction === "suggest" ? "Loading..." : "Suggest Commit Message"}
+          </button>
+        </div>
+
+        <div className="commitBox">
+          <label>
+            <span>Commit message</span>
+            <input
+              value={commitMessage}
+              onChange={(event) => setCommitMessage(event.target.value)}
+              placeholder='Void v1.4: Git Capability'
+            />
+          </label>
+          <button
+            type="button"
+            disabled={Boolean(loadingAction)}
+            onClick={() => void handleCommit()}
+          >
+            {loadingAction === "commit" ? "Requesting..." : "Commit"}
+          </button>
+        </div>
+        <div className="muted">
+          Commit requires approval in the Approvals tab. Git add is not automatic.
+        </div>
+      </section>
+
+      <pre className="gitOutput">
+        <code>{result || "No Git output yet."}</code>
+      </pre>
     </section>
   );
 }
@@ -1051,6 +1202,9 @@ function MemoryTab() {
 function ActiveTab({ tab }: { tab: Tab }) {
   if (tab === "browser") {
     return <BrowserTab />;
+  }
+  if (tab === "git") {
+    return <GitTab />;
   }
   if (tab === "approvals") {
     return <ApprovalsTab />;
