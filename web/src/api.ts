@@ -103,6 +103,10 @@ export type BrowserTaskRequest = {
   instruction: string;
 };
 
+export type GitCommitRequest = {
+  message: string;
+};
+
 export type MemoryResponse = {
   ok: boolean;
   content: string;
@@ -276,6 +280,37 @@ export function getBrowserScreenshot(url: string) {
 
 export function runBrowserTask(payload: BrowserTaskRequest) {
   return request<ApprovalActionResponse>("/browser/task", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function getGitStatus() {
+  return request<ApprovalActionResponse>("/git/status");
+}
+
+export function getGitDiff() {
+  return request<ApprovalActionResponse>("/git/diff");
+}
+
+export function getGitStagedDiff() {
+  return request<ApprovalActionResponse>("/git/diff/staged");
+}
+
+export function getGitLog() {
+  return request<ApprovalActionResponse>("/git/log");
+}
+
+export function getGitBranch() {
+  return request<ApprovalActionResponse>("/git/branch");
+}
+
+export function suggestGitCommitMessage() {
+  return request<ApprovalActionResponse>("/git/suggest-commit-message");
+}
+
+export function createGitCommit(payload: GitCommitRequest) {
+  return request<ApprovalActionResponse>("/git/commit", {
     method: "POST",
     body: JSON.stringify(payload),
   });

@@ -15,6 +15,7 @@ Void — локальный AI-помощник с deterministic core, tools, sk
 - Task Scheduler
 - Scheduler Worker
 - Browser Capability
+- Git Capability
 - Memory layer
 - LLM fallback through LM Studio / OpenAI-compatible API
 
@@ -120,6 +121,29 @@ Important:
 * No login/form submission automation yet.
 * Only http/https URLs are allowed.
 
+## Git Capability
+
+Examples:
+
+CLI:
+
+```text
+git status
+покажи diff
+какой commit написать
+сделай commit с сообщением "Void v1.4: Git Capability"
+```
+
+Notes:
+
+* git_commit requires approval.
+* git add is not automatic.
+* push/pull/reset/checkout/merge are not supported for safety.
+
+Web UI:
+
+Git tab.
+
 ## Auth
 
 If `VOID_API_TOKEN` is not set, Void runs in local dev mode and protected API endpoints do not require auth.
@@ -184,7 +208,7 @@ Current project metadata version: Void v0.1.0. The API reports version `0.8.0`.
 ## Roadmap
 
 - Interactive browser automation
-- Git capability
+- Advanced git workflows with stronger approval controls
 - Better remote access
 - More skills
 - Web UI improvements

@@ -23,6 +23,7 @@ from void.api.schemas import (
     ChatResponse,
     CreateScheduledTaskRequest,
     ErrorResponse,
+    GitCommitRequest,
     HealthResponse,
     MemoryResponse,
     ScheduledTasksResponse,
@@ -355,6 +356,63 @@ def browser_task_endpoint(
         "browser_task",
         {"url": request.url, "instruction": request.instruction},
     )
+
+
+@app.get("/git/status", response_model=ApprovalResponse | ErrorResponse)
+def git_status_endpoint(
+    _: None = Depends(require_api_token),
+    registry: ToolRegistry = Depends(get_tool_registry),
+) -> ApprovalResponse | ErrorResponse:
+    return _execute_api_tool(registry, "git_status", {})
+
+
+@app.get("/git/diff", response_model=ApprovalResponse | ErrorResponse)
+def git_diff_endpoint(
+    _: None = Depends(require_api_token),
+    registry: ToolRegistry = Depends(get_tool_registry),
+) -> ApprovalResponse | ErrorResponse:
+    return _execute_api_tool(registry, "git_diff", {"staged": False})
+
+
+@app.get("/git/diff/staged", response_model=ApprovalResponse | ErrorResponse)
+def git_staged_diff_endpoint(
+    _: None = Depends(require_api_token),
+    registry: ToolRegistry = Depends(get_tool_registry),
+) -> ApprovalResponse | ErrorResponse:
+    return _execute_api_tool(registry, "git_diff", {"staged": True})
+
+
+@app.get("/git/log", response_model=ApprovalResponse | ErrorResponse)
+def git_log_endpoint(
+    _: None = Depends(require_api_token),
+    registry: ToolRegistry = Depends(get_tool_registry),
+) -> ApprovalResponse | ErrorResponse:
+    return _execute_api_tool(registry, "git_log", {})
+
+
+@app.get("/git/branch", response_model=ApprovalResponse | ErrorResponse)
+def git_branch_endpoint(
+    _: None = Depends(require_api_token),
+    registry: ToolRegistry = Depends(get_tool_registry),
+) -> ApprovalResponse | ErrorResponse:
+    return _execute_api_tool(registry, "git_current_branch", {})
+
+
+@app.get("/git/suggest-commit-message", response_model=ApprovalResponse | ErrorResponse)
+def git_suggest_commit_message_endpoint(
+    _: None = Depends(require_api_token),
+    registry: ToolRegistry = Depends(get_tool_registry),
+) -> ApprovalResponse | ErrorResponse:
+    return _execute_api_tool(registry, "git_suggest_commit_message", {})
+
+
+@app.post("/git/commit", response_model=ApprovalResponse | ErrorResponse)
+def git_commit_endpoint(
+    request: GitCommitRequest,
+    _: None = Depends(require_api_token),
+    registry: ToolRegistry = Depends(get_tool_registry),
+) -> ApprovalResponse | ErrorResponse:
+    return _execute_api_tool(registry, "git_commit", {"message": request.message})
 
 
 @app.post("/tasks/{task_id}/run", response_model=ApprovalResponse | ErrorResponse)

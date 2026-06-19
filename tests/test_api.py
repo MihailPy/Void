@@ -70,3 +70,21 @@ def test_chat_uses_router_without_llm():
     assert payload["ok"] is True
     assert payload["response"]
     assert "Project statistics" in payload["response"]
+
+
+def test_git_status_endpoint():
+    response = request("GET", "/git/status")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["ok"] is True
+    assert isinstance(payload["message"], str)
+
+
+def test_git_commit_endpoint_creates_approval():
+    response = request("POST", "/git/commit", json={"message": "test"})
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["ok"] is True
+    assert "approval" in payload["message"].lower()

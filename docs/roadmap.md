@@ -14,11 +14,12 @@
 - Task Scheduler
 - Scheduler Worker
 - Browser Capability
+- Git Capability
 
 ## Next
 
 - Interactive browser automation
-- Git capability
+- Advanced git workflows with stronger approval controls
 - Better web dashboards
 - Remote access hardening
 - Tests

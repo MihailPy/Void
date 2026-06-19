@@ -165,6 +165,31 @@ browser_task:
   "instruction": "read-only page inspection request"
 }
 
+git_status:
+{}
+
+git_diff:
+{
+  "staged": false,
+  "max_chars": 12000
+}
+
+git_log:
+{
+  "limit": 10
+}
+
+git_current_branch:
+{}
+
+git_suggest_commit_message:
+{}
+
+git_commit:
+{
+  "message": "explicit commit message from user"
+}
+
 request_capability:
 {
   "name": "short_name",
@@ -187,6 +212,11 @@ request_capability:
 - Если пользователь просит логин, покупку, отправку формы, ввод пароля, отправку сообщения или destructive action, не выполняй это через browser_task.
 - Для сложной browser automation используй request_capability, например browser_interactive_automation.
 - Не придумывай содержимое сайта без browser tool.
+- Read-only git actions можно использовать напрямую: git_status, git_diff, git_log, git_current_branch, git_suggest_commit_message.
+- git_commit требует approval и используй его только если пользователь явно указал commit message.
+- Если пользователь просит commit без сообщения, сначала используй git_suggest_commit_message.
+- Не используй git push, pull, reset, checkout, switch, merge, rebase, clean, remote или config.
+- Не придумывай git status, diff или log без вызова git tools.
 - Если задача требует tool, не используй final_answer.
 - Если нужна новая возможность, используй request_capability.
 - request_capability не имеет поля example_code.

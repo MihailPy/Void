@@ -6,6 +6,7 @@ from void.tools import (
     browser_tools,
     capability_tools,
     file_tools,
+    git_tools,
     memory_tools,
     project_tools,
     scheduler_tools,
@@ -26,6 +27,7 @@ def build_registry() -> ToolRegistry:
         capability_tools,
         scheduler_tools,
         browser_tools,
+        git_tools,
     ):
         for definition in module.definitions():
             registry.register(definition)

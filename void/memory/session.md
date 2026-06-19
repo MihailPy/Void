@@ -1374,3 +1374,278 @@ Top-level structure:
 
 ---
 
+## User Request
+
+Time: 2026-06-19 17:05:37
+
+git status
+
+---
+
+## Routed Action
+
+Time: 2026-06-19 17:05:37
+
+Action: git_status
+Reason: User asks for Git status.
+OK: True
+Terminal: True
+
+## features/git-capability
+ M README.md
+ M docs/architecture.md
+ M docs/roadmap.md
+ M memory/capabilities/installed.json
+ M tests/test_api.py
+ M tests/test_router.py
+ M void/api/schemas.py
+ M void/api/server.py
+ M void/core/router.py
+ M void/memory/session.md
+ M void/prompts.py
+ M void/tools/builtin.py
+ M web/src/App.tsx
+ M web/src/api.ts
+ M web/src/styles.css
+?? tests/test_git_tools.py
+?? void/tools/git_tools.py
+
+---
+
+## User Request
+
+Time: 2026-06-19 17:05:44
+
+покажи diff
+
+---
+
+## Routed Action
+
+Time: 2026-06-19 17:05:44
+
+Action: git_diff
+Reason: User asks for Git diff.
+OK: True
+Terminal: True
+
+diff --git a/README.md b/README.md
+index ac7c334..7d9e1f6 100644
+--- a/README.md
++++ b/README.md
+@@ -15,6 +15,7 @@ Void — локальный AI-помощник с deterministic core, tools, sk
+ - Task Scheduler
+ - Scheduler Worker
+ - Browser Capability
++- Git Capability
+ - Memory layer
+ - LLM fallback through LM Studio / OpenAI-compatible API
+ 
+@@ -120,6 +121,29 @@ Important:
+ * No login/form submission automation yet.
+ * Only http/https URLs are allowed.
+ 
++## Git Capability
++
++Examples:
++
++CLI:
++
++```text
++git status
++покажи diff
++какой commit написать
++сделай commit с сообщением "Void v1.4: Git Capability"
++```
++
++Notes:
++
++* git_commit requires approval.
++* git add is not automatic.
++* push/pull/reset/checkout/merge are not supported for safety.
++
++Web UI:
++
++Git tab.
++
+ ## Auth
+ 
+ If `VOID_API_TOKEN` is not set, Void runs in local dev mode and protected API endpoints do not require auth.
+@@ -184,7 +208,7 @@ Current project metadata version: Void v0.1.0. The API reports version `0.8.0`.
+ ## Roadmap
+ 
+ - Interactive browser automation
+-- Git capability
++- Advanced git workflows with stronger approval controls
+ - Better remote access
+ - More skills
+ - Web UI improvements
+diff --git a/docs/architecture.md b/docs/architecture.md
+index 4cb4f55..45f176d 100644
+--- a/docs/architecture.md
++++ b/docs/architecture.md
+@@ -15,6 +15,7 @@ Void is organized around a deterministic local agent runtime. The CLI, API, Web
+ - Tool Registry: safe dispatch for executable tools.
+ - LLM fallback: LM Studio or another OpenAI-compatible API is used when deterministic routing and skills do not handle a request.
+ - Browser Capability: approval-gated Playwright tools for http/https page title, text extraction, links, screenshots, and read-only page inspection.
++- Git Capability: safe Git status, diff, log, current branch, commit message suggestion, and approval-gated commit.
+ 
+ ## Execution Order
+ 
+@@ -56,6 +57,13 @@ Memory files live under `memory/` and runtime package defaults live under `void/
+ - Screenshots are limited to `workspace/screenshots/`.
+ - Browser task is read-only and does not click, log in, fill forms, submit data, run user-provided JavaScript, or persist sessions.
+ 
++## Git Capability
++
++- Read-only Git tools expose status, diff, staged diff, log, and current branch.
++- Commit message suggestions are deterministic and based on status plus staged or unstaged diff.
++- `git_commit` requires approval and never runs `git add`.
++- Git push, pull, reset, checkout, switch, merge, rebase, clean, remote, and config are blocked.
++
+ ## Safety
+ 
+ - File tools use safe project paths.
+@@ -63,3 +71,4 @@ Memory files live under `memory/` and runtime package defaults live under `void/
+ - Protected actions require approval before execution.
+ - API token auth protects endpoints when `VOID_API_TOKEN` is set.
+ - Future interactive browser automation should be added as a separate capability with explicit approvals and t
+
+[truncated]
+
+---
+
+## User Request
+
+Time: 2026-06-19 17:05:54
+
+покажи staged
+
+---
+
+## Routed Action
+
+Time: 2026-06-19 17:05:54
+
+Action: git_diff
+Reason: User asks for staged Git diff.
+OK: True
+Terminal: True
+
+
+
+---
+
+## User Request
+
+Time: 2026-06-19 17:05:59
+
+git log
+
+---
+
+## Routed Action
+
+Time: 2026-06-19 17:05:59
+
+Action: git_log
+Reason: User asks for recent Git log.
+OK: True
+Terminal: True
+
+15863bc Merge branch 'features/browser-capability'
+7f16715 Void v1.3: Browser Capability
+3eacbc2 Merge branch 'tests/core-api-smoke'
+7d3396e Add core and API smoke tests
+9d26dbd Merge branch 'docs/dev-experience'
+2d1e579 Improve documentaion adn developer experience
+c53bed0 Merge branch 'features/scheduler-worker'
+c6e0972 Void v1.2: Scheduler Worker
+4a4e658 Merge branch 'feature/task-scheduler'
+188b166 Void v1.1: Task Scheduler
+
+---
+
+## User Request
+
+Time: 2026-06-19 17:06:10
+
+текущая ветка
+
+---
+
+## Routed Action
+
+Time: 2026-06-19 17:06:10
+
+Action: git_current_branch
+Reason: User asks for the current Git branch.
+OK: True
+Terminal: True
+
+features/git-capability
+
+---
+
+## User Request
+
+Time: 2026-06-19 17:06:24
+
+как commit написать?
+
+---
+
+## LLM Action
+
+Time: 2026-06-19 17:06:45
+
+Action: git_suggest_commit_message
+Reason: Пользователь спрашивает как написать commit — использую git_suggest_commit_message для предложения подходящего сообщения
+OK: True
+Terminal: True
+
+Suggested commit message: Update documentation
+
+Diff source: unstaged
+Files:
+- README.md
+- docs/architecture.md
+- docs/roadmap.md
+- memory/capabilities/installed.json
+- tests/test_api.py
+- tests/test_router.py
+- void/api/schemas.py
+- void/api/server.py
+- void/core/router.py
+- void/memory/session.md
+- void/prompts.py
+- void/tools/builtin.py
+- web/src/App.tsx
+- web/src/api.ts
+- web/src/styles.css
+- tests/test_git_tools.py
+- void/tools/git_tools.py
+
+---
+
+## User Request
+
+Time: 2026-06-19 17:07:43
+
+сделай commit с сообщением "Void v1.4: Git Capability"
+
+---
+
+## Routed Action
+
+Time: 2026-06-19 17:07:43
+
+Action: git_commit
+Reason: User asks to create a Git commit with an explicit message.
+OK: True
+Terminal: True
+
+Action requires approval. Use /approve ca6be80c7ca6 or /reject ca6be80c7ca6.
+
+---
+

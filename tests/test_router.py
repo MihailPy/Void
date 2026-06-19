@@ -59,3 +59,36 @@ def test_router_browser_screenshot():
     assert route.action is not None
     assert route.action.action == "browser_screenshot"
     assert route.action.arguments == {"url": "https://example.com"}
+
+
+def test_router_git_status():
+    route = Router().route("git status")
+
+    assert route.matched is True
+    assert route.action is not None
+    assert route.action.action == "git_status"
+
+
+def test_router_git_diff():
+    route = Router().route("покажи diff")
+
+    assert route.matched is True
+    assert route.action is not None
+    assert route.action.action == "git_diff"
+
+
+def test_router_git_suggest_commit_message():
+    route = Router().route("какой commit написать")
+
+    assert route.matched is True
+    assert route.action is not None
+    assert route.action.action == "git_suggest_commit_message"
+
+
+def test_router_git_commit_with_message():
+    route = Router().route("сделай commit с сообщением test")
+
+    assert route.matched is True
+    assert route.action is not None
+    assert route.action.action == "git_commit"
+    assert route.action.arguments == {"message": "test"}

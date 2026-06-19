@@ -18,5 +18,15 @@
     "reason": "Implemented as approval-gated read-only browser tools.",
     "created_at": "2026-06-18T00:00:00",
     "updated_at": "2026-06-18T00:00:00"
+  },
+  {
+    "id": "git_basic",
+    "name": "git_basic",
+    "status": "installed",
+    "description": "Safe Git capability: status, diff, log, current branch, commit message suggestion, approved commit.",
+    "problem": null,
+    "reason": "Implemented as safe read-only Git tools plus approval-gated commit.",
+    "created_at": "2026-06-19T00:00:00",
+    "updated_at": "2026-06-19T00:00:00"
   }
 ]

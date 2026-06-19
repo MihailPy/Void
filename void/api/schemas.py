@@ -95,6 +95,10 @@ class BrowserTaskRequest(BaseModel):
     instruction: str
 
 
+class GitCommitRequest(BaseModel):
+    message: str
+
+
 class ErrorResponse(BaseModel):
     ok: bool
     error: str
