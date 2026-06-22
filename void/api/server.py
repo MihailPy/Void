@@ -9,6 +9,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
+from void.__version__ import __version__
 from void.api.auth import get_api_token, require_api_token
 from void.api.dependencies import get_agent, get_skill_registry, get_tool_registry
 from void.api.schemas import (
@@ -35,13 +36,13 @@ from void.core.agent import Agent
 from void.core.capabilities import list_capabilities
 from void.core.permissions import approve, clear_approval, list_approvals, reject
 from void.core.registry import ToolRegistry
+from void.core.safety import MEMORY_DIR, ensure_memory_files
 from void.core.scheduler import list_tasks
 from void.core.scheduler_worker import SchedulerWorker
-from void.core.safety import MEMORY_DIR, ensure_memory_files
 from void.core.types import AgentAction
 from void.skills.registry import SkillRegistry
 
-API_VERSION = "0.8.0"
+API_VERSION = __version__
 SCHEDULER_WORKER_ENABLED_ENV = "VOID_SCHEDULER_WORKER_ENABLED"
 SCHEDULER_WORKER_INTERVAL_ENV = "VOID_SCHEDULER_WORKER_INTERVAL"
 
@@ -65,6 +66,7 @@ def _env_int(name: str, default: int) -> int:
             flush=True,
         )
         return default
+
 
 if get_api_token() is None:
     print(
@@ -244,7 +246,9 @@ def scheduler_status(
     _: None = Depends(require_api_token),
 ) -> SchedulerStatusResponse | ErrorResponse:
     try:
-        worker: SchedulerWorker | None = getattr(request.app.state, "scheduler_worker", None)
+        worker: SchedulerWorker | None = getattr(
+            request.app.state, "scheduler_worker", None
+        )
         enabled = bool(getattr(request.app.state, "scheduler_worker_enabled", False))
         return SchedulerStatusResponse(
             ok=True,
@@ -256,13 +260,17 @@ def scheduler_status(
         return _error(error)
 
 
-@app.post("/scheduler/run-once", response_model=SchedulerRunOnceResponse | ErrorResponse)
+@app.post(
+    "/scheduler/run-once", response_model=SchedulerRunOnceResponse | ErrorResponse
+)
 async def scheduler_run_once(
     request: Request,
     _: None = Depends(require_api_token),
 ) -> SchedulerRunOnceResponse | ErrorResponse:
     try:
-        worker: SchedulerWorker | None = getattr(request.app.state, "scheduler_worker", None)
+        worker: SchedulerWorker | None = getattr(
+            request.app.state, "scheduler_worker", None
+        )
         if worker is None:
             worker = SchedulerWorker()
             request.app.state.scheduler_worker = worker
@@ -475,7 +483,9 @@ def delete_task(
         return _error(error)
 
 
-@app.post("/approvals/{approval_id}/approve", response_model=ApprovalResponse | ErrorResponse)
+@app.post(
+    "/approvals/{approval_id}/approve", response_model=ApprovalResponse | ErrorResponse
+)
 def approve_approval(
     approval_id: str,
     _: None = Depends(require_api_token),
@@ -493,7 +503,9 @@ def approve_approval(
         return _error(error)
 
 
-@app.post("/approvals/{approval_id}/reject", response_model=ApprovalResponse | ErrorResponse)
+@app.post(
+    "/approvals/{approval_id}/reject", response_model=ApprovalResponse | ErrorResponse
+)
 def reject_approval(
     approval_id: str,
     _: None = Depends(require_api_token),

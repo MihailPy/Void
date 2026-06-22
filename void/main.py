@@ -2,6 +2,7 @@
 
 import json
 
+from void.__version__ import __version__
 from void.core.agent import Agent
 from void.core.capabilities import list_capabilities
 from void.core.permissions import approve, clear_approval, list_approvals, reject
@@ -24,7 +25,7 @@ class Color:
 
 def print_header() -> None:
     print()
-    print(f"{Color.BOLD}{Color.CYAN}Void v0.3{Color.RESET}")
+    print(f"{Color.BOLD}{Color.CYAN}Void v{__version__}{Color.RESET}")
     print(f"{Color.GRAY}Local AI assistant. Type /help for commands.{Color.RESET}")
     print()
 
@@ -92,7 +93,9 @@ def print_approvals() -> None:
             ensure_ascii=False,
             sort_keys=True,
         )
-        print(f"{Color.CYAN}{approval.get('id', '')}{Color.RESET} {approval.get('action', '')}")
+        print(
+            f"{Color.CYAN}{approval.get('id', '')}{Color.RESET} {approval.get('action', '')}"
+        )
         print(f"  reason: {approval.get('reason', '')}")
         print(f"  arguments: {arguments}")
         print(f"  created_at: {approval.get('created_at', '')}")
@@ -153,11 +156,15 @@ def main() -> None:
                 print_help()
                 continue
             if user_input == "/clear-session":
-                result = registry.execute(AgentAction("clear_session", {}, "CLI command."))
+                result = registry.execute(
+                    AgentAction("clear_session", {}, "CLI command.")
+                )
                 print_response(result.content)
                 continue
             if user_input == "/clear-facts":
-                result = registry.execute(AgentAction("clear_facts", {}, "CLI command."))
+                result = registry.execute(
+                    AgentAction("clear_facts", {}, "CLI command.")
+                )
                 print_response(result.content)
                 continue
             if user_input == "/skills":

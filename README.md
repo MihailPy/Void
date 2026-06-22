@@ -2,6 +2,10 @@
 
 Void — локальный AI-помощник с deterministic core, tools, skills, memory, FastAPI backend и Web UI.
 
+## Version
+
+Current version: **Void v1.4.0**
+
 ## Features
 
 - CLI interface
@@ -116,10 +120,10 @@ CLI:
 
 Important:
 
-* Browser actions require approval.
-* No cookies/session persistence by default.
-* No login/form submission automation yet.
-* Only http/https URLs are allowed.
+- Browser actions require approval.
+- No cookies/session persistence by default.
+- No login/form submission automation yet.
+- Only http/https URLs are allowed.
 
 ## Git Capability
 
@@ -136,9 +140,9 @@ git status
 
 Notes:
 
-* git_commit requires approval.
-* git add is not automatic.
-* push/pull/reset/checkout/merge are not supported for safety.
+- git_commit requires approval.
+- git add is not automatic.
+- push/pull/reset/checkout/merge are not supported for safety.
 
 Web UI:
 
@@ -203,7 +207,7 @@ make web
 
 ## Development Status
 
-Current project metadata version: Void v0.1.0. The API reports version `0.8.0`.
+Current project metadata version: Void v1.4.0.
 
 ## Roadmap
 

@@ -15,12 +15,13 @@
 - Scheduler Worker
 - Browser Capability
 - Git Capability
+- Auth
+- Tests
 
 ## Next
 
-- Interactive browser automation
-- Advanced git workflows with stronger approval controls
-- Better web dashboards
+- Release packaging
+- Better Web UI dashboards
+- Advanced browser automation
 - Remote access hardening
-- Tests
-- Packaging
+- Plugin/skill marketplace
