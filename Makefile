@@ -27,7 +27,7 @@ test:
 	uv run pytest
 
 check:
-	python3 -m compileall .
+	uv run python -m compileall .
 	uv run pytest
 
 verify: check
