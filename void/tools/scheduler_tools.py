@@ -115,6 +115,8 @@ def definitions() -> list[ToolDefinition]:
             "List scheduled tasks.",
             list_scheduled_tasks,
             terminal=True,
+            category="scheduler",
+            risk_level="read",
         ),
         ToolDefinition(
             "create_scheduled_task",
@@ -122,6 +124,8 @@ def definitions() -> list[ToolDefinition]:
             create_scheduled_task,
             terminal=True,
             requires_confirmation=True,
+            category="scheduler",
+            risk_level="write",
         ),
         ToolDefinition(
             "delete_scheduled_task",
@@ -129,6 +133,8 @@ def definitions() -> list[ToolDefinition]:
             delete_scheduled_task,
             terminal=True,
             requires_confirmation=True,
+            category="scheduler",
+            risk_level="write",
         ),
         ToolDefinition(
             "enable_scheduled_task",
@@ -136,6 +142,8 @@ def definitions() -> list[ToolDefinition]:
             enable_scheduled_task,
             terminal=True,
             requires_confirmation=True,
+            category="scheduler",
+            risk_level="write",
         ),
         ToolDefinition(
             "disable_scheduled_task",
@@ -143,6 +151,8 @@ def definitions() -> list[ToolDefinition]:
             disable_scheduled_task,
             terminal=True,
             requires_confirmation=True,
+            category="scheduler",
+            risk_level="write",
         ),
         ToolDefinition(
             "run_scheduled_task",
@@ -150,5 +160,7 @@ def definitions() -> list[ToolDefinition]:
             run_scheduled_task,
             terminal=True,
             requires_confirmation=True,
+            category="scheduler",
+            risk_level="write",
         ),
     ]

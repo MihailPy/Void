@@ -567,6 +567,11 @@ function ApprovalsTab() {
                 <span>{approval.created_at}</span>
               </div>
               <h2>{approval.action ?? "Unknown action"}</h2>
+              {approval.category || approval.risk_level ? (
+                <p>
+                  {[approval.category, approval.risk_level].filter(Boolean).join(" / ")}
+                </p>
+              ) : null}
               {approval.reason ? <p>{approval.reason}</p> : null}
               <JsonBlock value={approval.arguments ?? {}} />
               <div className="buttonRow">

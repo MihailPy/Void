@@ -20,6 +20,8 @@ class ToolDefinition:
     function: Callable[..., ToolResult]
     terminal: bool = False
     requires_confirmation: bool = False
+    category: str = "unknown"
+    risk_level: str = "unknown"
 
 
 @dataclass
@@ -34,4 +36,3 @@ class RouteResult:
     matched: bool
     confidence: float
     action: AgentAction | None = None
-

@@ -278,6 +278,8 @@ def definitions() -> list[ToolDefinition]:
             browser_extract_text,
             terminal=True,
             requires_confirmation=True,
+            category="browser",
+            risk_level="network",
         ),
         ToolDefinition(
             "browser_screenshot",
@@ -285,6 +287,8 @@ def definitions() -> list[ToolDefinition]:
             browser_screenshot,
             terminal=True,
             requires_confirmation=True,
+            category="browser",
+            risk_level="network",
         ),
         ToolDefinition(
             "browser_links",
@@ -292,6 +296,8 @@ def definitions() -> list[ToolDefinition]:
             browser_links,
             terminal=True,
             requires_confirmation=True,
+            category="browser",
+            risk_level="network",
         ),
         ToolDefinition(
             "browser_title",
@@ -299,6 +305,8 @@ def definitions() -> list[ToolDefinition]:
             browser_title,
             terminal=True,
             requires_confirmation=True,
+            category="browser",
+            risk_level="network",
         ),
         ToolDefinition(
             "browser_task",
@@ -306,5 +314,7 @@ def definitions() -> list[ToolDefinition]:
             browser_task,
             terminal=True,
             requires_confirmation=True,
+            category="browser",
+            risk_level="network",
         ),
     ]

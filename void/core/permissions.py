@@ -7,7 +7,7 @@ from datetime import datetime
 from uuid import uuid4
 
 from void.core.safety import PROJECT_ROOT
-from void.core.types import AgentAction
+from void.core.types import AgentAction, ToolDefinition
 
 APPROVALS_PATH = PROJECT_ROOT / "memory" / "pending_approvals.json"
 
@@ -34,7 +34,7 @@ def _save(approvals: list[dict]) -> None:
     )
 
 
-def create_approval(action: AgentAction) -> str:
+def create_approval(action: AgentAction, tool: ToolDefinition | None = None) -> str:
     approval_id = uuid4().hex[:12]
     approvals = _load()
     approvals.append(
@@ -43,6 +43,8 @@ def create_approval(action: AgentAction) -> str:
             "action": action.action,
             "arguments": action.arguments,
             "reason": action.reason,
+            "category": tool.category if tool is not None else "unknown",
+            "risk_level": tool.risk_level if tool is not None else "unknown",
             "created_at": datetime.now().isoformat(timespec="seconds"),
         }
     )

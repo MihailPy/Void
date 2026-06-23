@@ -97,6 +97,12 @@ def print_approvals() -> None:
             f"{Color.CYAN}{approval.get('id', '')}{Color.RESET} {approval.get('action', '')}"
         )
         print(f"  reason: {approval.get('reason', '')}")
+        if approval.get("category") or approval.get("risk_level"):
+            print(
+                "  metadata: "
+                f"category={approval.get('category', 'unknown')}, "
+                f"risk_level={approval.get('risk_level', 'unknown')}"
+            )
         print(f"  arguments: {arguments}")
         print(f"  created_at: {approval.get('created_at', '')}")
     print()

@@ -69,4 +69,12 @@ def project_stats(path: str = ".") -> ToolResult:
 
 
 def definitions() -> list[ToolDefinition]:
-    return [ToolDefinition("project_stats", "Summarize project files and folders.", project_stats)]
+    return [
+        ToolDefinition(
+            "project_stats",
+            "Summarize project files and folders.",
+            project_stats,
+            category="filesystem",
+            risk_level="read",
+        )
+    ]

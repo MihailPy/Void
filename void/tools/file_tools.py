@@ -68,12 +68,26 @@ def list_files(path: str = ".") -> ToolResult:
 
 def definitions() -> list[ToolDefinition]:
     return [
-        ToolDefinition("read_file", "Read a UTF-8 file inside the project.", read_file),
+        ToolDefinition(
+            "read_file",
+            "Read a UTF-8 file inside the project.",
+            read_file,
+            category="filesystem",
+            risk_level="read",
+        ),
         ToolDefinition(
             "write_file",
             "Write a UTF-8 file inside the project.",
             write_file,
             requires_confirmation=True,
+            category="filesystem",
+            risk_level="write",
         ),
-        ToolDefinition("list_files", "List one directory level inside the project.", list_files),
+        ToolDefinition(
+            "list_files",
+            "List one directory level inside the project.",
+            list_files,
+            category="filesystem",
+            risk_level="read",
+        ),
     ]
