@@ -1,4 +1,4 @@
-.PHONY: cli api web web-install test check clean help
+.PHONY: cli api web web-install test check verify clean help
 
 help:
 	@echo "Void commands:"
@@ -8,6 +8,7 @@ help:
 	@echo "  make web-install  Install Web UI deps"
 	@echo "  make test         Run pytest"
 	@echo "  make check        Run Python compile and test checks"
+	@echo "  make verify       Run release verification checks"
 	@echo "  make clean        Remove caches"
 
 cli:
@@ -26,8 +27,10 @@ test:
 	uv run pytest
 
 check:
-	python3 -m compileall .
+	uv run python -m compileall .
 	uv run pytest
+
+verify: check
 
 clean:
 	find . -type d -name "__pycache__" -prune -exec rm -rf {} +

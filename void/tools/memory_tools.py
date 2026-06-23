@@ -73,29 +73,60 @@ def clear_facts() -> ToolResult:
 
 def definitions() -> list[ToolDefinition]:
     return [
-        ToolDefinition("remember_fact", "Save a medium-term fact.", remember_fact, terminal=True),
-        ToolDefinition("read_facts", "Read saved facts.", read_facts),
+        ToolDefinition(
+            "remember_fact",
+            "Save a medium-term fact.",
+            remember_fact,
+            terminal=True,
+            category="memory",
+            risk_level="write",
+        ),
+        ToolDefinition(
+            "read_facts",
+            "Read saved facts.",
+            read_facts,
+            category="memory",
+            risk_level="read",
+        ),
         ToolDefinition(
             "update_project",
             "Replace project memory.",
             update_project,
             terminal=True,
             requires_confirmation=True,
+            category="memory",
+            risk_level="write",
         ),
         ToolDefinition(
             "append_project_note",
             "Append a note to project memory.",
             append_project_note,
             terminal=True,
+            category="memory",
+            risk_level="write",
         ),
-        ToolDefinition("read_project", "Read project memory.", read_project),
-        ToolDefinition("append_session", "Append an entry to session memory.", append_session),
+        ToolDefinition(
+            "read_project",
+            "Read project memory.",
+            read_project,
+            category="memory",
+            risk_level="read",
+        ),
+        ToolDefinition(
+            "append_session",
+            "Append an entry to session memory.",
+            append_session,
+            category="memory",
+            risk_level="write",
+        ),
         ToolDefinition(
             "clear_session",
             "Clear session memory.",
             clear_session,
             terminal=True,
             requires_confirmation=True,
+            category="memory",
+            risk_level="destructive",
         ),
         ToolDefinition(
             "clear_facts",
@@ -103,5 +134,7 @@ def definitions() -> list[ToolDefinition]:
             clear_facts,
             terminal=True,
             requires_confirmation=True,
+            category="memory",
+            risk_level="destructive",
         ),
     ]

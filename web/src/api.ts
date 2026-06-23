@@ -48,6 +48,8 @@ export type Approval = {
   action?: string;
   arguments?: Record<string, unknown>;
   reason?: string;
+  category?: string;
+  risk_level?: string;
   created_at?: string;
 };
 

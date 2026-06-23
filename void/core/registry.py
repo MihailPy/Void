@@ -28,7 +28,7 @@ class ToolRegistry:
             return ToolResult(ok=False, content=f"Unknown tool: {action.action}")
 
         if tool.requires_confirmation and not bypass_confirmation:
-            approval_id = create_approval(action)
+            approval_id = create_approval(action, tool)
             return ToolResult(
                 ok=True,
                 content=(

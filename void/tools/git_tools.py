@@ -195,6 +195,8 @@ def definitions() -> list[ToolDefinition]:
             git_status,
             terminal=True,
             requires_confirmation=False,
+            category="git",
+            risk_level="read",
         ),
         ToolDefinition(
             "git_diff",
@@ -202,6 +204,8 @@ def definitions() -> list[ToolDefinition]:
             git_diff,
             terminal=True,
             requires_confirmation=False,
+            category="git",
+            risk_level="read",
         ),
         ToolDefinition(
             "git_log",
@@ -209,6 +213,8 @@ def definitions() -> list[ToolDefinition]:
             git_log,
             terminal=True,
             requires_confirmation=False,
+            category="git",
+            risk_level="read",
         ),
         ToolDefinition(
             "git_current_branch",
@@ -216,6 +222,8 @@ def definitions() -> list[ToolDefinition]:
             git_current_branch,
             terminal=True,
             requires_confirmation=False,
+            category="git",
+            risk_level="read",
         ),
         ToolDefinition(
             "git_suggest_commit_message",
@@ -223,6 +231,8 @@ def definitions() -> list[ToolDefinition]:
             git_suggest_commit_message,
             terminal=True,
             requires_confirmation=False,
+            category="git",
+            risk_level="read",
         ),
         ToolDefinition(
             "git_commit",
@@ -230,5 +240,7 @@ def definitions() -> list[ToolDefinition]:
             git_commit,
             terminal=True,
             requires_confirmation=True,
+            category="git",
+            risk_level="write",
         ),
     ]

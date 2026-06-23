@@ -151,6 +151,8 @@ def definitions() -> list[ToolDefinition]:
             list_capabilities,
             terminal=True,
             requires_confirmation=False,
+            category="capability",
+            risk_level="read",
         ),
         ToolDefinition(
             "add_capability_request",
@@ -158,6 +160,8 @@ def definitions() -> list[ToolDefinition]:
             add_capability_request,
             terminal=True,
             requires_confirmation=True,
+            category="capability",
+            risk_level="write",
         ),
         ToolDefinition(
             "mark_capability_installed",
@@ -165,6 +169,8 @@ def definitions() -> list[ToolDefinition]:
             mark_capability_installed,
             terminal=True,
             requires_confirmation=True,
+            category="capability",
+            risk_level="write",
         ),
         ToolDefinition(
             "reject_capability_request",
@@ -172,6 +178,8 @@ def definitions() -> list[ToolDefinition]:
             reject_capability_request,
             terminal=True,
             requires_confirmation=True,
+            category="capability",
+            risk_level="write",
         ),
         ToolDefinition(
             "request_capability",
@@ -179,5 +187,7 @@ def definitions() -> list[ToolDefinition]:
             request_capability,
             terminal=True,
             requires_confirmation=True,
+            category="capability",
+            risk_level="write",
         )
     ]

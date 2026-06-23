@@ -50,3 +50,30 @@ def test_confirmation_tool_creates_approval_without_executing(registry):
     approvals = list_approvals()
     assert len(approvals) == 1
     assert approvals[0]["action"] == "dangerous"
+    assert approvals[0]["category"] == "unknown"
+    assert approvals[0]["risk_level"] == "unknown"
+
+
+def test_confirmation_tool_stores_approval_metadata(registry):
+    def write_memory() -> ToolResult:
+        return ToolResult(ok=True, content="done")
+
+    registry.register(
+        ToolDefinition(
+            "write_memory",
+            "Write test memory.",
+            write_memory,
+            requires_confirmation=True,
+            category="memory",
+            risk_level="write",
+        )
+    )
+
+    result = registry.execute(AgentAction(action="write_memory", arguments={}, reason="test"))
+
+    assert result.ok is True
+    approvals = list_approvals()
+    assert len(approvals) == 1
+    assert approvals[0]["action"] == "write_memory"
+    assert approvals[0]["category"] == "memory"
+    assert approvals[0]["risk_level"] == "write"
