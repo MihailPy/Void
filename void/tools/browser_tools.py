@@ -270,6 +270,98 @@ def browser_task(url: str, instruction: str) -> ToolResult:
         _close_browser(manager, browser, context)
 
 
+def browser_click(url: str, selector: str) -> ToolResult:
+    clean_selector = selector.strip()
+    if not clean_selector:
+        raise ValueError("Selector is required.")
+
+    manager, browser, context, page, normalized_url = _open_page(url)
+    try:
+        page.wait_for_load_state("load")
+        page.locator(clean_selector).first.click()
+        return ToolResult(
+            ok=True,
+            content=f"Clicked selector {clean_selector!r} on {normalized_url}.",
+            data={"url": normalized_url, "selector": clean_selector},
+        )
+    finally:
+        _close_browser(manager, browser, context)
+
+
+def browser_fill(url: str, selector: str, value: str) -> ToolResult:
+    clean_selector = selector.strip()
+    if not clean_selector:
+        raise ValueError("Selector is required.")
+
+    manager, browser, context, page, normalized_url = _open_page(url)
+    try:
+        page.wait_for_load_state("load")
+        page.locator(clean_selector).first.fill(value)
+        return ToolResult(
+            ok=True,
+            content=f"Filled selector {clean_selector!r} on {normalized_url}.",
+            data={"url": normalized_url, "selector": clean_selector},
+        )
+    finally:
+        _close_browser(manager, browser, context)
+
+
+def browser_submit(url: str, selector: str) -> ToolResult:
+    clean_selector = selector.strip()
+    if not clean_selector:
+        raise ValueError("Selector is required.")
+
+    manager, browser, context, page, normalized_url = _open_page(url)
+    try:
+        page.wait_for_load_state("load")
+        locator = page.locator(clean_selector).first
+        tag_name = locator.evaluate("element => element.tagName.toLowerCase()")
+        if tag_name == "form":
+            locator.evaluate(
+                "element => element.requestSubmit ? element.requestSubmit() : element.submit()"
+            )
+        else:
+            locator.click()
+        return ToolResult(
+            ok=True,
+            content=f"Submitted selector {clean_selector!r} on {normalized_url}.",
+            data={"url": normalized_url, "selector": clean_selector},
+        )
+    finally:
+        _close_browser(manager, browser, context)
+
+
+def browser_wait_for_selector(
+    url: str,
+    selector: str,
+    timeout_ms: int = 10000,
+) -> ToolResult:
+    clean_selector = selector.strip()
+    if not clean_selector:
+        raise ValueError("Selector is required.")
+    if timeout_ms < 1:
+        raise ValueError("timeout_ms must be greater than 0.")
+
+    manager, browser, context, page, normalized_url = _open_page(url)
+    try:
+        page.wait_for_load_state("load")
+        page.wait_for_selector(clean_selector, timeout=timeout_ms)
+        return ToolResult(
+            ok=True,
+            content=(
+                f"Selector {clean_selector!r} appeared on {normalized_url} "
+                f"within {timeout_ms} ms."
+            ),
+            data={
+                "url": normalized_url,
+                "selector": clean_selector,
+                "timeout_ms": timeout_ms,
+            },
+        )
+    finally:
+        _close_browser(manager, browser, context)
+
+
 def definitions() -> list[ToolDefinition]:
     return [
         ToolDefinition(
@@ -312,6 +404,42 @@ def definitions() -> list[ToolDefinition]:
             "browser_task",
             "Perform a read-only browser page inspection task.",
             browser_task,
+            terminal=True,
+            requires_confirmation=True,
+            category="browser",
+            risk_level="network",
+        ),
+        ToolDefinition(
+            "browser_click",
+            "Open an http/https URL and click a CSS selector.",
+            browser_click,
+            terminal=True,
+            requires_confirmation=True,
+            category="browser",
+            risk_level="write",
+        ),
+        ToolDefinition(
+            "browser_fill",
+            "Open an http/https URL and fill an input or textarea selector.",
+            browser_fill,
+            terminal=True,
+            requires_confirmation=True,
+            category="browser",
+            risk_level="write",
+        ),
+        ToolDefinition(
+            "browser_submit",
+            "Open an http/https URL and submit a form or click a submit selector.",
+            browser_submit,
+            terminal=True,
+            requires_confirmation=True,
+            category="browser",
+            risk_level="write",
+        ),
+        ToolDefinition(
+            "browser_wait_for_selector",
+            "Open an http/https URL and wait for a CSS selector.",
+            browser_wait_for_selector,
             terminal=True,
             requires_confirmation=True,
             category="browser",

@@ -8,6 +8,7 @@ import {
   ScheduledTask,
   Skill,
   approve,
+  clickBrowserSelector,
   clearStoredToken,
   createGitCommit,
   createTask,
@@ -15,6 +16,7 @@ import {
   disableTask,
   enableTask,
   extractBrowserText,
+  fillBrowserSelector,
   getApprovals,
   getBrowserLinks,
   getBrowserScreenshot,
@@ -39,7 +41,9 @@ import {
   runTask,
   sendChatMessage,
   setStoredToken,
+  submitBrowserSelector,
   suggestGitCommitMessage,
+  waitForBrowserSelector,
 } from "./api";
 
 type Tab =
@@ -56,6 +60,8 @@ type Message = {
   role: "user" | "void";
   content: string;
 };
+
+type ApprovalAction = "approve" | "reject";
 
 const tabs: { id: Tab; label: string }[] = [
   { id: "chat", label: "Chat" },
@@ -78,6 +84,83 @@ function JsonBlock({ value }: { value: unknown }) {
 
 function EmptyState({ children }: { children: string }) {
   return <div className="empty">{children}</div>;
+}
+
+function approvalTimestamp(approval: Approval) {
+  const time = approval.created_at ? Date.parse(approval.created_at) : Number.NaN;
+  return Number.isFinite(time) ? time : 0;
+}
+
+function newestApproval(
+  approvals: Approval[],
+  predicate: (approval: Approval) => boolean = () => true,
+) {
+  return approvals.reduce<Approval | null>((newest, approval) => {
+    if (!approval.id || !predicate(approval)) {
+      return newest;
+    }
+    if (!newest) {
+      return approval;
+    }
+    return approvalTimestamp(approval) >= approvalTimestamp(newest) ? approval : newest;
+  }, null);
+}
+
+async function fetchInlineApproval(predicate?: (approval: Approval) => boolean) {
+  const response = await getApprovals();
+  return newestApproval(response.pending, predicate);
+}
+
+async function resolveInlineApproval(id: string, action: ApprovalAction) {
+  return action === "approve" ? approve(id) : reject(id);
+}
+
+function mentionsApproval(message: string) {
+  return message.toLowerCase().includes("approval");
+}
+
+function InlineApprovalCard({
+  approval,
+  resolving,
+  onResolve,
+}: {
+  approval: Approval;
+  resolving: boolean;
+  onResolve: (id: string, action: ApprovalAction) => void;
+}) {
+  const id = approval.id ?? "";
+
+  return (
+    <article className="inlineApprovalCard">
+      <div className="cardTopline">
+        <span>{id || "unknown id"}</span>
+        <span>{approval.created_at}</span>
+      </div>
+      <h2>{approval.action ?? "Unknown action"}</h2>
+      {approval.category || approval.risk_level ? (
+        <p>{[approval.category, approval.risk_level].filter(Boolean).join(" / ")}</p>
+      ) : null}
+      {approval.reason ? <p>{approval.reason}</p> : null}
+      <JsonBlock value={approval.arguments ?? {}} />
+      <div className="buttonRow">
+        <button
+          type="button"
+          disabled={!id || resolving}
+          onClick={() => onResolve(id, "approve")}
+        >
+          {resolving ? "Working..." : "Approve"}
+        </button>
+        <button
+          className="dangerButton"
+          type="button"
+          disabled={!id || resolving}
+          onClick={() => onResolve(id, "reject")}
+        >
+          Reject
+        </button>
+      </div>
+    </article>
+  );
 }
 
 function StatusPanel() {
@@ -169,6 +252,8 @@ function AuthPanel() {
 function ChatTab() {
   const [input, setInput] = useState("");
   const [messages, setMessages] = useState<Message[]>([]);
+  const [inlineApproval, setInlineApproval] = useState<Approval | null>(null);
+  const [approvalActionId, setApprovalActionId] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
@@ -189,10 +274,31 @@ function ChatTab() {
         ...current,
         { role: "void", content: response.response },
       ]);
+      if (mentionsApproval(response.response)) {
+        const pendingApproval = await fetchInlineApproval();
+        setInlineApproval(pendingApproval);
+      }
     } catch (currentError) {
       setError(getErrorMessage(currentError));
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function handleApprovalAction(id: string, action: ApprovalAction) {
+    setApprovalActionId(id);
+    setError("");
+    try {
+      const response = await resolveInlineApproval(id, action);
+      setMessages((current) => [
+        ...current,
+        { role: "void", content: response.message },
+      ]);
+      setInlineApproval(null);
+    } catch (currentError) {
+      setError(getErrorMessage(currentError));
+    } finally {
+      setApprovalActionId("");
     }
   }
 
@@ -220,6 +326,14 @@ function ChatTab() {
         )}
       </div>
 
+      {inlineApproval ? (
+        <InlineApprovalCard
+          approval={inlineApproval}
+          resolving={approvalActionId === inlineApproval.id}
+          onResolve={handleApprovalAction}
+        />
+      ) : null}
+
       {error ? <div className="error">{error}</div> : null}
 
       <div className="composer">
@@ -244,10 +358,22 @@ function ChatTab() {
 
 function BrowserTab() {
   const [url, setUrl] = useState("https://example.com");
+  const [selector, setSelector] = useState("#login");
+  const [value, setValue] = useState("test@test.com");
+  const [timeoutMs, setTimeoutMs] = useState("10000");
   const [instruction, setInstruction] = useState("Изучи страницу кратко");
   const [loadingAction, setLoadingAction] = useState("");
+  const [inlineApproval, setInlineApproval] = useState<Approval | null>(null);
+  const [approvalActionId, setApprovalActionId] = useState("");
   const [result, setResult] = useState("");
   const [error, setError] = useState("");
+
+  async function loadBrowserApproval() {
+    const pendingApproval = await fetchInlineApproval(
+      (approval) => approval.category === "browser",
+    );
+    setInlineApproval(pendingApproval);
+  }
 
   async function handleBrowserAction(action: string) {
     const cleanUrl = url.trim();
@@ -258,6 +384,7 @@ function BrowserTab() {
 
     setError("");
     setResult("");
+    setInlineApproval(null);
     setLoadingAction(action);
     try {
       const response =
@@ -274,10 +401,77 @@ function BrowserTab() {
                     instruction: instruction.trim() || "Read-only page inspection.",
                   });
       setResult(response.message);
+      await loadBrowserApproval();
     } catch (currentError) {
       setError(getErrorMessage(currentError));
     } finally {
       setLoadingAction("");
+    }
+  }
+
+  async function handleInteractiveAction(action: string) {
+    const cleanUrl = url.trim();
+    const cleanSelector = selector.trim();
+    const cleanValue = value;
+    const parsedTimeout = Number(timeoutMs);
+
+    if (!cleanUrl) {
+      setError("URL is required.");
+      return;
+    }
+    if (!cleanSelector) {
+      setError("Selector is required.");
+      return;
+    }
+    if (action === "wait" && (!Number.isFinite(parsedTimeout) || parsedTimeout < 1)) {
+      setError("Timeout must be greater than 0.");
+      return;
+    }
+
+    setError("");
+    setResult("");
+    setInlineApproval(null);
+    setLoadingAction(action);
+    try {
+      const response =
+        action === "click"
+          ? await clickBrowserSelector({ url: cleanUrl, selector: cleanSelector })
+          : action === "fill"
+            ? await fillBrowserSelector({
+                url: cleanUrl,
+                selector: cleanSelector,
+                value: cleanValue,
+              })
+            : action === "submit"
+              ? await submitBrowserSelector({
+                  url: cleanUrl,
+                  selector: cleanSelector,
+                })
+              : await waitForBrowserSelector({
+                  url: cleanUrl,
+                  selector: cleanSelector,
+                  timeout_ms: parsedTimeout,
+                });
+      setResult(response.message);
+      await loadBrowserApproval();
+    } catch (currentError) {
+      setError(getErrorMessage(currentError));
+    } finally {
+      setLoadingAction("");
+    }
+  }
+
+  async function handleApprovalAction(id: string, action: ApprovalAction) {
+    setApprovalActionId(id);
+    setError("");
+    try {
+      const response = await resolveInlineApproval(id, action);
+      setResult(response.message);
+      setInlineApproval(null);
+    } catch (currentError) {
+      setError(getErrorMessage(currentError));
+    } finally {
+      setApprovalActionId("");
     }
   }
 
@@ -286,12 +480,19 @@ function BrowserTab() {
       <div className="panelHeader">
         <div>
           <h1>Browser</h1>
-          <p>Read-only Playwright actions for http/https pages.</p>
+          <p>Approval-gated Playwright actions for http/https pages.</p>
         </div>
       </div>
 
       {error ? <div className="error">{error}</div> : null}
       {result ? <div className="notice">{result}</div> : null}
+      {inlineApproval ? (
+        <InlineApprovalCard
+          approval={inlineApproval}
+          resolving={approvalActionId === inlineApproval.id}
+          onResolve={handleApprovalAction}
+        />
+      ) : null}
 
       <section className="browserPanel">
         <label>
@@ -311,6 +512,33 @@ function BrowserTab() {
             placeholder="Проверь сайт и покажи краткую сводку"
           />
         </label>
+        <div className="browserInteractiveGrid">
+          <label>
+            <span>Selector</span>
+            <input
+              value={selector}
+              onChange={(event) => setSelector(event.target.value)}
+              placeholder="#login"
+            />
+          </label>
+          <label>
+            <span>Fill value</span>
+            <input
+              value={value}
+              onChange={(event) => setValue(event.target.value)}
+              placeholder="test@test.com"
+            />
+          </label>
+          <label>
+            <span>Wait timeout ms</span>
+            <input
+              inputMode="numeric"
+              value={timeoutMs}
+              onChange={(event) => setTimeoutMs(event.target.value)}
+              placeholder="10000"
+            />
+          </label>
+        </div>
         <div className="buttonRow">
           <button
             type="button"
@@ -348,9 +576,39 @@ function BrowserTab() {
             {loadingAction === "task" ? "Requesting..." : "Browser task"}
           </button>
         </div>
+        <div className="buttonRow">
+          <button
+            type="button"
+            disabled={Boolean(loadingAction)}
+            onClick={() => void handleInteractiveAction("click")}
+          >
+            {loadingAction === "click" ? "Requesting..." : "Click"}
+          </button>
+          <button
+            type="button"
+            disabled={Boolean(loadingAction)}
+            onClick={() => void handleInteractiveAction("fill")}
+          >
+            {loadingAction === "fill" ? "Requesting..." : "Fill"}
+          </button>
+          <button
+            type="button"
+            disabled={Boolean(loadingAction)}
+            onClick={() => void handleInteractiveAction("submit")}
+          >
+            {loadingAction === "submit" ? "Requesting..." : "Submit"}
+          </button>
+          <button
+            type="button"
+            disabled={Boolean(loadingAction)}
+            onClick={() => void handleInteractiveAction("wait")}
+          >
+            {loadingAction === "wait" ? "Requesting..." : "Wait"}
+          </button>
+        </div>
         <div className="muted">
-          Browser actions require approval. Open the Approvals tab after sending a
-          request to approve or reject it.
+          Browser Interactive v1 actions are stateless: each approved action opens a
+          fresh browser session. Multi-step workflows will be added later.
         </div>
       </section>
     </section>

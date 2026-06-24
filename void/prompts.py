@@ -165,6 +165,32 @@ browser_task:
   "instruction": "read-only page inspection request"
 }
 
+browser_click:
+{
+  "url": "https://example.com",
+  "selector": "#login"
+}
+
+browser_fill:
+{
+  "url": "https://example.com",
+  "selector": "#email",
+  "value": "test@test.com"
+}
+
+browser_submit:
+{
+  "url": "https://example.com",
+  "selector": "#login-form"
+}
+
+browser_wait_for_selector:
+{
+  "url": "https://example.com",
+  "selector": "#result",
+  "timeout_ms": 10000
+}
+
 git_status:
 {}
 
@@ -209,8 +235,10 @@ request_capability:
 - Не создавай расписание через memory tools.
 - Если пользователь просит запросить новую возможность, используй add_capability_request.
 - Используй browser tools только для http/https URL.
-- Если пользователь просит логин, покупку, отправку формы, ввод пароля, отправку сообщения или destructive action, не выполняй это через browser_task.
-- Для сложной browser automation используй request_capability, например browser_interactive_automation.
+- browser_task только для read-only page inspection.
+- Для простого click/fill/submit/wait selector используй browser_interactive_automation tools.
+- Если пользователь просит логин, покупку, ввод пароля, отправку сообщения или destructive action, не выполняй это через browser tools.
+- Для сложной browser automation используй request_capability.
 - Не придумывай содержимое сайта без browser tool.
 - Read-only git actions можно использовать напрямую: git_status, git_diff, git_log, git_current_branch, git_suggest_commit_message.
 - git_commit требует approval и используй его только если пользователь явно указал commit message.
