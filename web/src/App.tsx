@@ -8,6 +8,7 @@ import {
   ScheduledTask,
   Skill,
   approve,
+  clickBrowserSelector,
   clearStoredToken,
   createGitCommit,
   createTask,
@@ -15,6 +16,7 @@ import {
   disableTask,
   enableTask,
   extractBrowserText,
+  fillBrowserSelector,
   getApprovals,
   getBrowserLinks,
   getBrowserScreenshot,
@@ -39,7 +41,9 @@ import {
   runTask,
   sendChatMessage,
   setStoredToken,
+  submitBrowserSelector,
   suggestGitCommitMessage,
+  waitForBrowserSelector,
 } from "./api";
 
 type Tab =
@@ -244,6 +248,9 @@ function ChatTab() {
 
 function BrowserTab() {
   const [url, setUrl] = useState("https://example.com");
+  const [selector, setSelector] = useState("#login");
+  const [value, setValue] = useState("test@test.com");
+  const [timeoutMs, setTimeoutMs] = useState("10000");
   const [instruction, setInstruction] = useState("Изучи страницу кратко");
   const [loadingAction, setLoadingAction] = useState("");
   const [result, setResult] = useState("");
@@ -281,12 +288,62 @@ function BrowserTab() {
     }
   }
 
+  async function handleInteractiveAction(action: string) {
+    const cleanUrl = url.trim();
+    const cleanSelector = selector.trim();
+    const cleanValue = value;
+    const parsedTimeout = Number(timeoutMs);
+
+    if (!cleanUrl) {
+      setError("URL is required.");
+      return;
+    }
+    if (!cleanSelector) {
+      setError("Selector is required.");
+      return;
+    }
+    if (action === "wait" && (!Number.isFinite(parsedTimeout) || parsedTimeout < 1)) {
+      setError("Timeout must be greater than 0.");
+      return;
+    }
+
+    setError("");
+    setResult("");
+    setLoadingAction(action);
+    try {
+      const response =
+        action === "click"
+          ? await clickBrowserSelector({ url: cleanUrl, selector: cleanSelector })
+          : action === "fill"
+            ? await fillBrowserSelector({
+                url: cleanUrl,
+                selector: cleanSelector,
+                value: cleanValue,
+              })
+            : action === "submit"
+              ? await submitBrowserSelector({
+                  url: cleanUrl,
+                  selector: cleanSelector,
+                })
+              : await waitForBrowserSelector({
+                  url: cleanUrl,
+                  selector: cleanSelector,
+                  timeout_ms: parsedTimeout,
+                });
+      setResult(response.message);
+    } catch (currentError) {
+      setError(getErrorMessage(currentError));
+    } finally {
+      setLoadingAction("");
+    }
+  }
+
   return (
     <section className="panel">
       <div className="panelHeader">
         <div>
           <h1>Browser</h1>
-          <p>Read-only Playwright actions for http/https pages.</p>
+          <p>Approval-gated Playwright actions for http/https pages.</p>
         </div>
       </div>
 
@@ -311,6 +368,33 @@ function BrowserTab() {
             placeholder="Проверь сайт и покажи краткую сводку"
           />
         </label>
+        <div className="browserInteractiveGrid">
+          <label>
+            <span>Selector</span>
+            <input
+              value={selector}
+              onChange={(event) => setSelector(event.target.value)}
+              placeholder="#login"
+            />
+          </label>
+          <label>
+            <span>Fill value</span>
+            <input
+              value={value}
+              onChange={(event) => setValue(event.target.value)}
+              placeholder="test@test.com"
+            />
+          </label>
+          <label>
+            <span>Wait timeout ms</span>
+            <input
+              inputMode="numeric"
+              value={timeoutMs}
+              onChange={(event) => setTimeoutMs(event.target.value)}
+              placeholder="10000"
+            />
+          </label>
+        </div>
         <div className="buttonRow">
           <button
             type="button"
@@ -346,6 +430,36 @@ function BrowserTab() {
             onClick={() => void handleBrowserAction("task")}
           >
             {loadingAction === "task" ? "Requesting..." : "Browser task"}
+          </button>
+        </div>
+        <div className="buttonRow">
+          <button
+            type="button"
+            disabled={Boolean(loadingAction)}
+            onClick={() => void handleInteractiveAction("click")}
+          >
+            {loadingAction === "click" ? "Requesting..." : "Click"}
+          </button>
+          <button
+            type="button"
+            disabled={Boolean(loadingAction)}
+            onClick={() => void handleInteractiveAction("fill")}
+          >
+            {loadingAction === "fill" ? "Requesting..." : "Fill"}
+          </button>
+          <button
+            type="button"
+            disabled={Boolean(loadingAction)}
+            onClick={() => void handleInteractiveAction("submit")}
+          >
+            {loadingAction === "submit" ? "Requesting..." : "Submit"}
+          </button>
+          <button
+            type="button"
+            disabled={Boolean(loadingAction)}
+            onClick={() => void handleInteractiveAction("wait")}
+          >
+            {loadingAction === "wait" ? "Requesting..." : "Wait"}
           </button>
         </div>
         <div className="muted">

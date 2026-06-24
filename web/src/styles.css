@@ -436,6 +436,12 @@ textarea:focus {
   padding: 1rem;
 }
 
+.browserInteractiveGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 0.75rem;
+}
+
 .browserPanel label,
 .gitPanel label {
   display: grid;

@@ -61,6 +61,67 @@ def test_router_browser_screenshot():
     assert route.action.arguments == {"url": "https://example.com"}
 
 
+def test_router_browser_click():
+    route = Router().route("click button #login on https://example.com")
+
+    assert route.matched is True
+    assert route.action is not None
+    assert route.action.action == "browser_click"
+    assert route.action.arguments == {
+        "url": "https://example.com",
+        "selector": "#login",
+    }
+
+
+def test_router_browser_fill():
+    route = Router().route("fill input #email with test@test.com on https://example.com")
+
+    assert route.matched is True
+    assert route.action is not None
+    assert route.action.action == "browser_fill"
+    assert route.action.arguments == {
+        "url": "https://example.com",
+        "selector": "#email",
+        "value": "test@test.com",
+    }
+
+
+def test_router_browser_submit():
+    route = Router().route("submit form #login-form on https://example.com")
+
+    assert route.matched is True
+    assert route.action is not None
+    assert route.action.action == "browser_submit"
+    assert route.action.arguments == {
+        "url": "https://example.com",
+        "selector": "#login-form",
+    }
+
+
+def test_router_browser_wait():
+    route = Router().route("wait for selector #result on https://example.com")
+
+    assert route.matched is True
+    assert route.action is not None
+    assert route.action.action == "browser_wait_for_selector"
+    assert route.action.arguments == {
+        "url": "https://example.com",
+        "selector": "#result",
+    }
+
+
+def test_router_browser_click_ru():
+    route = Router().route("Нажми кнопку #login на https://example.com")
+
+    assert route.matched is True
+    assert route.action is not None
+    assert route.action.action == "browser_click"
+    assert route.action.arguments == {
+        "url": "https://example.com",
+        "selector": "#login",
+    }
+
+
 def test_router_git_status():
     route = Router().route("git status")
 

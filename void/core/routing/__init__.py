@@ -26,7 +26,14 @@ def task_title(value: str) -> str:
 
 
 def extract_url(value: str) -> str | None:
-    match = re.search(r"(https?://[^\s\"'<>]+|[A-Za-z0-9.-]+\.[A-Za-z]{2,}[^\s\"'<>]*)", value)
+    match = re.search(r"https?://[^\s\"'<>]+", value)
+    if match:
+        return clean(match.group(0)).rstrip(".,;)")
+
+    match = re.search(
+        r"(?<!@)\b[A-Za-z0-9.-]+\.[A-Za-z]{2,}[^\s\"'<>]*",
+        value,
+    )
     if not match:
         return None
-    return clean(match.group(1)).rstrip(".,;)")
+    return clean(match.group(0)).rstrip(".,;)")

@@ -20,6 +20,16 @@
     "updated_at": "2026-06-18T00:00:00"
   },
   {
+    "id": "browser_interactive",
+    "name": "browser_interactive_automation",
+    "status": "installed",
+    "description": "Minimal approval-gated browser interaction capability: click, fill, submit, and wait for selector.",
+    "problem": null,
+    "reason": "Implemented as explicit Playwright tools with confirmation required for every action.",
+    "created_at": "2026-06-24T00:00:00",
+    "updated_at": "2026-06-24T00:00:00"
+  },
+  {
     "id": "git_basic",
     "name": "git_basic",
     "status": "installed",

@@ -14,11 +14,14 @@ from void.api.auth import get_api_token, require_api_token
 from void.api.dependencies import get_agent, get_skill_registry, get_tool_registry
 from void.api.schemas import (
     ApprovalResponse,
+    BrowserFillRequest,
     BrowserLinksRequest,
     BrowserScreenshotRequest,
+    BrowserSelectorRequest,
     BrowserTaskRequest,
     BrowserTextRequest,
     BrowserUrlRequest,
+    BrowserWaitRequest,
     CapabilitiesResponse,
     ChatRequest,
     ChatResponse,
@@ -363,6 +366,62 @@ def browser_task_endpoint(
         registry,
         "browser_task",
         {"url": request.url, "instruction": request.instruction},
+    )
+
+
+@app.post("/browser/click", response_model=ApprovalResponse | ErrorResponse)
+def browser_click_endpoint(
+    request: BrowserSelectorRequest,
+    _: None = Depends(require_api_token),
+    registry: ToolRegistry = Depends(get_tool_registry),
+) -> ApprovalResponse | ErrorResponse:
+    return _execute_api_tool(
+        registry,
+        "browser_click",
+        {"url": request.url, "selector": request.selector},
+    )
+
+
+@app.post("/browser/fill", response_model=ApprovalResponse | ErrorResponse)
+def browser_fill_endpoint(
+    request: BrowserFillRequest,
+    _: None = Depends(require_api_token),
+    registry: ToolRegistry = Depends(get_tool_registry),
+) -> ApprovalResponse | ErrorResponse:
+    return _execute_api_tool(
+        registry,
+        "browser_fill",
+        {"url": request.url, "selector": request.selector, "value": request.value},
+    )
+
+
+@app.post("/browser/submit", response_model=ApprovalResponse | ErrorResponse)
+def browser_submit_endpoint(
+    request: BrowserSelectorRequest,
+    _: None = Depends(require_api_token),
+    registry: ToolRegistry = Depends(get_tool_registry),
+) -> ApprovalResponse | ErrorResponse:
+    return _execute_api_tool(
+        registry,
+        "browser_submit",
+        {"url": request.url, "selector": request.selector},
+    )
+
+
+@app.post("/browser/wait", response_model=ApprovalResponse | ErrorResponse)
+def browser_wait_endpoint(
+    request: BrowserWaitRequest,
+    _: None = Depends(require_api_token),
+    registry: ToolRegistry = Depends(get_tool_registry),
+) -> ApprovalResponse | ErrorResponse:
+    return _execute_api_tool(
+        registry,
+        "browser_wait_for_selector",
+        {
+            "url": request.url,
+            "selector": request.selector,
+            "timeout_ms": request.timeout_ms,
+        },
     )
 
 

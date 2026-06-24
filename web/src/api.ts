@@ -105,6 +105,19 @@ export type BrowserTaskRequest = {
   instruction: string;
 };
 
+export type BrowserSelectorRequest = {
+  url: string;
+  selector: string;
+};
+
+export type BrowserFillRequest = BrowserSelectorRequest & {
+  value: string;
+};
+
+export type BrowserWaitRequest = BrowserSelectorRequest & {
+  timeout_ms?: number;
+};
+
 export type GitCommitRequest = {
   message: string;
 };
@@ -282,6 +295,34 @@ export function getBrowserScreenshot(url: string) {
 
 export function runBrowserTask(payload: BrowserTaskRequest) {
   return request<ApprovalActionResponse>("/browser/task", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function clickBrowserSelector(payload: BrowserSelectorRequest) {
+  return request<ApprovalActionResponse>("/browser/click", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function fillBrowserSelector(payload: BrowserFillRequest) {
+  return request<ApprovalActionResponse>("/browser/fill", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function submitBrowserSelector(payload: BrowserSelectorRequest) {
+  return request<ApprovalActionResponse>("/browser/submit", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function waitForBrowserSelector(payload: BrowserWaitRequest) {
+  return request<ApprovalActionResponse>("/browser/wait", {
     method: "POST",
     body: JSON.stringify(payload),
   });

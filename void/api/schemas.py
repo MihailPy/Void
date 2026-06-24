@@ -2,7 +2,7 @@
 
 from typing import Any
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class ChatRequest(BaseModel):
@@ -93,6 +93,23 @@ class BrowserScreenshotRequest(BaseModel):
 class BrowserTaskRequest(BaseModel):
     url: str
     instruction: str
+
+
+class BrowserSelectorRequest(BaseModel):
+    url: str
+    selector: str
+
+
+class BrowserFillRequest(BaseModel):
+    url: str
+    selector: str
+    value: str
+
+
+class BrowserWaitRequest(BaseModel):
+    url: str
+    selector: str
+    timeout_ms: int = Field(default=10000, ge=1, le=60000)
 
 
 class GitCommitRequest(BaseModel):

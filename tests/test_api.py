@@ -88,3 +88,44 @@ def test_git_commit_endpoint_creates_approval():
     payload = response.json()
     assert payload["ok"] is True
     assert "approval" in payload["message"].lower()
+
+
+def test_browser_click_endpoint_creates_approval():
+    response = request(
+        "POST",
+        "/browser/click",
+        json={"url": "https://example.com", "selector": "#login"},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["ok"] is True
+    assert "approval" in payload["message"].lower()
+
+
+def test_browser_fill_endpoint_requires_selector():
+    response = request(
+        "POST",
+        "/browser/fill",
+        json={"url": "https://example.com", "value": "test@test.com"},
+    )
+
+    assert response.status_code == 422
+    payload = response.json()
+    assert payload["ok"] is False
+
+
+def test_browser_wait_endpoint_validates_timeout():
+    response = request(
+        "POST",
+        "/browser/wait",
+        json={
+            "url": "https://example.com",
+            "selector": "#result",
+            "timeout_ms": 0,
+        },
+    )
+
+    assert response.status_code == 422
+    payload = response.json()
+    assert payload["ok"] is False
