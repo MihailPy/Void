@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import {
   Approval,
+  BrowserSession,
   Capability,
   HealthResponse,
   MemoryResponse,
@@ -8,18 +9,23 @@ import {
   ScheduledTask,
   Skill,
   approve,
+  clickBrowserSession,
   clickBrowserSelector,
   clearStoredToken,
+  closeAllBrowserSessions,
+  closeBrowserSession,
   createGitCommit,
   createTask,
   deleteTask,
   disableTask,
   enableTask,
   extractBrowserText,
+  fillBrowserSession,
   fillBrowserSelector,
   getApprovals,
   getBrowserLinks,
   getBrowserScreenshot,
+  getBrowserSessionStatus,
   getBrowserTitle,
   getCapabilities,
   getFactsMemory,
@@ -35,14 +41,18 @@ import {
   getTasks,
   getStoredToken,
   health,
+  listBrowserSessions,
+  openBrowserSession,
   reject,
   runBrowserTask,
   runDueTasksNow,
   runTask,
   sendChatMessage,
   setStoredToken,
+  submitBrowserSession,
   submitBrowserSelector,
   suggestGitCommitMessage,
+  waitForBrowserSession,
   waitForBrowserSelector,
 } from "./api";
 
@@ -358,6 +368,8 @@ function ChatTab() {
 
 function BrowserTab() {
   const [url, setUrl] = useState("https://example.com");
+  const [sessionMode, setSessionMode] = useState<"headless" | "visible">("headless");
+  const [sessions, setSessions] = useState<BrowserSession[]>([]);
   const [selector, setSelector] = useState("#login");
   const [value, setValue] = useState("test@test.com");
   const [timeoutMs, setTimeoutMs] = useState("10000");
@@ -368,11 +380,24 @@ function BrowserTab() {
   const [result, setResult] = useState("");
   const [error, setError] = useState("");
 
+  useEffect(() => {
+    void refreshSessions();
+  }, []);
+
   async function loadBrowserApproval() {
     const pendingApproval = await fetchInlineApproval(
       (approval) => approval.category === "browser",
     );
     setInlineApproval(pendingApproval);
+  }
+
+  async function refreshSessions() {
+    try {
+      const response = await listBrowserSessions();
+      setSessions(response.sessions);
+    } catch (currentError) {
+      setError(getErrorMessage(currentError));
+    }
   }
 
   async function handleBrowserAction(action: string) {
@@ -461,6 +486,119 @@ function BrowserTab() {
     }
   }
 
+  async function handleOpenSession() {
+    const cleanUrl = url.trim();
+    if (!cleanUrl) {
+      setError("URL is required.");
+      return;
+    }
+
+    setError("");
+    setResult("");
+    setInlineApproval(null);
+    setLoadingAction("open-session");
+    try {
+      const response = await openBrowserSession({
+        url: cleanUrl,
+        mode: sessionMode,
+      });
+      setResult(response.message);
+      await loadBrowserApproval();
+    } catch (currentError) {
+      setError(getErrorMessage(currentError));
+    } finally {
+      setLoadingAction("");
+    }
+  }
+
+  async function handleSessionStatus(id: string) {
+    setError("");
+    setResult("");
+    setLoadingAction(`status-${id}`);
+    try {
+      const response = await getBrowserSessionStatus(id);
+      setResult(JSON.stringify(response.session, null, 2));
+      await refreshSessions();
+    } catch (currentError) {
+      setError(getErrorMessage(currentError));
+    } finally {
+      setLoadingAction("");
+    }
+  }
+
+  async function handleCloseSession(id: string) {
+    setError("");
+    setResult("");
+    setInlineApproval(null);
+    setLoadingAction(`close-${id}`);
+    try {
+      const response = await closeBrowserSession(id);
+      setResult(response.message);
+      await loadBrowserApproval();
+    } catch (currentError) {
+      setError(getErrorMessage(currentError));
+    } finally {
+      setLoadingAction("");
+    }
+  }
+
+  async function handleCloseAllSessions() {
+    setError("");
+    setResult("");
+    setInlineApproval(null);
+    setLoadingAction("close-all-sessions");
+    try {
+      const response = await closeAllBrowserSessions();
+      setResult(response.message);
+      await loadBrowserApproval();
+    } catch (currentError) {
+      setError(getErrorMessage(currentError));
+    } finally {
+      setLoadingAction("");
+    }
+  }
+
+  async function handleSessionAction(id: string, action: string) {
+    const cleanSelector = selector.trim();
+    const parsedTimeout = Number(timeoutMs);
+
+    if (!cleanSelector) {
+      setError("Selector is required.");
+      return;
+    }
+    if (action === "wait" && (!Number.isFinite(parsedTimeout) || parsedTimeout < 1)) {
+      setError("Timeout must be greater than 0.");
+      return;
+    }
+
+    setError("");
+    setResult("");
+    setInlineApproval(null);
+    setLoadingAction(`${action}-${id}`);
+    try {
+      const response =
+        action === "click"
+          ? await clickBrowserSession(id, { selector: cleanSelector })
+          : action === "fill"
+            ? await fillBrowserSession(id, {
+                selector: cleanSelector,
+                value,
+              })
+            : action === "submit"
+              ? await submitBrowserSession(id, { selector: cleanSelector })
+              : await waitForBrowserSession(id, {
+                  selector: cleanSelector,
+                  timeout_ms: parsedTimeout,
+                });
+      setResult(response.message);
+      await loadBrowserApproval();
+    } catch (currentError) {
+      setError(getErrorMessage(currentError));
+    } finally {
+      setLoadingAction("");
+    }
+  }
+
   async function handleApprovalAction(id: string, action: ApprovalAction) {
     setApprovalActionId(id);
     setError("");
@@ -468,6 +606,7 @@ function BrowserTab() {
       const response = await resolveInlineApproval(id, action);
       setResult(response.message);
       setInlineApproval(null);
+      await refreshSessions();
     } catch (currentError) {
       setError(getErrorMessage(currentError));
     } finally {
@@ -502,6 +641,18 @@ function BrowserTab() {
             onChange={(event) => setUrl(event.target.value)}
             placeholder="https://example.com"
           />
+        </label>
+        <label>
+          <span>Session mode</span>
+          <select
+            value={sessionMode}
+            onChange={(event) =>
+              setSessionMode(event.target.value === "visible" ? "visible" : "headless")
+            }
+          >
+            <option value="headless">headless</option>
+            <option value="visible">visible</option>
+          </select>
         </label>
         <label>
           <span>Browser task instruction</span>
@@ -605,6 +756,109 @@ function BrowserTab() {
           >
             {loadingAction === "wait" ? "Requesting..." : "Wait"}
           </button>
+        </div>
+        <div className="browserSessionHeader">
+          <h2>Browser Sessions</h2>
+          <div className="buttonRow">
+            <button
+              type="button"
+              disabled={Boolean(loadingAction)}
+              onClick={() => void handleOpenSession()}
+            >
+              {loadingAction === "open-session" ? "Requesting..." : "Open session"}
+            </button>
+            <button
+              className="secondaryButton"
+              type="button"
+              disabled={Boolean(loadingAction)}
+              onClick={() => void refreshSessions()}
+            >
+              Refresh sessions
+            </button>
+            <button
+              className="dangerButton"
+              type="button"
+              disabled={Boolean(loadingAction)}
+              onClick={() => void handleCloseAllSessions()}
+            >
+              {loadingAction === "close-all-sessions"
+                ? "Requesting..."
+                : "Close all sessions"}
+            </button>
+          </div>
+        </div>
+        <div className="muted">
+          Visible sessions are managed by Void. Void does not attach to your existing
+          personal browser.
+        </div>
+        <div className="browserSessionsList">
+          {sessions.length === 0 ? (
+            <div className="empty">No browser sessions are open.</div>
+          ) : (
+            sessions.map((session) => {
+              const id = session.session_id ?? "";
+              return (
+                <article className="browserSessionCard" key={id || session.url}>
+                  <div className="cardTopline">
+                    <span>{id || "unknown session"}</span>
+                    <span>{session.mode}</span>
+                  </div>
+                  <h2>{session.title || "(no title)"}</h2>
+                  <p>{session.url}</p>
+                  <div className="browserSessionMeta">
+                    <span>created {session.created_at || "unknown"}</span>
+                    <span>last used {session.last_used_at || "unknown"}</span>
+                  </div>
+                  <div className="buttonRow">
+                    <button
+                      className="secondaryButton"
+                      type="button"
+                      disabled={!id || Boolean(loadingAction)}
+                      onClick={() => void handleSessionStatus(id)}
+                    >
+                      {loadingAction === `status-${id}` ? "Loading..." : "Status"}
+                    </button>
+                    <button
+                      className="dangerButton"
+                      type="button"
+                      disabled={!id || Boolean(loadingAction)}
+                      onClick={() => void handleCloseSession(id)}
+                    >
+                      {loadingAction === `close-${id}` ? "Requesting..." : "Close"}
+                    </button>
+                    <button
+                      type="button"
+                      disabled={!id || Boolean(loadingAction)}
+                      onClick={() => void handleSessionAction(id, "click")}
+                    >
+                      {loadingAction === `click-${id}` ? "Requesting..." : "Click"}
+                    </button>
+                    <button
+                      type="button"
+                      disabled={!id || Boolean(loadingAction)}
+                      onClick={() => void handleSessionAction(id, "fill")}
+                    >
+                      {loadingAction === `fill-${id}` ? "Requesting..." : "Fill"}
+                    </button>
+                    <button
+                      type="button"
+                      disabled={!id || Boolean(loadingAction)}
+                      onClick={() => void handleSessionAction(id, "submit")}
+                    >
+                      {loadingAction === `submit-${id}` ? "Requesting..." : "Submit"}
+                    </button>
+                    <button
+                      type="button"
+                      disabled={!id || Boolean(loadingAction)}
+                      onClick={() => void handleSessionAction(id, "wait")}
+                    >
+                      {loadingAction === `wait-${id}` ? "Requesting..." : "Wait"}
+                    </button>
+                  </div>
+                </article>
+              );
+            })
+          )}
         </div>
         <div className="muted">
           Browser Interactive v1 actions are stateless: each approved action opens a

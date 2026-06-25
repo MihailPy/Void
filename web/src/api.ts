@@ -118,6 +118,42 @@ export type BrowserWaitRequest = BrowserSelectorRequest & {
   timeout_ms?: number;
 };
 
+export type BrowserSession = {
+  session_id?: string;
+  mode?: "headless" | "visible" | string;
+  url?: string;
+  title?: string | null;
+  created_at?: string;
+  last_used_at?: string;
+};
+
+export type BrowserSessionsResponse = {
+  ok: boolean;
+  sessions: BrowserSession[];
+};
+
+export type BrowserSessionResponse = {
+  ok: boolean;
+  session: BrowserSession;
+};
+
+export type BrowserOpenSessionRequest = {
+  url: string;
+  mode: "headless" | "visible";
+};
+
+export type BrowserSessionSelectorRequest = {
+  selector: string;
+};
+
+export type BrowserSessionFillRequest = BrowserSessionSelectorRequest & {
+  value: string;
+};
+
+export type BrowserSessionWaitRequest = BrowserSessionSelectorRequest & {
+  timeout_ms?: number;
+};
+
 export type GitCommitRequest = {
   message: string;
 };
@@ -323,6 +359,70 @@ export function submitBrowserSelector(payload: BrowserSelectorRequest) {
 
 export function waitForBrowserSelector(payload: BrowserWaitRequest) {
   return request<ApprovalActionResponse>("/browser/wait", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function openBrowserSession(payload: BrowserOpenSessionRequest) {
+  return request<ApprovalActionResponse>("/browser/sessions", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function listBrowserSessions() {
+  return request<BrowserSessionsResponse>("/browser/sessions");
+}
+
+export function getBrowserSessionStatus(id: string) {
+  return request<BrowserSessionResponse>(`/browser/sessions/${id}`);
+}
+
+export function closeBrowserSession(id: string) {
+  return request<ApprovalActionResponse>(`/browser/sessions/${id}`, {
+    method: "DELETE",
+  });
+}
+
+export function closeAllBrowserSessions() {
+  return request<ApprovalActionResponse>("/browser/sessions", {
+    method: "DELETE",
+  });
+}
+
+export function clickBrowserSession(
+  id: string,
+  payload: BrowserSessionSelectorRequest,
+) {
+  return request<ApprovalActionResponse>(`/browser/sessions/${id}/click`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function fillBrowserSession(id: string, payload: BrowserSessionFillRequest) {
+  return request<ApprovalActionResponse>(`/browser/sessions/${id}/fill`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function submitBrowserSession(
+  id: string,
+  payload: BrowserSessionSelectorRequest,
+) {
+  return request<ApprovalActionResponse>(`/browser/sessions/${id}/submit`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function waitForBrowserSession(
+  id: string,
+  payload: BrowserSessionWaitRequest,
+) {
+  return request<ApprovalActionResponse>(`/browser/sessions/${id}/wait`, {
     method: "POST",
     body: JSON.stringify(payload),
   });

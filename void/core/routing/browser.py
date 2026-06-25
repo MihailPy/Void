@@ -21,6 +21,151 @@ def _without_url(text: str, url: str) -> str:
     return text.replace(url, "", 1).strip()
 
 
+def _session_id(value: str) -> str:
+    return clean(value).split()[0] if clean(value) else ""
+
+
+def _match_open_session(text: str, lowered: str, url: str) -> RouteResult | None:
+    mode = ""
+    if re.search(r"\bopen\s+visible\s+browser\s+session\b", lowered) or (
+        "открой видимую browser session" in lowered
+    ):
+        mode = "visible"
+    elif re.search(r"\bopen\s+headless\s+browser\s+session\b", lowered) or (
+        "открой фоновую browser session" in lowered
+    ):
+        mode = "headless"
+
+    if not mode:
+        return None
+    return RouteResult(
+        matched=True,
+        confidence=0.92,
+        action=AgentAction(
+            "browser_open_session",
+            {"url": url, "mode": mode},
+            "User asks to open a managed browser session.",
+        ),
+    )
+
+
+def _match_session_without_url(text: str, lowered: str) -> RouteResult | None:
+    if lowered in {"browser sessions", "list browser sessions"} or (
+        "покажи browser sessions" in lowered
+    ):
+        return RouteResult(
+            matched=True,
+            confidence=0.92,
+            action=AgentAction(
+                "browser_list_sessions",
+                {},
+                "User asks to list managed browser sessions.",
+            ),
+        )
+
+    match = re.search(
+        r"(?:browser\s+session\s+status|статус\s+browser\s+session)\s+([A-Za-z0-9_-]+)",
+        text,
+        re.IGNORECASE,
+    )
+    if match:
+        return RouteResult(
+            matched=True,
+            confidence=0.92,
+            action=AgentAction(
+                "browser_session_status",
+                {"session_id": _session_id(match.group(1))},
+                "User asks for managed browser session status.",
+            ),
+        )
+
+    match = re.search(
+        r"(?:close|закрой)\s+browser\s+session\s+([A-Za-z0-9_-]+)",
+        text,
+        re.IGNORECASE,
+    )
+    if match:
+        return RouteResult(
+            matched=True,
+            confidence=0.92,
+            action=AgentAction(
+                "browser_close_session",
+                {"session_id": _session_id(match.group(1))},
+                "User asks to close a managed browser session.",
+            ),
+        )
+
+    match = re.search(
+        r"click\s+(.+?)\s+in\s+browser\s+session\s+([A-Za-z0-9_-]+)",
+        text,
+        re.IGNORECASE,
+    )
+    if match:
+        return RouteResult(
+            matched=True,
+            confidence=0.92,
+            action=AgentAction(
+                "browser_session_click",
+                {"selector": _selector(match.group(1)), "session_id": _session_id(match.group(2))},
+                "User asks to click in a managed browser session.",
+            ),
+        )
+
+    match = re.search(
+        r"fill\s+(.+?)\s+with\s+(.+?)\s+in\s+browser\s+session\s+([A-Za-z0-9_-]+)",
+        text,
+        re.IGNORECASE,
+    )
+    if match:
+        return RouteResult(
+            matched=True,
+            confidence=0.92,
+            action=AgentAction(
+                "browser_session_fill",
+                {
+                    "selector": _selector(match.group(1)),
+                    "value": clean(match.group(2)),
+                    "session_id": _session_id(match.group(3)),
+                },
+                "User asks to fill in a managed browser session.",
+            ),
+        )
+
+    match = re.search(
+        r"submit\s+(.+?)\s+in\s+browser\s+session\s+([A-Za-z0-9_-]+)",
+        text,
+        re.IGNORECASE,
+    )
+    if match:
+        return RouteResult(
+            matched=True,
+            confidence=0.92,
+            action=AgentAction(
+                "browser_session_submit",
+                {"selector": _selector(match.group(1)), "session_id": _session_id(match.group(2))},
+                "User asks to submit in a managed browser session.",
+            ),
+        )
+
+    match = re.search(
+        r"wait\s+for\s+(.+?)\s+in\s+browser\s+session\s+([A-Za-z0-9_-]+)",
+        text,
+        re.IGNORECASE,
+    )
+    if match:
+        return RouteResult(
+            matched=True,
+            confidence=0.92,
+            action=AgentAction(
+                "browser_session_wait_for_selector",
+                {"selector": _selector(match.group(1)), "session_id": _session_id(match.group(2))},
+                "User asks to wait in a managed browser session.",
+            ),
+        )
+
+    return None
+
+
 def _match_click(text: str, lowered: str, url: str) -> RouteResult | None:
     selector = ""
     if lowered.startswith("browser click"):
@@ -151,9 +296,17 @@ def _match_wait(text: str, lowered: str, url: str) -> RouteResult | None:
 
 
 def match(text: str, lowered: str) -> RouteResult | None:
+    session_route = _match_session_without_url(text, lowered)
+    if session_route is not None:
+        return session_route
+
     url = extract_url(text)
     if url is None:
         return None
+
+    open_session_route = _match_open_session(text, lowered, url)
+    if open_session_route is not None:
+        return open_session_route
 
     for matcher in (_match_click, _match_fill, _match_submit, _match_wait):
         route = matcher(text, lowered, url)

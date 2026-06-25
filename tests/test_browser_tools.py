@@ -39,12 +39,21 @@ def test_browser_tools_registered_with_confirmation():
         "browser_fill": "write",
         "browser_submit": "write",
         "browser_wait_for_selector": "network",
+        "browser_open_session": "network",
+        "browser_list_sessions": "read",
+        "browser_session_status": "read",
+        "browser_close_session": "write",
+        "browser_close_all_sessions": "destructive",
+        "browser_session_click": "write",
+        "browser_session_fill": "write",
+        "browser_session_submit": "write",
+        "browser_session_wait_for_selector": "network",
     }
     for name, risk_level in expected.items():
         tool = registry.get(name)
         assert tool is not None
         assert tool.terminal is True
-        assert tool.requires_confirmation is True
+        assert tool.requires_confirmation is (risk_level != "read")
         assert tool.category == "browser"
         assert tool.risk_level == risk_level
 
@@ -67,3 +76,48 @@ def test_interactive_browser_tool_creates_approval():
     assert approvals[0]["action"] == "browser_click"
     assert approvals[0]["category"] == "browser"
     assert approvals[0]["risk_level"] == "write"
+
+
+def test_browser_open_session_creates_approval():
+    registry = build_registry()
+
+    result = registry.execute(
+        AgentAction(
+            "browser_open_session",
+            {"url": "https://example.com", "mode": "visible"},
+            "test",
+        )
+    )
+
+    assert result.ok is True
+    assert "approval" in result.content.lower()
+    approvals = list_approvals()
+    assert approvals[0]["action"] == "browser_open_session"
+    assert approvals[0]["category"] == "browser"
+    assert approvals[0]["risk_level"] == "network"
+
+
+def test_read_only_session_tools_do_not_require_confirmation():
+    registry = build_registry()
+
+    assert registry.get("browser_list_sessions").requires_confirmation is False
+    assert registry.get("browser_session_status").requires_confirmation is False
+
+
+def test_browser_session_manager_rejects_invalid_mode():
+    from void.core.browser_sessions import BrowserSessionManager
+
+    manager = BrowserSessionManager()
+
+    with pytest.raises(ValueError, match="Mode must be one of"):
+        manager.open_session("https://example.com", "personal-chrome")
+
+
+def test_browser_session_manager_enforces_max_sessions():
+    from void.core.browser_sessions import BrowserSessionManager, MAX_SESSIONS
+
+    manager = BrowserSessionManager()
+    manager._sessions = {str(index): object() for index in range(MAX_SESSIONS)}
+
+    with pytest.raises(ValueError, match="Maximum open browser sessions"):
+        manager.open_session("https://example.com", "headless")

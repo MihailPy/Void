@@ -129,3 +129,47 @@ def test_browser_wait_endpoint_validates_timeout():
     assert response.status_code == 422
     payload = response.json()
     assert payload["ok"] is False
+
+
+def test_browser_open_session_endpoint_creates_approval():
+    response = request(
+        "POST",
+        "/browser/sessions",
+        json={"url": "https://example.com", "mode": "visible"},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["ok"] is True
+    assert "approval" in payload["message"].lower()
+
+
+def test_browser_sessions_endpoint_lists_sessions():
+    response = request("GET", "/browser/sessions")
+
+    assert response.status_code == 200
+    assert response.json() == {"ok": True, "sessions": []}
+
+
+def test_browser_open_session_endpoint_rejects_invalid_mode():
+    response = request(
+        "POST",
+        "/browser/sessions",
+        json={"url": "https://example.com", "mode": "personal"},
+    )
+
+    assert response.status_code == 422
+    payload = response.json()
+    assert payload["ok"] is False
+
+
+def test_browser_session_wait_endpoint_validates_timeout():
+    response = request(
+        "POST",
+        "/browser/sessions/abc123/wait",
+        json={"selector": "#result", "timeout_ms": 0},
+    )
+
+    assert response.status_code == 422
+    payload = response.json()
+    assert payload["ok"] is False
