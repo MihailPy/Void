@@ -1,6 +1,6 @@
 """Pydantic schemas for the Void HTTP API."""
 
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -110,6 +110,35 @@ class BrowserWaitRequest(BaseModel):
     url: str
     selector: str
     timeout_ms: int = Field(default=10000, ge=1, le=60000)
+
+
+class BrowserSessionOpenRequest(BaseModel):
+    url: str
+    mode: Literal["headless", "visible"] = "headless"
+
+
+class BrowserSessionSelectorRequest(BaseModel):
+    selector: str
+
+
+class BrowserSessionFillRequest(BaseModel):
+    selector: str
+    value: str
+
+
+class BrowserSessionWaitRequest(BaseModel):
+    selector: str
+    timeout_ms: int = Field(default=10000, ge=1, le=60000)
+
+
+class BrowserSessionResponse(BaseModel):
+    ok: bool
+    session: dict[str, Any]
+
+
+class BrowserSessionsResponse(BaseModel):
+    ok: bool
+    sessions: list[dict[str, Any]]
 
 
 class GitCommitRequest(BaseModel):

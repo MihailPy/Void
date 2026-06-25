@@ -362,6 +362,97 @@ def browser_wait_for_selector(
         _close_browser(manager, browser, context)
 
 
+def browser_open_session(url: str, mode: str = "headless") -> ToolResult:
+    from void.core import browser_sessions
+
+    session = browser_sessions.open_session(url, mode)
+    return ToolResult(
+        ok=True,
+        content=(
+            f"Opened {session['mode']} browser session {session['session_id']} "
+            f"for {session['url']}."
+        ),
+        data={"session": session},
+    )
+
+
+def browser_list_sessions() -> ToolResult:
+    from void.core import browser_sessions
+
+    sessions = browser_sessions.list_sessions()
+    if sessions:
+        lines = [
+            (
+                f"{session['session_id']} | {session['mode']} | "
+                f"{session['url']} | {session.get('title') or '(no title)'}"
+            )
+            for session in sessions
+        ]
+        content = "Browser sessions:\n" + "\n".join(lines)
+    else:
+        content = "No browser sessions are open."
+    return ToolResult(ok=True, content=content, data={"sessions": sessions})
+
+
+def browser_session_status(session_id: str) -> ToolResult:
+    from void.core import browser_sessions
+
+    session = browser_sessions.get_session(session_id)
+    if session is None:
+        return ToolResult(ok=False, content=f"Browser session not found: {session_id}.")
+    return ToolResult(
+        ok=True,
+        content=(
+            f"Browser session {session_id}: {session['mode']} {session['url']} "
+            f"title={session.get('title') or '(no title)'}"
+        ),
+        data={"session": session},
+    )
+
+
+def browser_close_session(session_id: str) -> ToolResult:
+    from void.core import browser_sessions
+
+    if not browser_sessions.close_session(session_id):
+        return ToolResult(ok=False, content=f"Browser session not found: {session_id}.")
+    return ToolResult(ok=True, content=f"Closed browser session {session_id}.")
+
+
+def browser_close_all_sessions() -> ToolResult:
+    from void.core import browser_sessions
+
+    count = browser_sessions.close_all_sessions()
+    return ToolResult(ok=True, content=f"Closed {count} browser session(s).")
+
+
+def browser_session_click(session_id: str, selector: str) -> ToolResult:
+    from void.core import browser_sessions
+
+    return browser_sessions.click(session_id, selector)
+
+
+def browser_session_fill(session_id: str, selector: str, value: str) -> ToolResult:
+    from void.core import browser_sessions
+
+    return browser_sessions.fill(session_id, selector, value)
+
+
+def browser_session_submit(session_id: str, selector: str) -> ToolResult:
+    from void.core import browser_sessions
+
+    return browser_sessions.submit(session_id, selector)
+
+
+def browser_session_wait_for_selector(
+    session_id: str,
+    selector: str,
+    timeout_ms: int = 10000,
+) -> ToolResult:
+    from void.core import browser_sessions
+
+    return browser_sessions.wait_for_selector(session_id, selector, timeout_ms)
+
+
 def definitions() -> list[ToolDefinition]:
     return [
         ToolDefinition(
@@ -440,6 +531,87 @@ def definitions() -> list[ToolDefinition]:
             "browser_wait_for_selector",
             "Open an http/https URL and wait for a CSS selector.",
             browser_wait_for_selector,
+            terminal=True,
+            requires_confirmation=True,
+            category="browser",
+            risk_level="network",
+        ),
+        ToolDefinition(
+            "browser_open_session",
+            "Open a managed Void browser session in headless or visible mode.",
+            browser_open_session,
+            terminal=True,
+            requires_confirmation=True,
+            category="browser",
+            risk_level="network",
+        ),
+        ToolDefinition(
+            "browser_list_sessions",
+            "List managed Void browser sessions.",
+            browser_list_sessions,
+            terminal=True,
+            requires_confirmation=False,
+            category="browser",
+            risk_level="read",
+        ),
+        ToolDefinition(
+            "browser_session_status",
+            "Return metadata for a managed Void browser session.",
+            browser_session_status,
+            terminal=True,
+            requires_confirmation=False,
+            category="browser",
+            risk_level="read",
+        ),
+        ToolDefinition(
+            "browser_close_session",
+            "Close a managed Void browser session.",
+            browser_close_session,
+            terminal=True,
+            requires_confirmation=True,
+            category="browser",
+            risk_level="write",
+        ),
+        ToolDefinition(
+            "browser_close_all_sessions",
+            "Close all managed Void browser sessions.",
+            browser_close_all_sessions,
+            terminal=True,
+            requires_confirmation=True,
+            category="browser",
+            risk_level="destructive",
+        ),
+        ToolDefinition(
+            "browser_session_click",
+            "Click a CSS selector in an existing managed browser session.",
+            browser_session_click,
+            terminal=True,
+            requires_confirmation=True,
+            category="browser",
+            risk_level="write",
+        ),
+        ToolDefinition(
+            "browser_session_fill",
+            "Fill a selector in an existing managed browser session.",
+            browser_session_fill,
+            terminal=True,
+            requires_confirmation=True,
+            category="browser",
+            risk_level="write",
+        ),
+        ToolDefinition(
+            "browser_session_submit",
+            "Submit a form or click a submit selector in an existing managed browser session.",
+            browser_session_submit,
+            terminal=True,
+            requires_confirmation=True,
+            category="browser",
+            risk_level="write",
+        ),
+        ToolDefinition(
+            "browser_session_wait_for_selector",
+            "Wait for a CSS selector in an existing managed browser session.",
+            browser_session_wait_for_selector,
             terminal=True,
             requires_confirmation=True,
             category="browser",

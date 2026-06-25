@@ -463,6 +463,57 @@ textarea:focus {
   gap: 0.75rem;
 }
 
+.browserSessionHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-top: 0.5rem;
+}
+
+.browserSessionHeader h2 {
+  font-size: 1rem;
+  line-height: 1.25;
+}
+
+.browserSessionHeader .buttonRow {
+  margin-top: 0;
+}
+
+.browserSessionsList {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.browserSessionCard {
+  min-width: 0;
+  padding: 1rem;
+  border: 1px solid rgba(142, 166, 194, 0.16);
+  border-radius: 8px;
+  background: rgba(12, 18, 26, 0.72);
+}
+
+.browserSessionCard h2 {
+  font-size: 1rem;
+  line-height: 1.25;
+}
+
+.browserSessionCard p {
+  color: #bfcede;
+  line-height: 1.45;
+  margin-top: 0.5rem;
+  overflow-wrap: anywhere;
+}
+
+.browserSessionMeta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  color: #8fa1b7;
+  font-size: 0.84rem;
+  margin-top: 0.6rem;
+}
+
 .browserPanel label,
 .gitPanel label {
   display: grid;
@@ -592,6 +643,10 @@ textarea:focus {
 
   .schedulerPanel {
     align-items: stretch;
+    flex-direction: column;
+  }
+
+  .browserSessionHeader {
     flex-direction: column;
   }
 

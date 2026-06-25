@@ -122,6 +122,73 @@ def test_router_browser_click_ru():
     }
 
 
+def test_router_browser_open_visible_session():
+    route = Router().route("open visible browser session https://example.com")
+
+    assert route.matched is True
+    assert route.action is not None
+    assert route.action.action == "browser_open_session"
+    assert route.action.arguments == {
+        "url": "https://example.com",
+        "mode": "visible",
+    }
+
+
+def test_router_browser_open_headless_session_ru():
+    route = Router().route("открой фоновую browser session https://example.com")
+
+    assert route.matched is True
+    assert route.action is not None
+    assert route.action.action == "browser_open_session"
+    assert route.action.arguments == {
+        "url": "https://example.com",
+        "mode": "headless",
+    }
+
+
+def test_router_browser_list_sessions():
+    route = Router().route("list browser sessions")
+
+    assert route.matched is True
+    assert route.action is not None
+    assert route.action.action == "browser_list_sessions"
+    assert route.action.arguments == {}
+
+
+def test_router_browser_session_status():
+    route = Router().route("browser session status abc123")
+
+    assert route.matched is True
+    assert route.action is not None
+    assert route.action.action == "browser_session_status"
+    assert route.action.arguments == {"session_id": "abc123"}
+
+
+def test_router_browser_session_click():
+    route = Router().route("click #login in browser session abc123")
+
+    assert route.matched is True
+    assert route.action is not None
+    assert route.action.action == "browser_session_click"
+    assert route.action.arguments == {
+        "session_id": "abc123",
+        "selector": "#login",
+    }
+
+
+def test_router_browser_session_fill():
+    route = Router().route("fill #email with test@test.com in browser session abc123")
+
+    assert route.matched is True
+    assert route.action is not None
+    assert route.action.action == "browser_session_fill"
+    assert route.action.arguments == {
+        "session_id": "abc123",
+        "selector": "#email",
+        "value": "test@test.com",
+    }
+
+
 def test_router_git_status():
     route = Router().route("git status")
 

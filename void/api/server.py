@@ -17,6 +17,12 @@ from void.api.schemas import (
     BrowserFillRequest,
     BrowserLinksRequest,
     BrowserScreenshotRequest,
+    BrowserSessionFillRequest,
+    BrowserSessionOpenRequest,
+    BrowserSessionResponse,
+    BrowserSessionsResponse,
+    BrowserSessionSelectorRequest,
+    BrowserSessionWaitRequest,
     BrowserSelectorRequest,
     BrowserTaskRequest,
     BrowserTextRequest,
@@ -419,6 +425,158 @@ def browser_wait_endpoint(
         "browser_wait_for_selector",
         {
             "url": request.url,
+            "selector": request.selector,
+            "timeout_ms": request.timeout_ms,
+        },
+    )
+
+
+@app.post("/browser/sessions", response_model=ApprovalResponse | ErrorResponse)
+def browser_open_session_endpoint(
+    request: BrowserSessionOpenRequest,
+    _: None = Depends(require_api_token),
+    registry: ToolRegistry = Depends(get_tool_registry),
+) -> ApprovalResponse | ErrorResponse:
+    return _execute_api_tool(
+        registry,
+        "browser_open_session",
+        {"url": request.url, "mode": request.mode},
+    )
+
+
+@app.get("/browser/sessions", response_model=BrowserSessionsResponse | ErrorResponse)
+def browser_sessions_endpoint(
+    _: None = Depends(require_api_token),
+    registry: ToolRegistry = Depends(get_tool_registry),
+) -> BrowserSessionsResponse | ErrorResponse:
+    try:
+        result = registry.execute(AgentAction("browser_list_sessions", {}, "API request."))
+        return BrowserSessionsResponse(
+            ok=result.ok,
+            sessions=(result.data or {}).get("sessions", []),
+        )
+    except Exception as error:
+        return _error(error)
+
+
+@app.get(
+    "/browser/sessions/{session_id}",
+    response_model=BrowserSessionResponse | ErrorResponse,
+)
+def browser_session_status_endpoint(
+    session_id: str,
+    _: None = Depends(require_api_token),
+    registry: ToolRegistry = Depends(get_tool_registry),
+) -> BrowserSessionResponse | ErrorResponse:
+    try:
+        result = registry.execute(
+            AgentAction(
+                "browser_session_status",
+                {"session_id": session_id},
+                "API request.",
+            )
+        )
+        if not result.ok:
+            return _error(result.content)
+        return BrowserSessionResponse(
+            ok=True,
+            session=(result.data or {}).get("session", {}),
+        )
+    except Exception as error:
+        return _error(error)
+
+
+@app.delete("/browser/sessions/{session_id}", response_model=ApprovalResponse | ErrorResponse)
+def browser_close_session_endpoint(
+    session_id: str,
+    _: None = Depends(require_api_token),
+    registry: ToolRegistry = Depends(get_tool_registry),
+) -> ApprovalResponse | ErrorResponse:
+    return _execute_api_tool(
+        registry,
+        "browser_close_session",
+        {"session_id": session_id},
+    )
+
+
+@app.delete("/browser/sessions", response_model=ApprovalResponse | ErrorResponse)
+def browser_close_all_sessions_endpoint(
+    _: None = Depends(require_api_token),
+    registry: ToolRegistry = Depends(get_tool_registry),
+) -> ApprovalResponse | ErrorResponse:
+    return _execute_api_tool(registry, "browser_close_all_sessions", {})
+
+
+@app.post(
+    "/browser/sessions/{session_id}/click",
+    response_model=ApprovalResponse | ErrorResponse,
+)
+def browser_session_click_endpoint(
+    session_id: str,
+    request: BrowserSessionSelectorRequest,
+    _: None = Depends(require_api_token),
+    registry: ToolRegistry = Depends(get_tool_registry),
+) -> ApprovalResponse | ErrorResponse:
+    return _execute_api_tool(
+        registry,
+        "browser_session_click",
+        {"session_id": session_id, "selector": request.selector},
+    )
+
+
+@app.post(
+    "/browser/sessions/{session_id}/fill",
+    response_model=ApprovalResponse | ErrorResponse,
+)
+def browser_session_fill_endpoint(
+    session_id: str,
+    request: BrowserSessionFillRequest,
+    _: None = Depends(require_api_token),
+    registry: ToolRegistry = Depends(get_tool_registry),
+) -> ApprovalResponse | ErrorResponse:
+    return _execute_api_tool(
+        registry,
+        "browser_session_fill",
+        {
+            "session_id": session_id,
+            "selector": request.selector,
+            "value": request.value,
+        },
+    )
+
+
+@app.post(
+    "/browser/sessions/{session_id}/submit",
+    response_model=ApprovalResponse | ErrorResponse,
+)
+def browser_session_submit_endpoint(
+    session_id: str,
+    request: BrowserSessionSelectorRequest,
+    _: None = Depends(require_api_token),
+    registry: ToolRegistry = Depends(get_tool_registry),
+) -> ApprovalResponse | ErrorResponse:
+    return _execute_api_tool(
+        registry,
+        "browser_session_submit",
+        {"session_id": session_id, "selector": request.selector},
+    )
+
+
+@app.post(
+    "/browser/sessions/{session_id}/wait",
+    response_model=ApprovalResponse | ErrorResponse,
+)
+def browser_session_wait_endpoint(
+    session_id: str,
+    request: BrowserSessionWaitRequest,
+    _: None = Depends(require_api_token),
+    registry: ToolRegistry = Depends(get_tool_registry),
+) -> ApprovalResponse | ErrorResponse:
+    return _execute_api_tool(
+        registry,
+        "browser_session_wait_for_selector",
+        {
+            "session_id": session_id,
             "selector": request.selector,
             "timeout_ms": request.timeout_ms,
         },
