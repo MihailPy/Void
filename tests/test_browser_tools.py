@@ -1,6 +1,6 @@
 import pytest
 
-from void.tools.browser_tools import browser_allowed, validate_url
+from void.core.browser_safety import browser_allowed, validate_url
 from void.tools.builtin import build_registry
 from void.core.permissions import list_approvals
 from void.core.types import AgentAction
@@ -24,6 +24,14 @@ def test_validate_url_rejects_blocked_schemes():
 def test_validate_url_rejects_empty_host():
     with pytest.raises(ValueError):
         validate_url("https:///missing-host")
+
+
+def test_browser_tools_re_export_shared_validation_helpers():
+    from void.tools import browser_tools
+
+    assert browser_tools.validate_url is validate_url
+    assert browser_tools.browser_allowed is browser_allowed
+    assert browser_tools.validate_url("example.com") == "https://example.com"
 
 
 def test_browser_tools_registered_with_confirmation():

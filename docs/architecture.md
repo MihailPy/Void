@@ -51,11 +51,15 @@ Memory files live under `memory/` and runtime package defaults live under `void/
 
 ## Browser Capability
 
-- Browser tools use Playwright with headless Chromium.
-- All browser tools are registered with `requires_confirmation=True`.
+- Browser tools use Playwright with Chromium.
+- Stateless browser actions open a fresh background browser for each approved action and close it afterward.
+- Managed headless sessions keep one Playwright page alive in the API process.
+- Managed visible sessions open a Void-owned visible browser window and are not attached to the user's personal browser.
+- Browser actions, session opens, session closes, and session interactions require approval. Session listing and status checks are read-only.
 - URL handling allows only `http` and `https`; `file`, `javascript`, and `data` schemes are blocked.
 - Screenshots are limited to `workspace/screenshots/`.
 - Browser task is read-only and does not click, log in, fill forms, submit data, run user-provided JavaScript, or persist sessions.
+- Limitations: no attach to existing personal Chrome, no persistent cookies or profile by default, no login automation workflow, no arbitrary JavaScript execution, session state is in-memory and lost on API restart, and the session manager allows at most 3 open sessions.
 
 ## Git Capability
 

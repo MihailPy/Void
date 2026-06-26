@@ -7,8 +7,8 @@ from datetime import datetime
 from typing import Any
 from uuid import uuid4
 
+from void.core.browser_safety import DEFAULT_TIMEOUT_MS, validate_url
 from void.core.types import ToolResult
-from void.tools.browser_tools import DEFAULT_TIMEOUT_MS, validate_url
 
 ALLOWED_MODES = {"headless", "visible"}
 MAX_SESSIONS = 3
