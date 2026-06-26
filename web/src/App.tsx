@@ -382,6 +382,7 @@ function BrowserTab() {
 
   useEffect(() => {
     void refreshSessions();
+    void loadBrowserApproval();
   }, []);
 
   async function loadBrowserApproval() {
@@ -398,6 +399,11 @@ function BrowserTab() {
     } catch (currentError) {
       setError(getErrorMessage(currentError));
     }
+  }
+
+  async function refreshBrowserState() {
+    await refreshSessions();
+    await loadBrowserApproval();
   }
 
   async function handleBrowserAction(action: string) {
@@ -605,8 +611,7 @@ function BrowserTab() {
     try {
       const response = await resolveInlineApproval(id, action);
       setResult(response.message);
-      setInlineApproval(null);
-      await refreshSessions();
+      await refreshBrowserState();
     } catch (currentError) {
       setError(getErrorMessage(currentError));
     } finally {
@@ -757,6 +762,10 @@ function BrowserTab() {
             {loadingAction === "wait" ? "Requesting..." : "Wait"}
           </button>
         </div>
+        <div className="muted">
+          Stateless actions open a fresh background browser each time. Managed sessions
+          keep the same browser page alive.
+        </div>
         <div className="browserSessionHeader">
           <h2>Browser Sessions</h2>
           <div className="buttonRow">
@@ -788,8 +797,8 @@ function BrowserTab() {
           </div>
         </div>
         <div className="muted">
-          Visible sessions are managed by Void. Void does not attach to your existing
-          personal browser.
+          Visible sessions are opened by Void and are not attached to your personal
+          browser. Attach-to-existing-browser is not implemented.
         </div>
         <div className="browserSessionsList">
           {sessions.length === 0 ? (
@@ -859,10 +868,6 @@ function BrowserTab() {
               );
             })
           )}
-        </div>
-        <div className="muted">
-          Browser Interactive v1 actions are stateless: each approved action opens a
-          fresh browser session. Multi-step workflows will be added later.
         </div>
       </section>
     </section>

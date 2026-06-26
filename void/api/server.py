@@ -42,6 +42,7 @@ from void.api.schemas import (
     SkillsResponse,
 )
 from void.core.agent import Agent
+from void.core import browser_sessions
 from void.core.capabilities import list_capabilities
 from void.core.permissions import approve, clear_approval, list_approvals, reject
 from void.core.registry import ToolRegistry
@@ -108,6 +109,13 @@ async def lifespan(app: FastAPI):
         yield
     finally:
         worker.stop()
+        try:
+            browser_sessions.close_all_sessions()
+        except Exception as error:
+            print(
+                f"WARNING: Failed to close browser sessions during shutdown: {error}",
+                flush=True,
+            )
 
 
 app = FastAPI(

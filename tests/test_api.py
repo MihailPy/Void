@@ -44,6 +44,47 @@ def test_skills():
     assert response.json()["ok"] is True
 
 
+def test_lifespan_closes_browser_sessions_on_shutdown(monkeypatch):
+    calls: list[str] = []
+
+    def close_all_sessions() -> int:
+        calls.append("closed")
+        return 2
+
+    monkeypatch.setattr(
+        "void.api.server.browser_sessions.close_all_sessions",
+        close_all_sessions,
+    )
+
+    async def run_lifespan() -> None:
+        async with app.router.lifespan_context(app):
+            pass
+
+    anyio.run(run_lifespan)
+
+    assert calls == ["closed"]
+
+
+def test_lifespan_browser_session_cleanup_failure_warns(monkeypatch, capsys):
+    def close_all_sessions() -> int:
+        raise RuntimeError("cleanup failed")
+
+    monkeypatch.setattr(
+        "void.api.server.browser_sessions.close_all_sessions",
+        close_all_sessions,
+    )
+
+    async def run_lifespan() -> None:
+        async with app.router.lifespan_context(app):
+            pass
+
+    anyio.run(run_lifespan)
+
+    captured = capsys.readouterr()
+    assert "WARNING: Failed to close browser sessions during shutdown" in captured.out
+    assert "cleanup failed" in captured.out
+
+
 def test_capabilities():
     response = request("GET", "/capabilities")
 

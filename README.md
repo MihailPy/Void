@@ -121,9 +121,15 @@ CLI:
 Important:
 
 - Browser actions require approval.
-- No cookies/session persistence by default.
-- No login/form submission automation yet.
 - Only http/https URLs are allowed.
+
+### Browser Modes
+
+- Stateless browser actions: each approved title, text, links, screenshot, task, or selector action opens a fresh background browser and closes it when the action finishes.
+- Managed headless sessions: approved session opens keep one Playwright page alive in the API process without showing a browser window.
+- Managed visible sessions: approved session opens launch a Void-owned visible browser window. This is not attached to your personal Chrome or browser profile.
+- Approval requirements: stateless browser actions, opening sessions, closing sessions, and session interactions require approval. Listing sessions and checking session status are read-only.
+- Limits: attach-to-existing-browser is not implemented, personal Chrome is not connected, cookies and profiles are not persisted by default, login automation workflows are not provided, arbitrary JavaScript execution is not exposed, session state is in-memory and lost on API restart, and at most 3 sessions may be open.
 
 ## Git Capability
 
