@@ -43,6 +43,33 @@ export type CapabilitiesResponse = {
   rejected: Capability[];
 };
 
+export type Project = {
+  id?: string;
+  name?: string;
+  aliases?: string[];
+  root_path?: string;
+  repo_url?: string;
+  commands?: Record<string, string>;
+};
+
+export type ProjectsResponse = {
+  ok: boolean;
+  projects: Project[];
+};
+
+export type CurrentProjectResponse = {
+  ok: boolean;
+  project: Project;
+};
+
+export type ProjectDescriptionResponse = CurrentProjectResponse & {
+  description: string;
+};
+
+export type SetCurrentProjectRequest = {
+  project: string;
+};
+
 export type Approval = {
   id?: string;
   action?: string;
@@ -238,6 +265,25 @@ export function getSkills() {
 
 export function getCapabilities() {
   return request<CapabilitiesResponse>("/capabilities");
+}
+
+export function getProjects() {
+  return request<ProjectsResponse>("/projects");
+}
+
+export function getCurrentProject() {
+  return request<CurrentProjectResponse>("/projects/current");
+}
+
+export function describeCurrentProject() {
+  return request<ProjectDescriptionResponse>("/projects/current/describe");
+}
+
+export function setCurrentProject(payload: SetCurrentProjectRequest) {
+  return request<ApprovalActionResponse>("/projects/current", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
 }
 
 export function getApprovals() {

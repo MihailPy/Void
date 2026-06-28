@@ -16,6 +16,7 @@ Void is organized around a deterministic local agent runtime. The CLI, API, Web 
 - LLM fallback: LM Studio or another OpenAI-compatible API is used when deterministic routing and skills do not handle a request.
 - Browser Capability: approval-gated Playwright tools for http/https page title, text extraction, links, screenshots, and read-only page inspection.
 - Git Capability: safe Git status, diff, log, current branch, commit message suggestion, and approval-gated commit.
+- Project Context: JSON-backed current project identity and known project metadata.
 
 ## Execution Order
 
@@ -31,10 +32,20 @@ The agent first tries a high-confidence router action. If that does not match, i
 - Session memory: request and action history.
 - Facts memory: durable user or environment facts.
 - Project memory: project-level notes and summaries.
+- Project context: known projects and the current project.
 - Capabilities memory: installed, requested, and rejected capability records.
 - Scheduled tasks: JSON-backed task storage.
 
 Memory files live under `memory/` and runtime package defaults live under `void/memory/`.
+
+## Project Context
+
+- Project context is stored in `memory/projects.json`.
+- The file records `current_project` plus a simple list of project records.
+- Project records include `id`, `name`, `aliases`, `root_path`, `repo_url`, and command keys.
+- Aliases let the router, API, and tools resolve names like `Void` or `MihailPy/Void`.
+- Command keys describe known project commands for future use; command execution is not implemented yet.
+- Void does not auto-scan the disk for projects and does not use a database.
 
 ## Permission Layer
 

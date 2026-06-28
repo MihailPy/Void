@@ -37,6 +37,26 @@ class CapabilitiesResponse(BaseModel):
     rejected: list[Any]
 
 
+class ProjectsResponse(BaseModel):
+    ok: bool
+    projects: list[dict[str, Any]]
+
+
+class CurrentProjectResponse(BaseModel):
+    ok: bool
+    project: dict[str, Any]
+
+
+class ProjectDescriptionResponse(BaseModel):
+    ok: bool
+    description: str
+    project: dict[str, Any]
+
+
+class SetCurrentProjectRequest(BaseModel):
+    project: str
+
+
 class SkillsResponse(BaseModel):
     ok: bool
     skills: list[Any]

@@ -5,6 +5,7 @@ import {
   Capability,
   HealthResponse,
   MemoryResponse,
+  Project,
   SchedulerStatusResponse,
   ScheduledTask,
   Skill,
@@ -17,6 +18,7 @@ import {
   createGitCommit,
   createTask,
   deleteTask,
+  describeCurrentProject,
   disableTask,
   enableTask,
   extractBrowserText,
@@ -35,6 +37,7 @@ import {
   getGitStagedDiff,
   getGitStatus,
   getProjectMemory,
+  getProjects,
   getSchedulerStatus,
   getSessionMemory,
   getSkills,
@@ -48,6 +51,7 @@ import {
   runDueTasksNow,
   runTask,
   sendChatMessage,
+  setCurrentProject,
   setStoredToken,
   submitBrowserSession,
   submitBrowserSelector,
@@ -60,6 +64,7 @@ type Tab =
   | "chat"
   | "browser"
   | "git"
+  | "project"
   | "approvals"
   | "tasks"
   | "capabilities"
@@ -77,6 +82,7 @@ const tabs: { id: Tab; label: string }[] = [
   { id: "chat", label: "Chat" },
   { id: "browser", label: "Browser" },
   { id: "git", label: "Git" },
+  { id: "project", label: "Project" },
   { id: "approvals", label: "Approvals" },
   { id: "tasks", label: "Tasks" },
   { id: "capabilities", label: "Capabilities" },
@@ -1016,6 +1022,202 @@ function GitTab() {
   );
 }
 
+function ProjectTab() {
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [currentProject, setCurrentProjectState] = useState<Project | null>(null);
+  const [description, setDescription] = useState("");
+  const [projectInput, setProjectInput] = useState("Void");
+  const [inlineApproval, setInlineApproval] = useState<Approval | null>(null);
+  const [approvalActionId, setApprovalActionId] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [setting, setSetting] = useState(false);
+  const [message, setMessage] = useState("");
+  const [error, setError] = useState("");
+
+  async function loadProjectContext() {
+    try {
+      setError("");
+      setLoading(true);
+      const [projectsResponse, descriptionResponse] = await Promise.all([
+        getProjects(),
+        describeCurrentProject(),
+      ]);
+      setProjects(projectsResponse.projects);
+      setCurrentProjectState(descriptionResponse.project);
+      setDescription(descriptionResponse.description);
+      const pendingApproval = await fetchInlineApproval(
+        (approval) => approval.action === "set_current_project",
+      );
+      setInlineApproval(pendingApproval);
+    } catch (currentError) {
+      setError(getErrorMessage(currentError));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleSetProject() {
+    const project = projectInput.trim();
+    if (!project) {
+      setError("Project id, name, or alias is required.");
+      return;
+    }
+
+    setError("");
+    setMessage("");
+    setInlineApproval(null);
+    setSetting(true);
+    try {
+      const response = await setCurrentProject({ project });
+      setMessage(response.message);
+      const pendingApproval = await fetchInlineApproval(
+        (approval) => approval.action === "set_current_project",
+      );
+      setInlineApproval(pendingApproval);
+    } catch (currentError) {
+      setError(getErrorMessage(currentError));
+    } finally {
+      setSetting(false);
+    }
+  }
+
+  async function handleApprovalAction(id: string, action: ApprovalAction) {
+    setApprovalActionId(id);
+    setError("");
+    setMessage("");
+    try {
+      const response = await resolveInlineApproval(id, action);
+      setMessage(response.message);
+      setInlineApproval(null);
+      await loadProjectContext();
+    } catch (currentError) {
+      setError(getErrorMessage(currentError));
+    } finally {
+      setApprovalActionId("");
+    }
+  }
+
+  useEffect(() => {
+    void loadProjectContext();
+  }, []);
+
+  const commandKeys = currentProject?.commands
+    ? Object.keys(currentProject.commands).sort()
+    : [];
+
+  return (
+    <section className="panel">
+      <div className="panelHeader">
+        <div>
+          <h1>Project</h1>
+          <p>Project context stored in local JSON memory.</p>
+        </div>
+        <button
+          className="secondaryButton"
+          type="button"
+          onClick={() => void loadProjectContext()}
+        >
+          Refresh
+        </button>
+      </div>
+
+      {error ? <div className="error">{error}</div> : null}
+      {message ? <div className="notice">{message}</div> : null}
+      {inlineApproval ? (
+        <InlineApprovalCard
+          approval={inlineApproval}
+          resolving={approvalActionId === inlineApproval.id}
+          onResolve={handleApprovalAction}
+        />
+      ) : null}
+
+      <section className="projectPanel">
+        <div className="projectSummary">
+          <div className="sectionLabel">Current project</div>
+          <h2>{currentProject?.name ?? (loading ? "Loading..." : "Unknown")}</h2>
+          <div className="field">
+            <span>ID</span>
+            <p>{currentProject?.id ?? "unknown"}</p>
+          </div>
+          <div className="field">
+            <span>Repo URL</span>
+            <p>{currentProject?.repo_url || "none"}</p>
+          </div>
+          <div className="field">
+            <span>Root path</span>
+            <p>{currentProject?.root_path || "."}</p>
+          </div>
+          <div className="field">
+            <span>Aliases</span>
+            <p>{currentProject?.aliases?.join(", ") || "none"}</p>
+          </div>
+          <div className="field">
+            <span>Command keys</span>
+            <p>{commandKeys.join(", ") || "none"}</p>
+          </div>
+        </div>
+
+        <div className="projectSwitcher">
+          <label>
+            <span>Set current project</span>
+            <input
+              value={projectInput}
+              onChange={(event) => setProjectInput(event.target.value)}
+              placeholder="Void"
+            />
+          </label>
+          <button
+            type="button"
+            disabled={setting}
+            onClick={() => void handleSetProject()}
+          >
+            {setting ? "Requesting..." : "Set project"}
+          </button>
+        </div>
+
+        <pre className="gitOutput">
+          <code>{description || "No project description loaded."}</code>
+        </pre>
+      </section>
+
+      <section className="contentSection">
+        <h2>Known Projects</h2>
+        <div className="cardGrid">
+          {projects.length === 0 ? (
+            <EmptyState>No projects configured.</EmptyState>
+          ) : (
+            projects.map((project) => (
+              <article className="card" key={project.id ?? project.name}>
+                <div className="cardTopline">
+                  <span>{project.id}</span>
+                  <span>{project.root_path}</span>
+                </div>
+                <h2>{project.name}</h2>
+                <div className="field">
+                  <span>Repo URL</span>
+                  <p>{project.repo_url || "none"}</p>
+                </div>
+                <div className="field">
+                  <span>Aliases</span>
+                  <p>{project.aliases?.join(", ") || "none"}</p>
+                </div>
+                <div className="field">
+                  <span>Command keys</span>
+                  <p>
+                    {project.commands
+                      ? Object.keys(project.commands).sort().join(", ") || "none"
+                      : "none"}
+                  </p>
+                </div>
+              </article>
+            ))
+          )}
+        </div>
+      </section>
+    </section>
+  );
+}
+
 function ApprovalsTab() {
   const [approvals, setApprovals] = useState<Approval[]>([]);
   const [loading, setLoading] = useState(true);
@@ -1727,6 +1929,9 @@ function ActiveTab({ tab }: { tab: Tab }) {
   }
   if (tab === "git") {
     return <GitTab />;
+  }
+  if (tab === "project") {
+    return <ProjectTab />;
   }
   if (tab === "approvals") {
     return <ApprovalsTab />;

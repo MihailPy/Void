@@ -18,6 +18,39 @@ def test_router_project_stats():
     assert route.action.action == "project_stats"
 
 
+def test_router_list_projects():
+    route = Router().route("покажи проекты")
+
+    assert route.matched is True
+    assert route.action is not None
+    assert route.action.action == "list_projects"
+
+
+def test_router_current_project():
+    route = Router().route("what project am I working on")
+
+    assert route.matched is True
+    assert route.action is not None
+    assert route.action.action == "get_current_project"
+
+
+def test_router_describe_current_project():
+    route = Router().route("опиши текущий проект")
+
+    assert route.matched is True
+    assert route.action is not None
+    assert route.action.action == "describe_current_project"
+
+
+def test_router_set_current_project():
+    route = Router().route("switch project to Void")
+
+    assert route.matched is True
+    assert route.action is not None
+    assert route.action.action == "set_current_project"
+    assert route.action.arguments == {"project": "Void"}
+
+
 def test_router_list_scheduled_tasks():
     route = Router().route("Покажи scheduled tasks")
 
