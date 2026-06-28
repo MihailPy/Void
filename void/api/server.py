@@ -36,9 +36,13 @@ from void.api.schemas import (
     GitCommitRequest,
     HealthResponse,
     MemoryResponse,
+    CurrentProjectResponse,
+    ProjectDescriptionResponse,
+    ProjectsResponse,
     ScheduledTasksResponse,
     SchedulerRunOnceResponse,
     SchedulerStatusResponse,
+    SetCurrentProjectRequest,
     SkillsResponse,
 )
 from void.core.agent import Agent
@@ -181,6 +185,17 @@ def _execute_api_tool(
         return _error(error)
 
 
+def _execute_read_api_tool(
+    registry: ToolRegistry,
+    action: str,
+    arguments: dict[str, Any] | None = None,
+) -> Any:
+    result = registry.execute(AgentAction(action, arguments or {}, "API request."))
+    if not result.ok:
+        raise ValueError(result.content)
+    return result
+
+
 @app.get("/health", response_model=HealthResponse | ErrorResponse)
 def health() -> HealthResponse | ErrorResponse:
     try:
@@ -232,6 +247,58 @@ def capabilities(
             installed=records["installed"],
             requested=records["requested"],
             rejected=records["rejected"],
+        )
+    except Exception as error:
+        return _error(error)
+
+
+@app.get("/projects", response_model=ProjectsResponse | ErrorResponse)
+def projects(
+    _: None = Depends(require_api_token),
+    registry: ToolRegistry = Depends(get_tool_registry),
+) -> ProjectsResponse | ErrorResponse:
+    try:
+        result = _execute_read_api_tool(registry, "list_projects")
+        return ProjectsResponse(ok=True, projects=(result.data or {}).get("projects", []))
+    except Exception as error:
+        return _error(error)
+
+
+@app.get("/projects/current", response_model=CurrentProjectResponse | ErrorResponse)
+def current_project(
+    _: None = Depends(require_api_token),
+    registry: ToolRegistry = Depends(get_tool_registry),
+) -> CurrentProjectResponse | ErrorResponse:
+    try:
+        result = _execute_read_api_tool(registry, "get_current_project")
+        return CurrentProjectResponse(ok=True, project=(result.data or {}).get("project", {}))
+    except Exception as error:
+        return _error(error)
+
+
+@app.post("/projects/current", response_model=ApprovalResponse | ErrorResponse)
+def set_current_project(
+    request: SetCurrentProjectRequest,
+    _: None = Depends(require_api_token),
+    registry: ToolRegistry = Depends(get_tool_registry),
+) -> ApprovalResponse | ErrorResponse:
+    return _execute_api_tool(registry, "set_current_project", {"project": request.project})
+
+
+@app.get(
+    "/projects/current/describe",
+    response_model=ProjectDescriptionResponse | ErrorResponse,
+)
+def describe_current_project(
+    _: None = Depends(require_api_token),
+    registry: ToolRegistry = Depends(get_tool_registry),
+) -> ProjectDescriptionResponse | ErrorResponse:
+    try:
+        result = _execute_read_api_tool(registry, "describe_current_project")
+        return ProjectDescriptionResponse(
+            ok=True,
+            description=result.content,
+            project=(result.data or {}).get("project", {}),
         )
     except Exception as error:
         return _error(error)

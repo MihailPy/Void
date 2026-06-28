@@ -96,6 +96,43 @@ def test_capabilities():
     assert payload["rejected"] == []
 
 
+def test_projects_endpoint():
+    response = request("GET", "/projects")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["ok"] is True
+    assert payload["projects"][0]["id"] == "void"
+
+
+def test_current_project_endpoint():
+    response = request("GET", "/projects/current")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["ok"] is True
+    assert payload["project"]["name"] == "Void"
+
+
+def test_describe_current_project_endpoint():
+    response = request("GET", "/projects/current/describe")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["ok"] is True
+    assert "Current project" in payload["description"]
+    assert payload["project"]["id"] == "void"
+
+
+def test_set_current_project_endpoint_creates_approval():
+    response = request("POST", "/projects/current", json={"project": "Void"})
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["ok"] is True
+    assert "approval" in payload["message"].lower()
+
+
 def test_tasks():
     response = request("GET", "/tasks")
 

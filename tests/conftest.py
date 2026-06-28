@@ -14,7 +14,7 @@ def temp_memory_dir(tmp_path, monkeypatch):
 
     from void.api import dependencies
     from void.api import server
-    from void.core import capabilities, permissions, safety, scheduler
+    from void.core import capabilities, permissions, project_context, safety, scheduler
     from void.tools import memory_tools
 
     monkeypatch.setattr(safety, "MEMORY_DIR", memory_dir)
@@ -23,6 +23,7 @@ def temp_memory_dir(tmp_path, monkeypatch):
 
     monkeypatch.setattr(scheduler, "TASKS_PATH", memory_dir / "scheduled_tasks.json")
     monkeypatch.setattr(permissions, "APPROVALS_PATH", memory_dir / "pending_approvals.json")
+    monkeypatch.setattr(project_context, "PROJECT_CONTEXT_PATH", memory_dir / "projects.json")
 
     monkeypatch.setattr(capabilities, "CAPABILITY_DIR", capabilities_dir)
     monkeypatch.setattr(capabilities, "INSTALLED_PATH", capabilities_dir / "installed.json")

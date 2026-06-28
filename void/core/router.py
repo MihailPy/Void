@@ -1,6 +1,14 @@
 """Deterministic routing for common Void requests."""
 
-from void.core.routing import browser, capabilities, files, git, memory, scheduler
+from void.core.routing import (
+    browser,
+    capabilities,
+    files,
+    git,
+    memory,
+    project_context,
+    scheduler,
+)
 from void.core.types import RouteResult
 
 
@@ -13,6 +21,7 @@ class Router:
 
         for matcher in (
             git.match,
+            project_context.match,
             browser.match,
             scheduler.match,
             memory.match,

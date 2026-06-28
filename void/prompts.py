@@ -46,6 +46,20 @@ project_stats:
   "path": "."
 }
 
+list_projects:
+{}
+
+get_current_project:
+{}
+
+set_current_project:
+{
+  "project": "project id, name, or alias"
+}
+
+describe_current_project:
+{}
+
 remember_fact:
 {
   "fact": "fact"
@@ -228,6 +242,10 @@ request_capability:
 
 Правила выбора:
 - Если задача может быть решена project_stats, используй project_stats.
+- Если пользователь спрашивает о текущем проекте или известных проектах, используй project context tools: list_projects, get_current_project, describe_current_project.
+- Если пользователь просит переключить текущий проект, используй set_current_project. Этот action требует approval.
+- Если пользователь просит выполнить project command, terminal command, shell command, make/npm/cargo/python command или открыть project link, не выполняй команду; используй final_answer и объясни, что command runner для project context ещё не реализован.
+- Не придумывай детали текущего проекта без project context tools.
 - Если пользователь говорит "запомни в памяти проекта: ...", используй append_project_note.
 - update_project используй только для явной команды "полностью перезапиши память проекта: ...".
 - Если пользователь спрашивает о возможностях Void, используй list_capabilities.

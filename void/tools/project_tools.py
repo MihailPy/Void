@@ -1,8 +1,9 @@
-"""Project inspection tools."""
+"""Project inspection and context tools."""
 
 from collections import Counter
 from pathlib import Path
 
+from void.core import project_context
 from void.core.safety import IGNORED_NAMES, safe_project_path
 from void.core.types import ToolDefinition, ToolResult
 
@@ -68,6 +69,59 @@ def project_stats(path: str = ".") -> ToolResult:
     )
 
 
+def list_projects() -> ToolResult:
+    try:
+        projects = project_context.list_projects()
+    except ValueError as error:
+        return ToolResult(ok=False, content=str(error))
+
+    lines = ["Known projects", ""]
+    for project in projects:
+        aliases = ", ".join(project.get("aliases", [])) or "none"
+        lines.append(
+            f"- {project['name']} ({project['id']}) "
+            f"root={project.get('root_path', '.')} aliases={aliases}"
+        )
+
+    return ToolResult(ok=True, content="\n".join(lines), data={"projects": projects})
+
+
+def get_current_project() -> ToolResult:
+    try:
+        project = project_context.get_current_project()
+    except ValueError as error:
+        return ToolResult(ok=False, content=str(error))
+
+    return ToolResult(
+        ok=True,
+        content=f"Current project: {project['name']} ({project['id']})",
+        data={"project": project},
+    )
+
+
+def set_current_project(project: str) -> ToolResult:
+    result = project_context.set_current_project(project)
+    if not result["ok"]:
+        return ToolResult(ok=False, content=result["error"])
+
+    selected = result["project"]
+    return ToolResult(
+        ok=True,
+        content=f"Current project set to {selected['name']} ({selected['id']}).",
+        data={"project": selected},
+    )
+
+
+def describe_current_project() -> ToolResult:
+    try:
+        project = project_context.get_current_project()
+        description = project_context.describe_current_project()
+    except ValueError as error:
+        return ToolResult(ok=False, content=str(error))
+
+    return ToolResult(ok=True, content=description, data={"project": project})
+
+
 def definitions() -> list[ToolDefinition]:
     return [
         ToolDefinition(
@@ -76,5 +130,34 @@ def definitions() -> list[ToolDefinition]:
             project_stats,
             category="filesystem",
             risk_level="read",
-        )
+        ),
+        ToolDefinition(
+            "list_projects",
+            "List known project contexts.",
+            list_projects,
+            category="project",
+            risk_level="read",
+        ),
+        ToolDefinition(
+            "get_current_project",
+            "Show the current project context.",
+            get_current_project,
+            category="project",
+            risk_level="read",
+        ),
+        ToolDefinition(
+            "set_current_project",
+            "Set the current project context by id, name, or alias.",
+            set_current_project,
+            requires_confirmation=True,
+            category="project",
+            risk_level="write",
+        ),
+        ToolDefinition(
+            "describe_current_project",
+            "Describe the current project context.",
+            describe_current_project,
+            category="project",
+            risk_level="read",
+        ),
     ]
