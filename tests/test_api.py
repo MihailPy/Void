@@ -124,6 +124,16 @@ def test_describe_current_project_endpoint():
     assert payload["project"]["id"] == "void"
 
 
+def test_current_project_commands_endpoint():
+    response = request("GET", "/projects/current/commands")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["ok"] is True
+    assert payload["project"]["id"] == "void"
+    assert payload["commands"]["test"] == "make verify"
+
+
 def test_set_current_project_endpoint_creates_approval():
     response = request("POST", "/projects/current", json={"project": "Void"})
 
@@ -131,6 +141,30 @@ def test_set_current_project_endpoint_creates_approval():
     payload = response.json()
     assert payload["ok"] is True
     assert "approval" in payload["message"].lower()
+
+
+def test_run_project_command_endpoint_creates_approval():
+    response = request(
+        "POST",
+        "/projects/current/commands/test/run",
+        json={"timeout_seconds": 120},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["ok"] is True
+    assert "approval" in payload["message"].lower()
+
+
+def test_run_project_command_endpoint_validates_timeout():
+    response = request(
+        "POST",
+        "/projects/current/commands/test/run",
+        json={"timeout_seconds": 0},
+    )
+
+    assert response.status_code == 422
+    assert response.json()["ok"] is False
 
 
 def test_tasks():

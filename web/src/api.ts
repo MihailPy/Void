@@ -66,8 +66,19 @@ export type ProjectDescriptionResponse = CurrentProjectResponse & {
   description: string;
 };
 
+export type ProjectCommandsResponse = {
+  ok: boolean;
+  project: Project;
+  cwd: string;
+  commands: Record<string, string>;
+};
+
 export type SetCurrentProjectRequest = {
   project: string;
+};
+
+export type RunProjectCommandRequest = {
+  timeout_seconds?: number;
 };
 
 export type Approval = {
@@ -284,6 +295,23 @@ export function setCurrentProject(payload: SetCurrentProjectRequest) {
     method: "POST",
     body: JSON.stringify(payload),
   });
+}
+
+export function getProjectCommands() {
+  return request<ProjectCommandsResponse>("/projects/current/commands");
+}
+
+export function runProjectCommand(
+  commandKey: string,
+  payload: RunProjectCommandRequest = {},
+) {
+  return request<ApprovalActionResponse>(
+    `/projects/current/commands/${encodeURIComponent(commandKey)}/run`,
+    {
+      method: "POST",
+      body: JSON.stringify(payload),
+    },
+  );
 }
 
 export function getApprovals() {

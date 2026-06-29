@@ -9,6 +9,68 @@ from void.core.types import AgentAction, RouteResult
 
 
 def match(text: str, lowered: str) -> RouteResult | None:
+    if lowered in {
+        "list project commands",
+        "show project commands",
+        "what commands does this project have",
+        "покажи команды проекта",
+        "список команд проекта",
+        "какие команды есть у проекта",
+    }:
+        return RouteResult(
+            matched=True,
+            confidence=0.95,
+            action=AgentAction(
+                "list_project_commands",
+                {},
+                "User asks to list predefined commands for the current project.",
+            ),
+        )
+
+    command_match = re.match(
+        r"^run\s+project\s+command\s+(.+)$",
+        text,
+        re.IGNORECASE | re.DOTALL,
+    )
+    if command_match is None:
+        command_match = re.match(
+            r"^запусти\s+команду\s+проекта\s+(.+)$",
+            text,
+            re.IGNORECASE | re.DOTALL,
+        )
+    if command_match:
+        return RouteResult(
+            matched=True,
+            confidence=0.95,
+            action=AgentAction(
+                "run_project_command",
+                {"command_key": clean(command_match.group(1))},
+                "User asks to run a predefined current-project command.",
+            ),
+        )
+
+    command_aliases = {
+        "run tests": "test",
+        "run test": "test",
+        "run verification": "verify",
+        "run build": "build",
+        "run dev": "dev",
+        "запусти тесты": "test",
+        "запусти проверку": "verify",
+        "запусти сборку": "build",
+        "запусти dev": "dev",
+    }
+    if lowered in command_aliases:
+        return RouteResult(
+            matched=True,
+            confidence=0.95,
+            action=AgentAction(
+                "run_project_command",
+                {"command_key": command_aliases[lowered]},
+                "User asks to run a mapped predefined current-project command.",
+            ),
+        )
+
     set_match = re.match(
         r"^(?:set\s+current\s+project\s+to|switch\s+project\s+to)\s+(.+)$",
         text,

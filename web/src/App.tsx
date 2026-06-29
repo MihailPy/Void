@@ -36,6 +36,7 @@ import {
   getGitLog,
   getGitStagedDiff,
   getGitStatus,
+  getProjectCommands,
   getProjectMemory,
   getProjects,
   getSchedulerStatus,
@@ -49,6 +50,7 @@ import {
   reject,
   runBrowserTask,
   runDueTasksNow,
+  runProjectCommand,
   runTask,
   sendChatMessage,
   setCurrentProject,
@@ -1025,12 +1027,17 @@ function GitTab() {
 function ProjectTab() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [currentProject, setCurrentProjectState] = useState<Project | null>(null);
+  const [projectCommands, setProjectCommands] = useState<Record<string, string>>({});
+  const [projectCommandCwd, setProjectCommandCwd] = useState("");
   const [description, setDescription] = useState("");
   const [projectInput, setProjectInput] = useState("Void");
+  const [timeoutSeconds, setTimeoutSeconds] = useState(120);
   const [inlineApproval, setInlineApproval] = useState<Approval | null>(null);
   const [approvalActionId, setApprovalActionId] = useState("");
   const [loading, setLoading] = useState(true);
   const [setting, setSetting] = useState(false);
+  const [runningCommand, setRunningCommand] = useState("");
+  const [commandResult, setCommandResult] = useState("");
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
 
@@ -1038,15 +1045,20 @@ function ProjectTab() {
     try {
       setError("");
       setLoading(true);
-      const [projectsResponse, descriptionResponse] = await Promise.all([
+      const [projectsResponse, descriptionResponse, commandsResponse] = await Promise.all([
         getProjects(),
         describeCurrentProject(),
+        getProjectCommands(),
       ]);
       setProjects(projectsResponse.projects);
       setCurrentProjectState(descriptionResponse.project);
+      setProjectCommands(commandsResponse.commands);
+      setProjectCommandCwd(commandsResponse.cwd);
       setDescription(descriptionResponse.description);
       const pendingApproval = await fetchInlineApproval(
-        (approval) => approval.action === "set_current_project",
+        (approval) =>
+          approval.action === "set_current_project" ||
+          approval.action === "run_project_command",
       );
       setInlineApproval(pendingApproval);
     } catch (currentError) {
@@ -1081,13 +1093,40 @@ function ProjectTab() {
     }
   }
 
+  async function handleRunCommand(commandKey: string) {
+    setError("");
+    setMessage("");
+    setCommandResult("");
+    setInlineApproval(null);
+    setRunningCommand(commandKey);
+    try {
+      const response = await runProjectCommand(commandKey, {
+        timeout_seconds: timeoutSeconds,
+      });
+      setMessage(response.message);
+      const pendingApproval = await fetchInlineApproval(
+        (approval) => approval.action === "run_project_command",
+      );
+      setInlineApproval(pendingApproval);
+    } catch (currentError) {
+      setError(getErrorMessage(currentError));
+    } finally {
+      setRunningCommand("");
+    }
+  }
+
   async function handleApprovalAction(id: string, action: ApprovalAction) {
     setApprovalActionId(id);
     setError("");
     setMessage("");
+    const approvedAction = inlineApproval?.action;
     try {
       const response = await resolveInlineApproval(id, action);
-      setMessage(response.message);
+      if (action === "approve" && approvedAction === "run_project_command") {
+        setCommandResult(response.message);
+      } else {
+        setMessage(response.message);
+      }
       setInlineApproval(null);
       await loadProjectContext();
     } catch (currentError) {
@@ -1101,9 +1140,7 @@ function ProjectTab() {
     void loadProjectContext();
   }, []);
 
-  const commandKeys = currentProject?.commands
-    ? Object.keys(currentProject.commands).sort()
-    : [];
+  const commandKeys = Object.keys(projectCommands).sort();
 
   return (
     <section className="panel">
@@ -1177,6 +1214,51 @@ function ProjectTab() {
 
         <pre className="gitOutput">
           <code>{description || "No project description loaded."}</code>
+        </pre>
+      </section>
+
+      <section className="contentSection">
+        <div className="sectionHeader">
+          <div>
+            <h2>Project Commands</h2>
+            <p>{projectCommandCwd || "No command cwd loaded."}</p>
+          </div>
+          <label className="timeoutControl">
+            <span>Timeout</span>
+            <input
+              type="number"
+              min="1"
+              max="3600"
+              value={timeoutSeconds}
+              onChange={(event) =>
+                setTimeoutSeconds(Number.parseInt(event.target.value, 10) || 120)
+              }
+            />
+          </label>
+        </div>
+        <div className="commandList">
+          {commandKeys.length === 0 ? (
+            <EmptyState>No project commands configured.</EmptyState>
+          ) : (
+            commandKeys.map((key) => (
+              <article className="commandItem" key={key}>
+                <div>
+                  <h3>{key}</h3>
+                  <code>{projectCommands[key]}</code>
+                </div>
+                <button
+                  type="button"
+                  disabled={Boolean(runningCommand)}
+                  onClick={() => void handleRunCommand(key)}
+                >
+                  {runningCommand === key ? "Requesting..." : "Run"}
+                </button>
+              </article>
+            ))
+          )}
+        </div>
+        <pre className="gitOutput">
+          <code>{commandResult || "No command result yet."}</code>
         </pre>
       </section>
 

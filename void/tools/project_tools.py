@@ -3,6 +3,7 @@
 from collections import Counter
 from pathlib import Path
 
+from void.core import project_commands
 from void.core import project_context
 from void.core.safety import IGNORED_NAMES, safe_project_path
 from void.core.types import ToolDefinition, ToolResult
@@ -122,6 +123,71 @@ def describe_current_project() -> ToolResult:
     return ToolResult(ok=True, content=description, data={"project": project})
 
 
+def list_project_commands() -> ToolResult:
+    try:
+        payload = project_commands.list_project_commands()
+    except ValueError as error:
+        return ToolResult(ok=False, content=str(error))
+
+    commands = payload["commands"]
+    lines = [
+        f"Project commands for {payload['project']['name']} ({payload['project']['id']})",
+        f"CWD: {payload['cwd']}",
+        "",
+    ]
+    if commands:
+        lines.extend(f"- {key}: {command}" for key, command in commands.items())
+    else:
+        lines.append("- none configured")
+
+    return ToolResult(ok=True, content="\n".join(lines), data=payload)
+
+
+def get_project_command(command_key: str) -> ToolResult:
+    try:
+        payload = project_commands.get_project_command(command_key)
+    except ValueError as error:
+        return ToolResult(ok=False, content=str(error))
+
+    return ToolResult(
+        ok=True,
+        content=f"{payload['key']}: {payload['command']}",
+        data=payload,
+    )
+
+
+def run_project_command(command_key: str, timeout_seconds: int = 120) -> ToolResult:
+    try:
+        payload = project_commands.run_project_command(command_key, timeout_seconds)
+    except ValueError as error:
+        return ToolResult(ok=False, content=str(error), data={"command_key": command_key})
+
+    project = payload["project"]
+    status = "timed out" if payload["timed_out"] else "completed"
+    lines = [
+        f"Project command {status}: {payload['command_key']}",
+        f"Project: {project['name']} ({project['id']})",
+        f"Command: {payload['command']}",
+        f"CWD: {payload['cwd']}",
+        f"Return code: {payload['returncode']}",
+        f"Duration: {payload['duration_seconds']}s",
+    ]
+    if payload.get("error"):
+        lines.extend(["", payload["error"]])
+    lines.extend(
+        [
+            "",
+            "stdout:",
+            payload["stdout"] or "(empty)",
+            "",
+            "stderr:",
+            payload["stderr"] or "(empty)",
+        ]
+    )
+
+    return ToolResult(ok=payload["ok"], content="\n".join(lines), data=payload)
+
+
 def definitions() -> list[ToolDefinition]:
     return [
         ToolDefinition(
@@ -159,5 +225,20 @@ def definitions() -> list[ToolDefinition]:
             describe_current_project,
             category="project",
             risk_level="read",
+        ),
+        ToolDefinition(
+            "list_project_commands",
+            "List predefined commands for the current project.",
+            list_project_commands,
+            category="project",
+            risk_level="read",
+        ),
+        ToolDefinition(
+            "run_project_command",
+            "Run a predefined command for the current project.",
+            run_project_command,
+            requires_confirmation=True,
+            category="project",
+            risk_level="write",
         ),
     ]
