@@ -53,8 +53,19 @@ class ProjectDescriptionResponse(BaseModel):
     project: dict[str, Any]
 
 
+class ProjectCommandsResponse(BaseModel):
+    ok: bool
+    project: dict[str, Any]
+    cwd: str
+    commands: dict[str, str]
+
+
 class SetCurrentProjectRequest(BaseModel):
     project: str
+
+
+class RunProjectCommandRequest(BaseModel):
+    timeout_seconds: int = Field(default=120, ge=1, le=3600)
 
 
 class SkillsResponse(BaseModel):

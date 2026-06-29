@@ -76,6 +76,8 @@ def test_project_tools_registered_with_metadata():
         "list_projects": ("project", "read", False),
         "get_current_project": ("project", "read", False),
         "describe_current_project": ("project", "read", False),
+        "list_project_commands": ("project", "read", False),
+        "run_project_command": ("project", "write", True),
         "set_current_project": ("project", "write", True),
     }
 

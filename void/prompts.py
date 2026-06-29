@@ -60,6 +60,15 @@ set_current_project:
 describe_current_project:
 {}
 
+list_project_commands:
+{}
+
+run_project_command:
+{
+  "command_key": "predefined command key",
+  "timeout_seconds": 120
+}
+
 remember_fact:
 {
   "fact": "fact"
@@ -244,7 +253,12 @@ request_capability:
 - Если задача может быть решена project_stats, используй project_stats.
 - Если пользователь спрашивает о текущем проекте или известных проектах, используй project context tools: list_projects, get_current_project, describe_current_project.
 - Если пользователь просит переключить текущий проект, используй set_current_project. Этот action требует approval.
-- Если пользователь просит выполнить project command, terminal command, shell command, make/npm/cargo/python command или открыть project link, не выполняй команду; используй final_answer и объясни, что command runner для project context ещё не реализован.
+- Если пользователь спрашивает, какие команды доступны для текущего проекта, используй list_project_commands.
+- Если пользователь просит выполнить tests/test/check/verification/build/dev для текущего проекта, используй run_project_command с predefined command_key: test, verify, build или dev. Этот action требует approval.
+- Никогда не придумывай command strings и не запускай произвольные команды.
+- Если requested command key не определён в current project context, ответь final_answer, что command key не настроен.
+- Visible terminal mode ещё не реализован.
+- Если пользователь просит выполнить terminal command, shell command, make/npm/cargo/python command не как predefined project command, используй final_answer и объясни, что arbitrary shell execution ещё не реализован.
 - Не придумывай детали текущего проекта без project context tools.
 - Если пользователь говорит "запомни в памяти проекта: ...", используй append_project_note.
 - update_project используй только для явной команды "полностью перезапиши память проекта: ...".

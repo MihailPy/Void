@@ -44,8 +44,18 @@ Memory files live under `memory/` and runtime package defaults live under `void/
 - The file records `current_project` plus a simple list of project records.
 - Project records include `id`, `name`, `aliases`, `root_path`, `repo_url`, and command keys.
 - Aliases let the router, API, and tools resolve names like `Void` or `MihailPy/Void`.
-- Command keys describe known project commands for future use; command execution is not implemented yet.
 - Void does not auto-scan the disk for projects and does not use a database.
+
+## Project Commands
+
+- Project commands live in `memory/projects.json` under each project's `commands` object.
+- Commands are predefined per project and are executed only by command key.
+- Void does not accept arbitrary shell command text from users.
+- Command execution requires approval through the standard permission layer.
+- Approved commands run from the current project's safe root path.
+- stdout, stderr, return code, duration, command, cwd, and project identity are captured.
+- Visible terminal mode is not implemented yet.
+- Streaming logs, background jobs, and interactive stdin are not implemented yet.
 
 ## Permission Layer
 

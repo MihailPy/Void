@@ -51,6 +51,32 @@ def test_router_set_current_project():
     assert route.action.arguments == {"project": "Void"}
 
 
+def test_router_list_project_commands():
+    route = Router().route("покажи команды проекта")
+
+    assert route.matched is True
+    assert route.action is not None
+    assert route.action.action == "list_project_commands"
+
+
+def test_router_run_project_command_by_key():
+    route = Router().route("run project command verify")
+
+    assert route.matched is True
+    assert route.action is not None
+    assert route.action.action == "run_project_command"
+    assert route.action.arguments == {"command_key": "verify"}
+
+
+def test_router_run_tests_maps_to_project_command():
+    route = Router().route("запусти тесты")
+
+    assert route.matched is True
+    assert route.action is not None
+    assert route.action.action == "run_project_command"
+    assert route.action.arguments == {"command_key": "test"}
+
+
 def test_router_list_scheduled_tasks():
     route = Router().route("Покажи scheduled tasks")
 

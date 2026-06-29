@@ -37,8 +37,10 @@ from void.api.schemas import (
     HealthResponse,
     MemoryResponse,
     CurrentProjectResponse,
+    ProjectCommandsResponse,
     ProjectDescriptionResponse,
     ProjectsResponse,
+    RunProjectCommandRequest,
     ScheduledTasksResponse,
     SchedulerRunOnceResponse,
     SchedulerStatusResponse,
@@ -302,6 +304,45 @@ def describe_current_project(
         )
     except Exception as error:
         return _error(error)
+
+
+@app.get(
+    "/projects/current/commands",
+    response_model=ProjectCommandsResponse | ErrorResponse,
+)
+def current_project_commands(
+    _: None = Depends(require_api_token),
+    registry: ToolRegistry = Depends(get_tool_registry),
+) -> ProjectCommandsResponse | ErrorResponse:
+    try:
+        result = _execute_read_api_tool(registry, "list_project_commands")
+        data = result.data or {}
+        return ProjectCommandsResponse(
+            ok=True,
+            project=data.get("project", {}),
+            cwd=data.get("cwd", ""),
+            commands=data.get("commands", {}),
+        )
+    except Exception as error:
+        return _error(error)
+
+
+@app.post(
+    "/projects/current/commands/{command_key}/run",
+    response_model=ApprovalResponse | ErrorResponse,
+)
+def run_current_project_command(
+    command_key: str,
+    request: RunProjectCommandRequest | None = None,
+    _: None = Depends(require_api_token),
+    registry: ToolRegistry = Depends(get_tool_registry),
+) -> ApprovalResponse | ErrorResponse:
+    timeout_seconds = request.timeout_seconds if request is not None else 120
+    return _execute_api_tool(
+        registry,
+        "run_project_command",
+        {"command_key": command_key, "timeout_seconds": timeout_seconds},
+    )
 
 
 @app.get("/approvals")
