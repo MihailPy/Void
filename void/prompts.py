@@ -57,6 +57,11 @@ set_current_project:
   "project": "project id, name, or alias"
 }
 
+open_project_repo:
+{
+  "project": "project id, name, or alias"
+}
+
 describe_current_project:
 {}
 
@@ -253,8 +258,13 @@ request_capability:
 - Если задача может быть решена project_stats, используй project_stats.
 - Если пользователь спрашивает о текущем проекте или известных проектах, используй project context tools: list_projects, get_current_project, describe_current_project.
 - Если пользователь просит переключить текущий проект, используй set_current_project. Этот action требует approval.
+- Если пользователь просит открыть project на GitHub, используй open_project_repo только когда project явно указан.
 - Если пользователь спрашивает, какие команды доступны для текущего проекта, используй list_project_commands.
 - Если пользователь просит выполнить tests/test/check/verification/build/dev для текущего проекта, используй run_project_command с predefined command_key: test, verify, build или dev. Этот action требует approval.
+- Если для deterministic action не хватает обязательного input, задай уточняющий вопрос вместо догадки. Поддержанные случаи: missing project для open_project_repo/set_current_project; missing command_key для run_project_command.
+- Никогда не угадывай project name.
+- Никогда не угадывай command key.
+- Предпочитай clarification вместо LLM speculation для missing project или missing command key.
 - Никогда не придумывай command strings и не запускай произвольные команды.
 - Если requested command key не определён в current project context, ответь final_answer, что command key не настроен.
 - Visible terminal mode ещё не реализован.

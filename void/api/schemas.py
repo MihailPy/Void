@@ -12,6 +12,8 @@ class ChatRequest(BaseModel):
 class ChatResponse(BaseModel):
     ok: bool
     response: str
+    result_type: str = "final_answer"
+    clarification: dict[str, Any] | None = None
 
 
 class HealthResponse(BaseModel):
@@ -23,6 +25,15 @@ class HealthResponse(BaseModel):
 class ApprovalResponse(BaseModel):
     ok: bool
     message: str
+
+
+class ClarificationResponse(BaseModel):
+    ok: bool
+    pending: dict[str, Any] | None = None
+
+
+class ClarificationRespondRequest(BaseModel):
+    answer: str
 
 
 class MemoryResponse(BaseModel):

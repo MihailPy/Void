@@ -12,6 +12,24 @@ export type HealthResponse = {
 export type ChatResponse = {
   ok: boolean;
   response: string;
+  result_type?: string;
+  clarification?: ClarificationRequest | null;
+};
+
+export type ClarificationRequest = {
+  id?: string | null;
+  question: string;
+  clarification_type: string;
+  context: Record<string, unknown>;
+};
+
+export type ClarificationResponse = {
+  ok: boolean;
+  pending: ClarificationRequest | null;
+};
+
+export type ClarificationRespondRequest = {
+  answer: string;
 };
 
 export type Skill = {
@@ -267,6 +285,17 @@ export function sendChatMessage(message: string) {
   return request<ChatResponse>("/chat", {
     method: "POST",
     body: JSON.stringify({ message }),
+  });
+}
+
+export function getClarification() {
+  return request<ClarificationResponse>("/clarification");
+}
+
+export function respondToClarification(payload: ClarificationRespondRequest) {
+  return request<ChatResponse>("/clarification/respond", {
+    method: "POST",
+    body: JSON.stringify(payload),
   });
 }
 
