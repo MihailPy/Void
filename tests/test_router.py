@@ -51,6 +51,33 @@ def test_router_set_current_project():
     assert route.action.arguments == {"project": "Void"}
 
 
+def test_router_switch_project_missing_project_requests_clarification():
+    route = Router().route("switch project")
+
+    assert route.matched is True
+    assert route.action is None
+    assert route.clarification is not None
+    assert route.clarification.clarification_type == "project_selection"
+
+
+def test_router_open_project_repo():
+    route = Router().route("open Void project on github")
+
+    assert route.matched is True
+    assert route.action is not None
+    assert route.action.action == "open_project_repo"
+    assert route.action.arguments == {"project": "Void"}
+
+
+def test_router_open_project_repo_missing_project_requests_clarification():
+    route = Router().route("открой проект на github")
+
+    assert route.matched is True
+    assert route.action is None
+    assert route.clarification is not None
+    assert route.clarification.clarification_type == "project_selection"
+
+
 def test_router_list_project_commands():
     route = Router().route("покажи команды проекта")
 
@@ -66,6 +93,15 @@ def test_router_run_project_command_by_key():
     assert route.action is not None
     assert route.action.action == "run_project_command"
     assert route.action.arguments == {"command_key": "verify"}
+
+
+def test_router_run_project_command_missing_key_requests_clarification():
+    route = Router().route("запусти команду проекта")
+
+    assert route.matched is True
+    assert route.action is None
+    assert route.clarification is not None
+    assert route.clarification.clarification_type == "command_selection"
 
 
 def test_router_run_tests_maps_to_project_command():

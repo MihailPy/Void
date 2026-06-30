@@ -4,11 +4,67 @@ from __future__ import annotations
 
 import re
 
+from void.core.clarification import create_clarification, project_command_options
 from void.core.routing import clean
-from void.core.types import AgentAction, RouteResult
+from void.core.types import AgentAction, ClarificationRequest, RouteResult
+
+
+def _clarification_route(
+    question: str,
+    clarification_type: str,
+    context: dict[str, object],
+) -> RouteResult:
+    payload = create_clarification(question, clarification_type, context)
+    return RouteResult(
+        matched=True,
+        confidence=0.95,
+        clarification=ClarificationRequest(
+            question=question,
+            clarification_type=clarification_type,
+            context=context,
+            id=str(payload.get("id", "")),
+        ),
+    )
 
 
 def match(text: str, lowered: str) -> RouteResult | None:
+    project_repo_match = re.match(
+        r"^open\s+(.+?)\s+project\s+on\s+github$",
+        text,
+        re.IGNORECASE | re.DOTALL,
+    )
+    if project_repo_match is None:
+        project_repo_match = re.match(
+            r"^открой\s+проект\s+(.+?)\s+на\s+github$",
+            text,
+            re.IGNORECASE | re.DOTALL,
+        )
+    if project_repo_match:
+        return RouteResult(
+            matched=True,
+            confidence=0.95,
+            action=AgentAction(
+                "open_project_repo",
+                {"project": clean(project_repo_match.group(1))},
+                "User asks for a configured project GitHub repository.",
+            ),
+        )
+
+    if lowered in {
+        "open project on github",
+        "open project github",
+        "открой проект на github",
+        "открой проект github",
+    }:
+        return _clarification_route(
+            "Which project do you want to open?",
+            "project_selection",
+            {
+                "original_action": "open_project_repo",
+                "missing_field": "project",
+            },
+        )
+
     if lowered in {
         "list project commands",
         "show project commands",
@@ -25,6 +81,19 @@ def match(text: str, lowered: str) -> RouteResult | None:
                 {},
                 "User asks to list predefined commands for the current project.",
             ),
+        )
+
+    if lowered in {"run project command", "запусти команду проекта"}:
+        options = project_command_options()
+        suffix = f" Available: {', '.join(options)}" if options else ""
+        return _clarification_route(
+            f"Which command do you want to run?{suffix}",
+            "command_selection",
+            {
+                "original_action": "run_project_command",
+                "missing_field": "command_key",
+                "available_commands": options,
+            },
         )
 
     command_match = re.match(
@@ -69,6 +138,16 @@ def match(text: str, lowered: str) -> RouteResult | None:
                 {"command_key": command_aliases[lowered]},
                 "User asks to run a mapped predefined current-project command.",
             ),
+        )
+
+    if lowered in {"switch project", "переключи проект"}:
+        return _clarification_route(
+            "Which project do you want to switch to?",
+            "project_selection",
+            {
+                "original_action": "set_current_project",
+                "missing_field": "project",
+            },
         )
 
     set_match = re.match(

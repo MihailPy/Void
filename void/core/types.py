@@ -32,7 +32,25 @@ class AgentAction:
 
 
 @dataclass
+class ClarificationRequest:
+    question: str
+    clarification_type: str
+    context: dict[str, Any]
+    id: str | None = None
+
+
+@dataclass
 class RouteResult:
     matched: bool
     confidence: float
     action: AgentAction | None = None
+    clarification: ClarificationRequest | None = None
+
+
+@dataclass
+class AgentResult:
+    kind: str
+    content: str
+    action: AgentAction | None = None
+    tool_result: ToolResult | None = None
+    clarification: ClarificationRequest | None = None

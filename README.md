@@ -154,6 +154,39 @@ Web UI:
 
 Git tab.
 
+## Clarification Flow
+
+Void can pause deterministic actions when a supported required input is missing,
+store one pending clarification, and resume the original action after the next
+answer.
+
+Storage:
+
+- Pending clarification state is JSON in `memory/pending_clarification.json`.
+- v1 supports a single active clarification at a time.
+- Creating a new clarification replaces the previous pending one.
+- A resolved clarification is cleared after the answer is mapped to a resumed action.
+
+Supported v1 cases:
+
+- `open project on github` asks which project to open.
+- `run project command` asks which configured command key to run.
+- `switch project` asks which project to switch to.
+
+API endpoints:
+
+```text
+GET  /clarification
+POST /clarification/respond
+```
+
+Limits:
+
+- Clarification Flow is not a planner.
+- It is not autonomous multi-step reasoning.
+- It does not support multiple simultaneous clarifications.
+- It only covers the deterministic missing-input cases listed above.
+
 ## Auth
 
 If `VOID_API_TOKEN` is not set, Void runs in local dev mode and protected API endpoints do not require auth.

@@ -184,6 +184,47 @@ def test_chat_uses_router_without_llm():
     assert "Project statistics" in payload["response"]
 
 
+def test_chat_returns_clarification_request():
+    response = request("POST", "/chat", json={"message": "open project on github"})
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["ok"] is True
+    assert payload["result_type"] == "clarification_request"
+    assert payload["clarification"]["clarification_type"] == "project_selection"
+    assert payload["response"] == "Which project do you want to open?"
+
+
+def test_clarification_endpoints_resume_action():
+    request("POST", "/chat", json={"message": "open project on github"})
+
+    pending_response = request("GET", "/clarification")
+    assert pending_response.status_code == 200
+    pending_payload = pending_response.json()
+    assert pending_payload["ok"] is True
+    assert pending_payload["pending"]["type"] == "project_selection"
+
+    response = request("POST", "/clarification/respond", json={"answer": "Void"})
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["ok"] is True
+    assert payload["result_type"] == "tool_call"
+    assert "https://github.com/MihailPy/Void" in payload["response"]
+
+    cleared_response = request("GET", "/clarification")
+    assert cleared_response.json()["pending"] is None
+
+
+def test_clarification_respond_without_pending_does_not_call_chat():
+    response = request("POST", "/clarification/respond", json={"answer": "Void"})
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["ok"] is True
+    assert payload["result_type"] == "final_answer"
+    assert payload["response"] == "No pending clarification."
+
+
 def test_git_status_endpoint():
     response = request("GET", "/git/status")
 

@@ -2,6 +2,7 @@
 
 import os
 from contextlib import asynccontextmanager
+from dataclasses import asdict
 from typing import Any
 
 from fastapi import Depends, FastAPI, Request
@@ -35,6 +36,8 @@ from void.api.schemas import (
     ErrorResponse,
     GitCommitRequest,
     HealthResponse,
+    ClarificationRespondRequest,
+    ClarificationResponse,
     MemoryResponse,
     CurrentProjectResponse,
     ProjectCommandsResponse,
@@ -50,6 +53,7 @@ from void.api.schemas import (
 from void.core.agent import Agent
 from void.core import browser_sessions
 from void.core.capabilities import list_capabilities
+from void.core.clarification import load_pending_clarification
 from void.core.permissions import approve, clear_approval, list_approvals, reject
 from void.core.registry import ToolRegistry
 from void.core.safety import MEMORY_DIR, ensure_memory_files
@@ -213,8 +217,53 @@ def chat(
     agent: Agent = Depends(get_agent),
 ) -> ChatResponse | ErrorResponse:
     try:
-        response = agent.handle(request.message)
-        return ChatResponse(ok=True, response=response)
+        result = agent.handle_result(request.message)
+        clarification = (
+            asdict(result.clarification) if result.clarification is not None else None
+        )
+        return ChatResponse(
+            ok=True,
+            response=result.content,
+            result_type=result.kind,
+            clarification=clarification,
+        )
+    except Exception as error:
+        return _error(error)
+
+
+@app.get("/clarification", response_model=ClarificationResponse | ErrorResponse)
+def clarification(
+    _: None = Depends(require_api_token),
+) -> ClarificationResponse | ErrorResponse:
+    try:
+        return ClarificationResponse(ok=True, pending=load_pending_clarification())
+    except Exception as error:
+        return _error(error)
+
+
+@app.post("/clarification/respond", response_model=ChatResponse | ErrorResponse)
+def respond_to_clarification(
+    request: ClarificationRespondRequest,
+    _: None = Depends(require_api_token),
+    agent: Agent = Depends(get_agent),
+) -> ChatResponse | ErrorResponse:
+    try:
+        if load_pending_clarification() is None:
+            return ChatResponse(
+                ok=True,
+                response="No pending clarification.",
+                result_type="final_answer",
+            )
+        result = agent.handle_result(request.answer)
+        clarification = (
+            asdict(result.clarification) if result.clarification is not None else None
+        )
+        return ChatResponse(
+            ok=True,
+            response=result.content,
+            result_type=result.kind,
+            clarification=clarification,
+        )
     except Exception as error:
         return _error(error)
 

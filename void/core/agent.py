@@ -7,10 +7,15 @@ from typing import Any
 
 from openai.types.chat import ChatCompletionMessageParam
 
+from void.core.clarification import (
+    action_from_resolved_clarification,
+    has_pending_clarification,
+    resolve_clarification,
+)
 from void.core.llm import ask_llm
 from void.core.registry import ToolRegistry
 from void.core.router import Router
-from void.core.types import AgentAction, RouteResult, ToolResult
+from void.core.types import AgentAction, AgentResult, RouteResult, ToolResult
 from void.prompts import SYSTEM_PROMPT
 from void.skills import build_skill_registry
 from void.skills.registry import SkillRegistry
@@ -67,11 +72,34 @@ class Agent:
         self.debug = debug
 
     def handle(self, user_input: str) -> str:
+        return self.handle_result(user_input).content
+
+    def handle_result(self, user_input: str) -> AgentResult:
         append_session("User Request", user_input)
+
+        if has_pending_clarification():
+            result = self._resolve_pending_clarification(user_input)
+            if result is not None:
+                return result
 
         route = self.router.route(user_input)
         if self.debug:
             self._debug("route result", route)
+
+        if route.clarification is not None:
+            append_session(
+                "Clarification Request",
+                (
+                    f"Type: {route.clarification.clarification_type}\n"
+                    f"Question: {route.clarification.question}\n"
+                    f"Context: {json.dumps(route.clarification.context, ensure_ascii=False)}"
+                ),
+            )
+            return AgentResult(
+                kind="clarification_request",
+                content=route.clarification.question,
+                clarification=route.clarification,
+            )
 
         if (
             route.matched
@@ -83,7 +111,12 @@ class Agent:
                 self._debug("action", route.action)
                 self._debug("tool result", result)
             self._save_result("Routed Action", route.action, result)
-            return result.content
+            return AgentResult(
+                kind="tool_call",
+                content=result.content,
+                action=route.action,
+                tool_result=result,
+            )
 
         skill_match = self.skill_registry.match(user_input)
         if self.debug:
@@ -98,12 +131,12 @@ class Agent:
             if self.debug:
                 self._debug("skill result", result)
             self._save_skill_result("Skill Action", skill_match, result)
-            return result.content
+            return AgentResult(kind="final_answer", content=result.content)
 
         action_or_error = self._ask_for_action(user_input)
         if isinstance(action_or_error, str):
             append_session("LLM Error", action_or_error)
-            return action_or_error
+            return AgentResult(kind="final_answer", content=action_or_error)
 
         action = action_or_error
         result = self.registry.execute(action)
@@ -113,7 +146,37 @@ class Agent:
             self._debug("tool result", result)
 
         self._save_result("LLM Action", action, result)
-        return result.content
+        return AgentResult(
+            kind="tool_call",
+            content=result.content,
+            action=action,
+            tool_result=result,
+        )
+
+    def _resolve_pending_clarification(self, answer: str) -> AgentResult | None:
+        resolved = resolve_clarification(answer)
+        if resolved is None:
+            return None
+
+        action = action_from_resolved_clarification(resolved)
+        if action is None:
+            message = "Void could not resume the clarified action."
+            append_session("Clarification Error", message)
+            return AgentResult(kind="final_answer", content=message)
+
+        result = self.registry.execute(action)
+        if self.debug:
+            self._debug("clarification resolved", resolved)
+            self._debug("resumed action", action)
+            self._debug("tool result", result)
+
+        self._save_result("Clarification Resumed Action", action, result)
+        return AgentResult(
+            kind="tool_call",
+            content=result.content,
+            action=action,
+            tool_result=result,
+        )
 
     def _ask_for_action(self, user_input: str) -> AgentAction | str:
         messages: list[ChatCompletionMessageParam] = [
@@ -187,7 +250,10 @@ class Agent:
 
     def _debug(self, title: str, value: object) -> None:
         print(f"\n--- {title.upper()} ---")
-        if isinstance(value, (AgentAction, RouteResult, ToolResult, SkillMatch, SkillResult)):
+        if isinstance(
+            value,
+            (AgentAction, AgentResult, RouteResult, ToolResult, SkillMatch, SkillResult),
+        ):
             print(asdict(value))
         else:
             print(value)

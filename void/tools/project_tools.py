@@ -113,6 +113,26 @@ def set_current_project(project: str) -> ToolResult:
     )
 
 
+def open_project_repo(project: str) -> ToolResult:
+    selected = project_context.find_project(project)
+    if selected is None:
+        return ToolResult(ok=False, content=f"Project not found: {project}")
+
+    repo_url = str(selected.get("repo_url") or "").strip()
+    if not repo_url:
+        return ToolResult(
+            ok=False,
+            content=f"Project has no repo_url configured: {selected['name']}",
+            data={"project": selected},
+        )
+
+    return ToolResult(
+        ok=True,
+        content=f"Project GitHub repository for {selected['name']}: {repo_url}",
+        data={"project": selected, "url": repo_url},
+    )
+
+
 def describe_current_project() -> ToolResult:
     try:
         project = project_context.get_current_project()
@@ -218,6 +238,13 @@ def definitions() -> list[ToolDefinition]:
             requires_confirmation=True,
             category="project",
             risk_level="write",
+        ),
+        ToolDefinition(
+            "open_project_repo",
+            "Return the configured GitHub repository URL for a known project.",
+            open_project_repo,
+            category="project",
+            risk_level="read",
         ),
         ToolDefinition(
             "describe_current_project",

@@ -3,6 +3,7 @@ import {
   Approval,
   BrowserSession,
   Capability,
+  ClarificationRequest,
   HealthResponse,
   MemoryResponse,
   Project,
@@ -29,6 +30,7 @@ import {
   getBrowserScreenshot,
   getBrowserSessionStatus,
   getBrowserTitle,
+  getClarification,
   getCapabilities,
   getFactsMemory,
   getGitBranch,
@@ -48,6 +50,7 @@ import {
   listBrowserSessions,
   openBrowserSession,
   reject,
+  respondToClarification,
   runBrowserTask,
   runDueTasksNow,
   runProjectCommand,
@@ -181,6 +184,67 @@ function InlineApprovalCard({
   );
 }
 
+function normalizeClarification(raw: unknown): ClarificationRequest | null {
+  if (typeof raw !== "object" || raw === null) {
+    return null;
+  }
+  const payload = raw as Record<string, unknown>;
+  const question = payload.question;
+  const type = payload.type ?? payload.clarification_type;
+  if (typeof question !== "string" || typeof type !== "string") {
+    return null;
+  }
+  const context =
+    typeof payload.context === "object" && payload.context !== null
+      ? (payload.context as Record<string, unknown>)
+      : {};
+  return {
+    id: typeof payload.id === "string" ? payload.id : null,
+    question,
+    clarification_type: type,
+    context,
+  };
+}
+
+function InlineClarificationCard({
+  clarification,
+  answer,
+  submitting,
+  onAnswerChange,
+  onSubmit,
+}: {
+  clarification: ClarificationRequest;
+  answer: string;
+  submitting: boolean;
+  onAnswerChange: (answer: string) => void;
+  onSubmit: () => void;
+}) {
+  return (
+    <article className="inlineClarificationCard">
+      <div className="cardTopline">
+        <span>{clarification.id || "clarification"}</span>
+        <span>{clarification.clarification_type}</span>
+      </div>
+      <h2>{clarification.question}</h2>
+      <div className="clarificationComposer">
+        <input
+          value={answer}
+          onChange={(event) => onAnswerChange(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") {
+              onSubmit();
+            }
+          }}
+          placeholder="Void"
+        />
+        <button type="button" disabled={submitting || !answer.trim()} onClick={onSubmit}>
+          {submitting ? "Submitting..." : "Submit"}
+        </button>
+      </div>
+    </article>
+  );
+}
+
 function StatusPanel() {
   const [status, setStatus] = useState<HealthResponse | null>(null);
   const [error, setError] = useState("");
@@ -271,6 +335,9 @@ function ChatTab() {
   const [input, setInput] = useState("");
   const [messages, setMessages] = useState<Message[]>([]);
   const [inlineApproval, setInlineApproval] = useState<Approval | null>(null);
+  const [inlineClarification, setInlineClarification] =
+    useState<ClarificationRequest | null>(null);
+  const [clarificationAnswer, setClarificationAnswer] = useState("");
   const [approvalActionId, setApprovalActionId] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -285,6 +352,7 @@ function ChatTab() {
     setError("");
     setLoading(true);
     setMessages((current) => [...current, { role: "user", content: message }]);
+    setInlineClarification(null);
 
     try {
       const response = await sendChatMessage(message);
@@ -292,6 +360,42 @@ function ChatTab() {
         ...current,
         { role: "void", content: response.response },
       ]);
+      if (response.result_type === "clarification_request" && response.clarification) {
+        setInlineClarification(response.clarification);
+        setClarificationAnswer("");
+      }
+      if (mentionsApproval(response.response)) {
+        const pendingApproval = await fetchInlineApproval();
+        setInlineApproval(pendingApproval);
+      }
+    } catch (currentError) {
+      setError(getErrorMessage(currentError));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleClarificationSubmit() {
+    const answer = clarificationAnswer.trim();
+    if (!answer || loading) {
+      return;
+    }
+
+    setError("");
+    setLoading(true);
+    setMessages((current) => [...current, { role: "user", content: answer }]);
+    try {
+      const response = await respondToClarification({ answer });
+      setMessages((current) => [
+        ...current,
+        { role: "void", content: response.response },
+      ]);
+      setInlineClarification(
+        response.result_type === "clarification_request" && response.clarification
+          ? response.clarification
+          : null,
+      );
+      setClarificationAnswer("");
       if (mentionsApproval(response.response)) {
         const pendingApproval = await fetchInlineApproval();
         setInlineApproval(pendingApproval);
@@ -351,6 +455,15 @@ function ChatTab() {
           onResolve={handleApprovalAction}
         />
       ) : null}
+      {inlineClarification ? (
+        <InlineClarificationCard
+          clarification={inlineClarification}
+          answer={clarificationAnswer}
+          submitting={loading}
+          onAnswerChange={setClarificationAnswer}
+          onSubmit={() => void handleClarificationSubmit()}
+        />
+      ) : null}
 
       {error ? <div className="error">{error}</div> : null}
 
@@ -384,6 +497,9 @@ function BrowserTab() {
   const [instruction, setInstruction] = useState("Изучи страницу кратко");
   const [loadingAction, setLoadingAction] = useState("");
   const [inlineApproval, setInlineApproval] = useState<Approval | null>(null);
+  const [inlineClarification, setInlineClarification] =
+    useState<ClarificationRequest | null>(null);
+  const [clarificationAnswer, setClarificationAnswer] = useState("");
   const [approvalActionId, setApprovalActionId] = useState("");
   const [result, setResult] = useState("");
   const [error, setError] = useState("");
@@ -1033,6 +1149,9 @@ function ProjectTab() {
   const [projectInput, setProjectInput] = useState("Void");
   const [timeoutSeconds, setTimeoutSeconds] = useState(120);
   const [inlineApproval, setInlineApproval] = useState<Approval | null>(null);
+  const [inlineClarification, setInlineClarification] =
+    useState<ClarificationRequest | null>(null);
+  const [clarificationAnswer, setClarificationAnswer] = useState("");
   const [approvalActionId, setApprovalActionId] = useState("");
   const [loading, setLoading] = useState(true);
   const [setting, setSetting] = useState(false);
@@ -1050,11 +1169,13 @@ function ProjectTab() {
         describeCurrentProject(),
         getProjectCommands(),
       ]);
+      const clarificationResponse = await getClarification();
       setProjects(projectsResponse.projects);
       setCurrentProjectState(descriptionResponse.project);
       setProjectCommands(commandsResponse.commands);
       setProjectCommandCwd(commandsResponse.cwd);
       setDescription(descriptionResponse.description);
+      setInlineClarification(normalizeClarification(clarificationResponse.pending));
       const pendingApproval = await fetchInlineApproval(
         (approval) =>
           approval.action === "set_current_project" ||
@@ -1136,6 +1257,43 @@ function ProjectTab() {
     }
   }
 
+  async function handleClarificationSubmit() {
+    const answer = clarificationAnswer.trim();
+    if (!answer) {
+      return;
+    }
+
+    setError("");
+    setMessage("");
+    setCommandResult("");
+    setRunningCommand("clarification");
+    try {
+      const response = await respondToClarification({ answer });
+      if (response.result_type === "clarification_request" && response.clarification) {
+        setInlineClarification(response.clarification);
+      } else {
+        setInlineClarification(null);
+      }
+      setClarificationAnswer("");
+      if (mentionsApproval(response.response)) {
+        setMessage(response.response);
+        const pendingApproval = await fetchInlineApproval(
+          (approval) =>
+            approval.action === "set_current_project" ||
+            approval.action === "run_project_command",
+        );
+        setInlineApproval(pendingApproval);
+      } else {
+        setCommandResult(response.response);
+      }
+      await loadProjectContext();
+    } catch (currentError) {
+      setError(getErrorMessage(currentError));
+    } finally {
+      setRunningCommand("");
+    }
+  }
+
   useEffect(() => {
     void loadProjectContext();
   }, []);
@@ -1165,6 +1323,15 @@ function ProjectTab() {
           approval={inlineApproval}
           resolving={approvalActionId === inlineApproval.id}
           onResolve={handleApprovalAction}
+        />
+      ) : null}
+      {inlineClarification ? (
+        <InlineClarificationCard
+          clarification={inlineClarification}
+          answer={clarificationAnswer}
+          submitting={runningCommand === "clarification"}
+          onAnswerChange={setClarificationAnswer}
+          onSubmit={() => void handleClarificationSubmit()}
         />
       ) : null}
 
