@@ -49,6 +49,7 @@ import {
   health,
   listBrowserSessions,
   openBrowserSession,
+  openProjectRepo,
   reject,
   respondToClarification,
   runBrowserTask,
@@ -1148,6 +1149,7 @@ function ProjectTab() {
   const [description, setDescription] = useState("");
   const [projectInput, setProjectInput] = useState("Void");
   const [timeoutSeconds, setTimeoutSeconds] = useState(120);
+  const [repoOpenMode, setRepoOpenMode] = useState<"visible" | "headless">("visible");
   const [inlineApproval, setInlineApproval] = useState<Approval | null>(null);
   const [inlineClarification, setInlineClarification] =
     useState<ClarificationRequest | null>(null);
@@ -1179,7 +1181,8 @@ function ProjectTab() {
       const pendingApproval = await fetchInlineApproval(
         (approval) =>
           approval.action === "set_current_project" ||
-          approval.action === "run_project_command",
+          approval.action === "run_project_command" ||
+          approval.action === "open_project_repo_in_browser",
       );
       setInlineApproval(pendingApproval);
     } catch (currentError) {
@@ -1236,6 +1239,32 @@ function ProjectTab() {
     }
   }
 
+  async function handleOpenRepo() {
+    const project = currentProject?.id ?? currentProject?.name ?? "";
+    if (!project) {
+      setError("Current project is required.");
+      return;
+    }
+
+    setError("");
+    setMessage("");
+    setCommandResult("");
+    setInlineApproval(null);
+    setRunningCommand("open-repo");
+    try {
+      const response = await openProjectRepo({ project, mode: repoOpenMode });
+      setMessage(response.message);
+      const pendingApproval = await fetchInlineApproval(
+        (approval) => approval.action === "open_project_repo_in_browser",
+      );
+      setInlineApproval(pendingApproval);
+    } catch (currentError) {
+      setError(getErrorMessage(currentError));
+    } finally {
+      setRunningCommand("");
+    }
+  }
+
   async function handleApprovalAction(id: string, action: ApprovalAction) {
     setApprovalActionId(id);
     setError("");
@@ -1243,7 +1272,11 @@ function ProjectTab() {
     const approvedAction = inlineApproval?.action;
     try {
       const response = await resolveInlineApproval(id, action);
-      if (action === "approve" && approvedAction === "run_project_command") {
+      if (
+        action === "approve" &&
+        (approvedAction === "run_project_command" ||
+          approvedAction === "open_project_repo_in_browser")
+      ) {
         setCommandResult(response.message);
       } else {
         setMessage(response.message);
@@ -1280,7 +1313,8 @@ function ProjectTab() {
         const pendingApproval = await fetchInlineApproval(
           (approval) =>
             approval.action === "set_current_project" ||
-            approval.action === "run_project_command",
+            approval.action === "run_project_command" ||
+            approval.action === "open_project_repo_in_browser",
         );
         setInlineApproval(pendingApproval);
       } else {
@@ -1358,6 +1392,29 @@ function ProjectTab() {
           <div className="field">
             <span>Command keys</span>
             <p>{commandKeys.join(", ") || "none"}</p>
+          </div>
+          <div className="buttonRow">
+            <label className="timeoutControl">
+              <span>Mode</span>
+              <select
+                value={repoOpenMode}
+                onChange={(event) =>
+                  setRepoOpenMode(event.target.value as "visible" | "headless")
+                }
+              >
+                <option value="visible">visible</option>
+                <option value="headless">headless</option>
+              </select>
+            </label>
+            <button
+              type="button"
+              disabled={Boolean(runningCommand) || !currentProject?.repo_url}
+              onClick={() => void handleOpenRepo()}
+            >
+              {runningCommand === "open-repo"
+                ? "Requesting..."
+                : "Open repo in browser"}
+            </button>
           </div>
         </div>
 

@@ -156,6 +156,24 @@ def test_run_project_command_endpoint_creates_approval():
     assert "approval" in payload["message"].lower()
 
 
+def test_open_project_repo_endpoint_creates_approval():
+    response = request(
+        "POST",
+        "/projects/repo/open",
+        json={"project": "Void", "mode": "visible"},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["ok"] is True
+    assert "approval" in payload["message"].lower()
+
+    approvals_response = request("GET", "/approvals")
+    approvals = approvals_response.json()["pending"]
+    assert approvals[0]["action"] == "open_project_repo_in_browser"
+    assert approvals[0]["arguments"] == {"project": "Void", "mode": "visible"}
+
+
 def test_run_project_command_endpoint_validates_timeout():
     response = request(
         "POST",
@@ -209,7 +227,12 @@ def test_clarification_endpoints_resume_action():
     payload = response.json()
     assert payload["ok"] is True
     assert payload["result_type"] == "tool_call"
-    assert "https://github.com/MihailPy/Void" in payload["response"]
+    assert "approval" in payload["response"].lower()
+
+    approvals_response = request("GET", "/approvals")
+    approvals = approvals_response.json()["pending"]
+    assert approvals[0]["action"] == "open_project_repo_in_browser"
+    assert approvals[0]["arguments"] == {"project": "Void"}
 
     cleared_response = request("GET", "/clarification")
     assert cleared_response.json()["pending"] is None

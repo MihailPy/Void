@@ -130,6 +130,16 @@ def action_from_resolved_clarification(
 
     if (
         clarification_type == "project_selection"
+        and original_action == "open_project_repo_in_browser"
+    ):
+        return AgentAction(
+            "open_project_repo_in_browser",
+            {"project": answer},
+            "User answered a project-selection clarification.",
+        )
+
+    if (
+        clarification_type == "project_selection"
         and original_action == "set_current_project"
     ):
         return AgentAction(
