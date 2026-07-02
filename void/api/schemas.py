@@ -75,6 +75,11 @@ class SetCurrentProjectRequest(BaseModel):
     project: str
 
 
+class OpenProjectRepoRequest(BaseModel):
+    project: str
+    mode: Literal["visible", "headless"] = "visible"
+
+
 class RunProjectCommandRequest(BaseModel):
     timeout_seconds: int = Field(default=120, ge=1, le=3600)
 

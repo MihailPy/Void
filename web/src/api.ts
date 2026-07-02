@@ -99,6 +99,11 @@ export type RunProjectCommandRequest = {
   timeout_seconds?: number;
 };
 
+export type OpenProjectRepoRequest = {
+  project: string;
+  mode: "visible" | "headless";
+};
+
 export type Approval = {
   id?: string;
   action?: string;
@@ -321,6 +326,13 @@ export function describeCurrentProject() {
 
 export function setCurrentProject(payload: SetCurrentProjectRequest) {
   return request<ApprovalActionResponse>("/projects/current", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function openProjectRepo(payload: OpenProjectRepoRequest) {
+  return request<ApprovalActionResponse>("/projects/repo/open", {
     method: "POST",
     body: JSON.stringify(payload),
   });

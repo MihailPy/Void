@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 
+from void.core import project_context
 from void.core.clarification import create_clarification, project_command_options
 from void.core.routing import clean
 from void.core.types import AgentAction, ClarificationRequest, RouteResult
@@ -27,27 +28,47 @@ def _clarification_route(
     )
 
 
-def match(text: str, lowered: str) -> RouteResult | None:
-    project_repo_match = re.match(
-        r"^open\s+(.+?)\s+project\s+on\s+github$",
-        text,
-        re.IGNORECASE | re.DOTALL,
+def _open_project_repo_browser_action(project: str, reason: str) -> RouteResult:
+    return RouteResult(
+        matched=True,
+        confidence=0.95,
+        action=AgentAction(
+            "open_project_repo_in_browser",
+            {"project": project},
+            reason,
+        ),
     )
-    if project_repo_match is None:
-        project_repo_match = re.match(
-            r"^открой\s+проект\s+(.+?)\s+на\s+github$",
-            text,
-            re.IGNORECASE | re.DOTALL,
-        )
-    if project_repo_match:
-        return RouteResult(
-            matched=True,
-            confidence=0.95,
-            action=AgentAction(
-                "open_project_repo",
-                {"project": clean(project_repo_match.group(1))},
-                "User asks for a configured project GitHub repository.",
-            ),
+
+
+def _current_project_arg() -> str:
+    try:
+        return str(project_context.get_current_project()["id"])
+    except ValueError:
+        return "current"
+
+
+def _project_repo_browser_clarification() -> RouteResult:
+    return _clarification_route(
+        "Which project do you want to open?",
+        "project_selection",
+        {
+            "original_action": "open_project_repo_in_browser",
+            "missing_field": "project",
+        },
+    )
+
+
+def match(text: str, lowered: str) -> RouteResult | None:
+    current_repo_phrases = {
+        "open current project on github",
+        "open current project repo",
+        "открой текущий проект на github",
+        "открой репозиторий текущего проекта",
+    }
+    if lowered in current_repo_phrases:
+        return _open_project_repo_browser_action(
+            _current_project_arg(),
+            "User asks to open the current project's configured repository.",
         )
 
     if lowered in {
@@ -56,14 +77,23 @@ def match(text: str, lowered: str) -> RouteResult | None:
         "открой проект на github",
         "открой проект github",
     }:
-        return _clarification_route(
-            "Which project do you want to open?",
-            "project_selection",
-            {
-                "original_action": "open_project_repo",
-                "missing_field": "project",
-            },
-        )
+        return _project_repo_browser_clarification()
+
+    project_repo_patterns = [
+        r"^open\s+(.+?)\s+project\s+on\s+github$",
+        r"^open\s+project\s+(.+?)\s+on\s+github$",
+        r"^open\s+(.+?)\s+repo(?:sitory)?$",
+        r"^открой\s+проект\s+(.+?)\s+на\s+github$",
+        r"^открой\s+(.+?)\s+на\s+github$",
+        r"^открой\s+репозиторий\s+(.+?)$",
+    ]
+    for pattern in project_repo_patterns:
+        project_repo_match = re.match(pattern, text, re.IGNORECASE | re.DOTALL)
+        if project_repo_match:
+            return _open_project_repo_browser_action(
+                clean(project_repo_match.group(1)),
+                "User asks to open a configured project repository in a browser.",
+            )
 
     if lowered in {
         "list project commands",

@@ -65,8 +65,26 @@ def test_router_open_project_repo():
 
     assert route.matched is True
     assert route.action is not None
-    assert route.action.action == "open_project_repo"
+    assert route.action.action == "open_project_repo_in_browser"
     assert route.action.arguments == {"project": "Void"}
+
+
+def test_router_open_project_repo_project_before_github():
+    route = Router().route("open project Void on github")
+
+    assert route.matched is True
+    assert route.action is not None
+    assert route.action.action == "open_project_repo_in_browser"
+    assert route.action.arguments == {"project": "Void"}
+
+
+def test_router_open_current_project_repo():
+    route = Router().route("open current project repo")
+
+    assert route.matched is True
+    assert route.action is not None
+    assert route.action.action == "open_project_repo_in_browser"
+    assert route.action.arguments == {"project": "void"}
 
 
 def test_router_open_project_repo_missing_project_requests_clarification():
@@ -76,6 +94,16 @@ def test_router_open_project_repo_missing_project_requests_clarification():
     assert route.action is None
     assert route.clarification is not None
     assert route.clarification.clarification_type == "project_selection"
+    assert route.clarification.context["original_action"] == "open_project_repo_in_browser"
+
+
+def test_router_open_russian_project_repo():
+    route = Router().route("открой репозиторий Void")
+
+    assert route.matched is True
+    assert route.action is not None
+    assert route.action.action == "open_project_repo_in_browser"
+    assert route.action.arguments == {"project": "Void"}
 
 
 def test_router_list_project_commands():

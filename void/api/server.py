@@ -39,6 +39,7 @@ from void.api.schemas import (
     ClarificationRespondRequest,
     ClarificationResponse,
     MemoryResponse,
+    OpenProjectRepoRequest,
     CurrentProjectResponse,
     ProjectCommandsResponse,
     ProjectDescriptionResponse,
@@ -334,6 +335,19 @@ def set_current_project(
     registry: ToolRegistry = Depends(get_tool_registry),
 ) -> ApprovalResponse | ErrorResponse:
     return _execute_api_tool(registry, "set_current_project", {"project": request.project})
+
+
+@app.post("/projects/repo/open", response_model=ApprovalResponse | ErrorResponse)
+def open_project_repo(
+    request: OpenProjectRepoRequest,
+    _: None = Depends(require_api_token),
+    registry: ToolRegistry = Depends(get_tool_registry),
+) -> ApprovalResponse | ErrorResponse:
+    return _execute_api_tool(
+        registry,
+        "open_project_repo_in_browser",
+        {"project": request.project, "mode": request.mode},
+    )
 
 
 @app.get(

@@ -131,6 +131,16 @@ Important:
 - Approval requirements: stateless browser actions, opening sessions, closing sessions, and session interactions require approval. Listing sessions and checking session status are read-only.
 - Limits: attach-to-existing-browser is not implemented, personal Chrome is not connected, cookies and profiles are not persisted by default, login automation workflows are not provided, arbitrary JavaScript execution is not exposed, session state is in-memory and lost on API restart, and at most 3 sessions may be open.
 
+## Project Link Actions
+
+Project repository links are read from `memory/projects.json` as configured
+`repo_url` values. Opening a project repo creates a managed Void browser
+session, defaults to visible mode, and requires approval before the browser is
+opened.
+
+This does not attach to personal Chrome, does not use persistent browser
+profiles, and does not open arbitrary user-provided URLs.
+
 ## Git Capability
 
 Examples:

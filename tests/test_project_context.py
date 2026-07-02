@@ -76,6 +76,8 @@ def test_project_tools_registered_with_metadata():
         "list_projects": ("project", "read", False),
         "get_current_project": ("project", "read", False),
         "describe_current_project": ("project", "read", False),
+        "open_project_repo": ("project", "read", False),
+        "open_project_repo_in_browser": ("project", "network", True),
         "list_project_commands": ("project", "read", False),
         "run_project_command": ("project", "write", True),
         "set_current_project": ("project", "write", True),
@@ -102,6 +104,133 @@ def test_set_current_project_tool_creates_approval():
     assert approvals[0]["action"] == "set_current_project"
     assert approvals[0]["category"] == "project"
     assert approvals[0]["risk_level"] == "write"
+
+
+def test_open_project_repo_in_browser_missing_project():
+    registry = build_registry()
+
+    result = registry.execute(
+        AgentAction(
+            "open_project_repo_in_browser",
+            {"project": "missing"},
+            "test",
+        ),
+        bypass_confirmation=True,
+    )
+
+    assert result.ok is False
+    assert "Project not found" in result.content
+
+
+def test_open_project_repo_in_browser_missing_repo_url():
+    project_context.save_project_context(
+        {
+            "current_project": "notes",
+            "projects": [
+                {
+                    "id": "notes",
+                    "name": "Notes",
+                    "aliases": [],
+                    "root_path": ".",
+                    "repo_url": "",
+                },
+            ],
+        }
+    )
+    registry = build_registry()
+
+    result = registry.execute(
+        AgentAction(
+            "open_project_repo_in_browser",
+            {"project": "Notes"},
+            "test",
+        ),
+        bypass_confirmation=True,
+    )
+
+    assert result.ok is False
+    assert "no repo_url configured" in result.content
+
+
+def test_open_project_repo_in_browser_invalid_repo_url_rejected():
+    project_context.save_project_context(
+        {
+            "current_project": "void",
+            "projects": [
+                {
+                    "id": "void",
+                    "name": "Void",
+                    "aliases": [],
+                    "root_path": ".",
+                    "repo_url": "ftp://example.com/repo",
+                },
+            ],
+        }
+    )
+    registry = build_registry()
+
+    result = registry.execute(
+        AgentAction(
+            "open_project_repo_in_browser",
+            {"project": "Void"},
+            "test",
+        ),
+        bypass_confirmation=True,
+    )
+
+    assert result.ok is False
+    assert "Only http and https URLs are allowed" in result.content
+
+
+def test_open_project_repo_in_browser_creates_approval():
+    registry = build_registry()
+
+    result = registry.execute(
+        AgentAction(
+            "open_project_repo_in_browser",
+            {"project": "Void", "mode": "visible"},
+            "test",
+        )
+    )
+
+    assert result.ok is True
+    assert "approval" in result.content.lower()
+    approvals = list_approvals()
+    assert approvals[0]["action"] == "open_project_repo_in_browser"
+    assert approvals[0]["category"] == "project"
+    assert approvals[0]["risk_level"] == "network"
+
+
+def test_open_project_repo_in_browser_opens_after_approval(monkeypatch):
+    def open_session(url: str, mode: str):
+        return {
+            "session_id": "abc123",
+            "mode": mode,
+            "url": url,
+            "title": "MihailPy/Void",
+        }
+
+    monkeypatch.setattr("void.tools.project_tools.browser_sessions.open_session", open_session)
+    registry = build_registry()
+
+    result = registry.execute(
+        AgentAction(
+            "open_project_repo_in_browser",
+            {"project": "Void", "mode": "visible"},
+            "test",
+        )
+    )
+    approval_id = list_approvals()[0]["id"]
+    action = approve(approval_id)
+
+    assert result.ok is True
+    assert action is not None
+    approved_result = registry.execute(action, bypass_confirmation=True)
+    clear_approval(approval_id)
+
+    assert approved_result.ok is True
+    assert "Session ID: abc123" in approved_result.content
+    assert approved_result.data["title"] == "MihailPy/Void"
 
 
 def test_set_current_project_switches_after_approval():

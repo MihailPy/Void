@@ -66,7 +66,7 @@ def test_router_open_project_github_requests_clarification():
     assert route.action is None
     assert route.clarification is not None
     assert route.clarification.clarification_type == "project_selection"
-    assert route.clarification.context["original_action"] == "open_project_repo"
+    assert route.clarification.context["original_action"] == "open_project_repo_in_browser"
 
 
 def test_router_run_project_command_requests_clarification():
@@ -90,7 +90,7 @@ def test_router_switch_project_requests_clarification():
     assert route.clarification.context["original_action"] == "set_current_project"
 
 
-def test_agent_resumes_project_selection():
+def test_agent_resumes_project_selection_to_browser_approval():
     agent = Agent(registry=_project_registry())
 
     first = agent.handle_result("open project on github")
@@ -98,8 +98,22 @@ def test_agent_resumes_project_selection():
 
     assert first.kind == "clarification_request"
     assert second.kind == "tool_call"
-    assert "https://github.com/MihailPy/Void" in second.content
+    assert "requires approval" in second.content.lower()
     assert has_pending_clarification() is False
+
+
+def test_action_from_resolved_clarification_opens_project_repo_in_browser():
+    resolved = {
+        "type": "project_selection",
+        "context": {"original_action": "open_project_repo_in_browser"},
+        "answer": "Void",
+    }
+
+    action = clarification.action_from_resolved_clarification(resolved)
+
+    assert action is not None
+    assert action.action == "open_project_repo_in_browser"
+    assert action.arguments == {"project": "Void"}
 
 
 def test_agent_resumes_command_selection_with_approval():

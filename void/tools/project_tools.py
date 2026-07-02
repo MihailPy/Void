@@ -3,8 +3,10 @@
 from collections import Counter
 from pathlib import Path
 
+from void.core import browser_sessions
 from void.core import project_commands
 from void.core import project_context
+from void.core.browser_safety import validate_url
 from void.core.safety import IGNORED_NAMES, safe_project_path
 from void.core.types import ToolDefinition, ToolResult
 
@@ -133,6 +135,67 @@ def open_project_repo(project: str) -> ToolResult:
     )
 
 
+def _find_project_or_current(project: str) -> dict | None:
+    if project.strip().casefold() in {"current", "current project", "текущий", "текущий проект"}:
+        try:
+            return project_context.get_current_project()
+        except ValueError:
+            return None
+    return project_context.find_project(project)
+
+
+def open_project_repo_in_browser(project: str, mode: str = "visible") -> ToolResult:
+    selected = _find_project_or_current(project)
+    if selected is None:
+        return ToolResult(ok=False, content=f"Project not found: {project}")
+
+    repo_url = str(selected.get("repo_url") or "").strip()
+    if not repo_url:
+        return ToolResult(
+            ok=False,
+            content=f"Project has no repo_url configured: {selected['name']}",
+            data={"project": selected},
+        )
+
+    clean_mode = mode.strip().casefold()
+    if clean_mode not in {"visible", "headless"}:
+        return ToolResult(ok=False, content="Mode must be one of: visible, headless.")
+
+    try:
+        normalized_url = validate_url(repo_url)
+        session = browser_sessions.open_session(normalized_url, clean_mode)
+    except ValueError as error:
+        return ToolResult(
+            ok=False,
+            content=f"Invalid repo_url for {selected['name']}: {error}",
+            data={"project": selected, "url": repo_url},
+        )
+
+    title = session.get("title")
+    lines = [
+        "Opened project repository in browser.",
+        f"Project: {selected['name']} ({selected['id']})",
+        f"Repo URL: {session.get('url', normalized_url)}",
+        f"Mode: {session.get('mode', clean_mode)}",
+        f"Session ID: {session.get('session_id', '')}",
+    ]
+    if title:
+        lines.append(f"Title: {title}")
+
+    return ToolResult(
+        ok=True,
+        content="\n".join(lines),
+        data={
+            "project": selected,
+            "url": session.get("url", normalized_url),
+            "mode": session.get("mode", clean_mode),
+            "session_id": session.get("session_id"),
+            "title": title,
+            "session": session,
+        },
+    )
+
+
 def describe_current_project() -> ToolResult:
     try:
         project = project_context.get_current_project()
@@ -245,6 +308,14 @@ def definitions() -> list[ToolDefinition]:
             open_project_repo,
             category="project",
             risk_level="read",
+        ),
+        ToolDefinition(
+            "open_project_repo_in_browser",
+            "Open the configured project repository URL in a managed browser session.",
+            open_project_repo_in_browser,
+            requires_confirmation=True,
+            category="project",
+            risk_level="network",
         ),
         ToolDefinition(
             "describe_current_project",
