@@ -80,9 +80,17 @@ type Tab =
 type Message = {
   role: "user" | "void";
   content: string;
+  resultType?: string;
+  data?: Record<string, unknown> | null;
 };
 
 type ApprovalAction = "approve" | "reject";
+
+type StructuredResult = {
+  message: string;
+  resultType?: string;
+  data?: Record<string, unknown> | null;
+};
 
 const tabs: { id: Tab; label: string }[] = [
   { id: "chat", label: "Chat" },
@@ -139,6 +147,140 @@ async function resolveInlineApproval(id: string, action: ApprovalAction) {
 
 function mentionsApproval(message: string) {
   return message.toLowerCase().includes("approval");
+}
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return typeof value === "object" && value !== null
+    ? (value as Record<string, unknown>)
+    : null;
+}
+
+function asText(value: unknown, fallback = "") {
+  return typeof value === "string" && value.trim() ? value : fallback;
+}
+
+function responseResultType(response: {
+  result_type?: string;
+  data?: Record<string, unknown> | null;
+}) {
+  const data = response.data ?? {};
+  if ("approval_id" in data) {
+    return "approval";
+  }
+  if ("command_key" in data) {
+    return "command_result";
+  }
+  if ("session_id" in data && "url" in data) {
+    return "browser_result";
+  }
+  if (response.result_type === "clarification_request") {
+    return "clarification";
+  }
+  return response.result_type ?? "message";
+}
+
+function toStructuredResult(response: {
+  message?: string;
+  response?: string;
+  result_type?: string;
+  data?: Record<string, unknown> | null;
+}): StructuredResult {
+  return {
+    message: response.message ?? response.response ?? "",
+    resultType: responseResultType(response),
+    data: response.data,
+  };
+}
+
+function FieldList({ fields }: { fields: Array<[string, unknown]> }) {
+  return (
+    <dl className="resultFields">
+      {fields.map(([label, value]) => (
+        <div className="resultField" key={label}>
+          <dt>{label}</dt>
+          <dd>{value === null || value === undefined || value === "" ? "none" : String(value)}</dd>
+        </div>
+      ))}
+    </dl>
+  );
+}
+
+function ResultBlock({ result }: { result: StructuredResult }) {
+  const data = result.data ?? {};
+  const project = asRecord(data.project);
+  const session = asRecord(data.session);
+  const type = result.resultType ?? "message";
+
+  if (type === "approval") {
+    return (
+      <article className="resultBlock approvalResult">
+        <div className="cardTopline">
+          <span>Approval required</span>
+          <span>{asText(data.approval_id, "pending")}</span>
+        </div>
+        <p>{result.message}</p>
+        <FieldList
+          fields={[
+            ["Action", data.action],
+            ["Category", data.category],
+            ["Risk", data.risk_level],
+          ]}
+        />
+      </article>
+    );
+  }
+
+  if (type === "command_result") {
+    return (
+      <article className="resultBlock commandResultBlock">
+        <div className="cardTopline">
+          <span>Command result</span>
+          <span>{data.ok === false ? "failed" : "complete"}</span>
+        </div>
+        <FieldList
+          fields={[
+            ["Command key", data.command_key],
+            ["Command", data.command],
+            ["CWD", data.cwd],
+            ["Return code", data.returncode],
+            ["Duration", `${data.duration_seconds ?? "unknown"}s`],
+          ]}
+        />
+        <div className="resultOutputGrid">
+          <div>
+            <div className="sectionLabel">stdout</div>
+            <pre className="resultOutput">{asText(data.stdout, "(empty)")}</pre>
+          </div>
+          <div>
+            <div className="sectionLabel">stderr</div>
+            <pre className="resultOutput">{asText(data.stderr, "(empty)")}</pre>
+          </div>
+        </div>
+      </article>
+    );
+  }
+
+  if (type === "browser_result") {
+    return (
+      <article className="resultBlock browserResultBlock">
+        <div className="cardTopline">
+          <span>Browser session</span>
+          <span>{asText(data.session_id ?? session?.session_id, "opened")}</span>
+        </div>
+        <FieldList
+          fields={[
+            ["Project", project?.name],
+            ["Repo URL", data.url ?? session?.url],
+            ["Session ID", data.session_id ?? session?.session_id],
+            ["Mode", data.mode ?? session?.mode],
+            ["Title", data.title ?? session?.title],
+          ]}
+        />
+      </article>
+    );
+  }
+
+  return <div className="notice">{result.message}</div>;
 }
 
 function InlineApprovalCard({
@@ -220,6 +362,17 @@ function InlineClarificationCard({
   onAnswerChange: (answer: string) => void;
   onSubmit: () => void;
 }) {
+  const commands = Array.isArray(clarification.context.available_commands)
+    ? clarification.context.available_commands
+        .filter((value): value is string => typeof value === "string" && Boolean(value))
+    : [];
+  const projects = Array.isArray(clarification.context.available_projects)
+    ? clarification.context.available_projects
+        .filter((value): value is string => typeof value === "string" && Boolean(value))
+    : [];
+  const suggestions = commands.length > 0 ? commands : projects;
+  const suggestionLabel = commands.length > 0 ? "Available commands" : "Available projects";
+
   return (
     <article className="inlineClarificationCard">
       <div className="cardTopline">
@@ -227,6 +380,24 @@ function InlineClarificationCard({
         <span>{clarification.clarification_type}</span>
       </div>
       <h2>{clarification.question}</h2>
+      {suggestions.length > 0 ? (
+        <div className="clarificationSuggestions">
+          <div className="sectionLabel">{suggestionLabel}</div>
+          <div className="chipRow">
+            {suggestions.map((suggestion) => (
+              <button
+                className="chipButton"
+                type="button"
+                key={suggestion}
+                disabled={submitting}
+                onClick={() => onAnswerChange(suggestion)}
+              >
+                {suggestion}
+              </button>
+            ))}
+          </div>
+        </div>
+      ) : null}
       <div className="clarificationComposer">
         <input
           value={answer}
@@ -359,14 +530,22 @@ function ChatTab() {
       const response = await sendChatMessage(message);
       setMessages((current) => [
         ...current,
-        { role: "void", content: response.response },
+        {
+          role: "void",
+          content: response.response,
+          resultType: responseResultType(response),
+          data: response.data,
+        },
       ]);
       if (response.result_type === "clarification_request" && response.clarification) {
         setInlineClarification(response.clarification);
         setClarificationAnswer("");
       }
-      if (mentionsApproval(response.response)) {
-        const pendingApproval = await fetchInlineApproval();
+      if (responseResultType(response) === "approval" || mentionsApproval(response.response)) {
+        const approvalId = asText(response.data?.approval_id);
+        const pendingApproval = await fetchInlineApproval(
+          approvalId ? (approval) => approval.id === approvalId : undefined,
+        );
         setInlineApproval(pendingApproval);
       }
     } catch (currentError) {
@@ -389,7 +568,12 @@ function ChatTab() {
       const response = await respondToClarification({ answer });
       setMessages((current) => [
         ...current,
-        { role: "void", content: response.response },
+        {
+          role: "void",
+          content: response.response,
+          resultType: responseResultType(response),
+          data: response.data,
+        },
       ]);
       setInlineClarification(
         response.result_type === "clarification_request" && response.clarification
@@ -397,8 +581,11 @@ function ChatTab() {
           : null,
       );
       setClarificationAnswer("");
-      if (mentionsApproval(response.response)) {
-        const pendingApproval = await fetchInlineApproval();
+      if (responseResultType(response) === "approval" || mentionsApproval(response.response)) {
+        const approvalId = asText(response.data?.approval_id);
+        const pendingApproval = await fetchInlineApproval(
+          approvalId ? (approval) => approval.id === approvalId : undefined,
+        );
         setInlineApproval(pendingApproval);
       }
     } catch (currentError) {
@@ -413,9 +600,15 @@ function ChatTab() {
     setError("");
     try {
       const response = await resolveInlineApproval(id, action);
+      const result = toStructuredResult(response);
       setMessages((current) => [
         ...current,
-        { role: "void", content: response.message },
+        {
+          role: "void",
+          content: response.message,
+          resultType: result.resultType,
+          data: result.data,
+        },
       ]);
       setInlineApproval(null);
     } catch (currentError) {
@@ -443,7 +636,17 @@ function ChatTab() {
               <div className="messageRole">
                 {message.role === "user" ? "You" : "Void"}
               </div>
-              <div className="messageContent">{message.content}</div>
+              {message.role === "void" && message.resultType ? (
+                <ResultBlock
+                  result={{
+                    message: message.content,
+                    resultType: message.resultType,
+                    data: message.data,
+                  }}
+                />
+              ) : (
+                <div className="messageContent">{message.content}</div>
+              )}
             </article>
           ))
         )}
@@ -502,7 +705,7 @@ function BrowserTab() {
     useState<ClarificationRequest | null>(null);
   const [clarificationAnswer, setClarificationAnswer] = useState("");
   const [approvalActionId, setApprovalActionId] = useState("");
-  const [result, setResult] = useState("");
+  const [result, setResult] = useState<StructuredResult | null>(null);
   const [error, setError] = useState("");
 
   useEffect(() => {
@@ -539,7 +742,7 @@ function BrowserTab() {
     }
 
     setError("");
-    setResult("");
+    setResult(null);
     setInlineApproval(null);
     setLoadingAction(action);
     try {
@@ -556,7 +759,7 @@ function BrowserTab() {
                     url: cleanUrl,
                     instruction: instruction.trim() || "Read-only page inspection.",
                   });
-      setResult(response.message);
+      setResult(toStructuredResult(response));
       await loadBrowserApproval();
     } catch (currentError) {
       setError(getErrorMessage(currentError));
@@ -585,7 +788,7 @@ function BrowserTab() {
     }
 
     setError("");
-    setResult("");
+    setResult(null);
     setInlineApproval(null);
     setLoadingAction(action);
     try {
@@ -608,7 +811,7 @@ function BrowserTab() {
                   selector: cleanSelector,
                   timeout_ms: parsedTimeout,
                 });
-      setResult(response.message);
+      setResult(toStructuredResult(response));
       await loadBrowserApproval();
     } catch (currentError) {
       setError(getErrorMessage(currentError));
@@ -625,7 +828,7 @@ function BrowserTab() {
     }
 
     setError("");
-    setResult("");
+    setResult(null);
     setInlineApproval(null);
     setLoadingAction("open-session");
     try {
@@ -633,7 +836,7 @@ function BrowserTab() {
         url: cleanUrl,
         mode: sessionMode,
       });
-      setResult(response.message);
+      setResult(toStructuredResult(response));
       await loadBrowserApproval();
     } catch (currentError) {
       setError(getErrorMessage(currentError));
@@ -644,11 +847,15 @@ function BrowserTab() {
 
   async function handleSessionStatus(id: string) {
     setError("");
-    setResult("");
+    setResult(null);
     setLoadingAction(`status-${id}`);
     try {
       const response = await getBrowserSessionStatus(id);
-      setResult(JSON.stringify(response.session, null, 2));
+      setResult({
+        message: "Browser session status.",
+        resultType: "browser_result",
+        data: { session: response.session },
+      });
       await refreshSessions();
     } catch (currentError) {
       setError(getErrorMessage(currentError));
@@ -659,12 +866,12 @@ function BrowserTab() {
 
   async function handleCloseSession(id: string) {
     setError("");
-    setResult("");
+    setResult(null);
     setInlineApproval(null);
     setLoadingAction(`close-${id}`);
     try {
       const response = await closeBrowserSession(id);
-      setResult(response.message);
+      setResult(toStructuredResult(response));
       await loadBrowserApproval();
     } catch (currentError) {
       setError(getErrorMessage(currentError));
@@ -675,12 +882,12 @@ function BrowserTab() {
 
   async function handleCloseAllSessions() {
     setError("");
-    setResult("");
+    setResult(null);
     setInlineApproval(null);
     setLoadingAction("close-all-sessions");
     try {
       const response = await closeAllBrowserSessions();
-      setResult(response.message);
+      setResult(toStructuredResult(response));
       await loadBrowserApproval();
     } catch (currentError) {
       setError(getErrorMessage(currentError));
@@ -703,7 +910,7 @@ function BrowserTab() {
     }
 
     setError("");
-    setResult("");
+    setResult(null);
     setInlineApproval(null);
     setLoadingAction(`${action}-${id}`);
     try {
@@ -721,7 +928,7 @@ function BrowserTab() {
                   selector: cleanSelector,
                   timeout_ms: parsedTimeout,
                 });
-      setResult(response.message);
+      setResult(toStructuredResult(response));
       await loadBrowserApproval();
     } catch (currentError) {
       setError(getErrorMessage(currentError));
@@ -735,7 +942,7 @@ function BrowserTab() {
     setError("");
     try {
       const response = await resolveInlineApproval(id, action);
-      setResult(response.message);
+      setResult(toStructuredResult(response));
       await refreshBrowserState();
     } catch (currentError) {
       setError(getErrorMessage(currentError));
@@ -754,7 +961,7 @@ function BrowserTab() {
       </div>
 
       {error ? <div className="error">{error}</div> : null}
-      {result ? <div className="notice">{result}</div> : null}
+      {result ? <ResultBlock result={result} /> : null}
       {inlineApproval ? (
         <InlineApprovalCard
           approval={inlineApproval}
@@ -1158,8 +1365,8 @@ function ProjectTab() {
   const [loading, setLoading] = useState(true);
   const [setting, setSetting] = useState(false);
   const [runningCommand, setRunningCommand] = useState("");
-  const [commandResult, setCommandResult] = useState("");
-  const [message, setMessage] = useState("");
+  const [commandResult, setCommandResult] = useState<StructuredResult | null>(null);
+  const [message, setMessage] = useState<StructuredResult | null>(null);
   const [error, setError] = useState("");
 
   async function loadProjectContext() {
@@ -1200,14 +1407,16 @@ function ProjectTab() {
     }
 
     setError("");
-    setMessage("");
+    setMessage(null);
     setInlineApproval(null);
     setSetting(true);
     try {
       const response = await setCurrentProject({ project });
-      setMessage(response.message);
+      setMessage(toStructuredResult(response));
       const pendingApproval = await fetchInlineApproval(
-        (approval) => approval.action === "set_current_project",
+        (approval) =>
+          approval.id === response.data?.approval_id ||
+          approval.action === "set_current_project",
       );
       setInlineApproval(pendingApproval);
     } catch (currentError) {
@@ -1219,17 +1428,19 @@ function ProjectTab() {
 
   async function handleRunCommand(commandKey: string) {
     setError("");
-    setMessage("");
-    setCommandResult("");
+    setMessage(null);
+    setCommandResult(null);
     setInlineApproval(null);
     setRunningCommand(commandKey);
     try {
       const response = await runProjectCommand(commandKey, {
         timeout_seconds: timeoutSeconds,
       });
-      setMessage(response.message);
+      setMessage(toStructuredResult(response));
       const pendingApproval = await fetchInlineApproval(
-        (approval) => approval.action === "run_project_command",
+        (approval) =>
+          approval.id === response.data?.approval_id ||
+          approval.action === "run_project_command",
       );
       setInlineApproval(pendingApproval);
     } catch (currentError) {
@@ -1247,15 +1458,17 @@ function ProjectTab() {
     }
 
     setError("");
-    setMessage("");
-    setCommandResult("");
+    setMessage(null);
+    setCommandResult(null);
     setInlineApproval(null);
     setRunningCommand("open-repo");
     try {
       const response = await openProjectRepo({ project, mode: repoOpenMode });
-      setMessage(response.message);
+      setMessage(toStructuredResult(response));
       const pendingApproval = await fetchInlineApproval(
-        (approval) => approval.action === "open_project_repo_in_browser",
+        (approval) =>
+          approval.id === response.data?.approval_id ||
+          approval.action === "open_project_repo_in_browser",
       );
       setInlineApproval(pendingApproval);
     } catch (currentError) {
@@ -1268,7 +1481,7 @@ function ProjectTab() {
   async function handleApprovalAction(id: string, action: ApprovalAction) {
     setApprovalActionId(id);
     setError("");
-    setMessage("");
+    setMessage(null);
     const approvedAction = inlineApproval?.action;
     try {
       const response = await resolveInlineApproval(id, action);
@@ -1277,9 +1490,9 @@ function ProjectTab() {
         (approvedAction === "run_project_command" ||
           approvedAction === "open_project_repo_in_browser")
       ) {
-        setCommandResult(response.message);
+        setCommandResult(toStructuredResult(response));
       } else {
-        setMessage(response.message);
+        setMessage(toStructuredResult(response));
       }
       setInlineApproval(null);
       await loadProjectContext();
@@ -1297,8 +1510,8 @@ function ProjectTab() {
     }
 
     setError("");
-    setMessage("");
-    setCommandResult("");
+    setMessage(null);
+    setCommandResult(null);
     setRunningCommand("clarification");
     try {
       const response = await respondToClarification({ answer });
@@ -1309,16 +1522,17 @@ function ProjectTab() {
       }
       setClarificationAnswer("");
       if (mentionsApproval(response.response)) {
-        setMessage(response.response);
+        setMessage(toStructuredResult(response));
         const pendingApproval = await fetchInlineApproval(
           (approval) =>
+            approval.id === response.data?.approval_id ||
             approval.action === "set_current_project" ||
             approval.action === "run_project_command" ||
             approval.action === "open_project_repo_in_browser",
         );
         setInlineApproval(pendingApproval);
       } else {
-        setCommandResult(response.response);
+        setCommandResult(toStructuredResult(response));
       }
       await loadProjectContext();
     } catch (currentError) {
@@ -1351,7 +1565,7 @@ function ProjectTab() {
       </div>
 
       {error ? <div className="error">{error}</div> : null}
-      {message ? <div className="notice">{message}</div> : null}
+      {message ? <ResultBlock result={message} /> : null}
       {inlineApproval ? (
         <InlineApprovalCard
           approval={inlineApproval}
@@ -1481,9 +1695,13 @@ function ProjectTab() {
             ))
           )}
         </div>
-        <pre className="gitOutput">
-          <code>{commandResult || "No command result yet."}</code>
-        </pre>
+        {commandResult ? (
+          <ResultBlock result={commandResult} />
+        ) : (
+          <pre className="gitOutput">
+            <code>No command result yet.</code>
+          </pre>
+        )}
       </section>
 
       <section className="contentSection">

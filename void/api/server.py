@@ -60,7 +60,7 @@ from void.core.registry import ToolRegistry
 from void.core.safety import MEMORY_DIR, ensure_memory_files
 from void.core.scheduler import list_tasks
 from void.core.scheduler_worker import SchedulerWorker
-from void.core.types import AgentAction
+from void.core.types import AgentAction, ToolResult
 from void.skills.registry import SkillRegistry
 
 API_VERSION = __version__
@@ -171,6 +171,31 @@ def _error(error: Exception | str) -> ErrorResponse:
     return ErrorResponse(ok=False, error=message)
 
 
+def _result_type(action: str | None, result: ToolResult) -> str:
+    data = result.data or {}
+    if "approval_id" in data:
+        return "approval"
+    if action == "run_project_command" or "command_key" in data:
+        return "command_result"
+    if action in {"open_project_repo_in_browser", "browser_open_session"} or (
+        "session_id" in data and "url" in data
+    ):
+        return "browser_result"
+    return "message"
+
+
+def _approval_response(
+    result: ToolResult,
+    action: str | None = None,
+) -> ApprovalResponse:
+    return ApprovalResponse(
+        ok=result.ok,
+        message=result.content,
+        result_type=_result_type(action, result),
+        data=result.data,
+    )
+
+
 def _read_memory_file(filename: str) -> MemoryResponse | ErrorResponse:
     try:
         ensure_memory_files()
@@ -187,7 +212,7 @@ def _execute_api_tool(
 ) -> ApprovalResponse | ErrorResponse:
     try:
         result = registry.execute(AgentAction(action, arguments, "API request."))
-        return ApprovalResponse(ok=result.ok, message=result.content)
+        return _approval_response(result, action)
     except Exception as error:
         return _error(error)
 
@@ -227,6 +252,8 @@ def chat(
             response=result.content,
             result_type=result.kind,
             clarification=clarification,
+            message=result.content,
+            data=result.tool_result.data if result.tool_result is not None else None,
         )
     except Exception as error:
         return _error(error)
@@ -264,6 +291,8 @@ def respond_to_clarification(
             response=result.content,
             result_type=result.kind,
             clarification=clarification,
+            message=result.content,
+            data=result.tool_result.data if result.tool_result is not None else None,
         )
     except Exception as error:
         return _error(error)
@@ -488,7 +517,7 @@ def create_task(
                 "API request.",
             )
         )
-        return ApprovalResponse(ok=result.ok, message=result.content)
+        return _approval_response(result, "create_scheduled_task")
     except Exception as error:
         return _error(error)
 
@@ -829,7 +858,7 @@ def run_task(
         result = registry.execute(
             AgentAction("run_scheduled_task", {"task_id": task_id}, "API request.")
         )
-        return ApprovalResponse(ok=result.ok, message=result.content)
+        return _approval_response(result, "run_scheduled_task")
     except Exception as error:
         return _error(error)
 
@@ -844,7 +873,7 @@ def enable_task(
         result = registry.execute(
             AgentAction("enable_scheduled_task", {"task_id": task_id}, "API request.")
         )
-        return ApprovalResponse(ok=result.ok, message=result.content)
+        return _approval_response(result, "enable_scheduled_task")
     except Exception as error:
         return _error(error)
 
@@ -859,7 +888,7 @@ def disable_task(
         result = registry.execute(
             AgentAction("disable_scheduled_task", {"task_id": task_id}, "API request.")
         )
-        return ApprovalResponse(ok=result.ok, message=result.content)
+        return _approval_response(result, "disable_scheduled_task")
     except Exception as error:
         return _error(error)
 
@@ -874,7 +903,7 @@ def delete_task(
         result = registry.execute(
             AgentAction("delete_scheduled_task", {"task_id": task_id}, "API request.")
         )
-        return ApprovalResponse(ok=result.ok, message=result.content)
+        return _approval_response(result, "delete_scheduled_task")
     except Exception as error:
         return _error(error)
 
@@ -894,7 +923,7 @@ def approve_approval(
 
         result = registry.execute(action, bypass_confirmation=True)
         clear_approval(approval_id)
-        return ApprovalResponse(ok=result.ok, message=result.content)
+        return _approval_response(result, action.action)
     except Exception as error:
         return _error(error)
 

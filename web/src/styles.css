@@ -240,6 +240,7 @@ h1 {
 .card,
 .inlineApprovalCard,
 .inlineClarificationCard,
+.resultBlock,
 .memoryBlock,
 .schedulerPanel,
 .taskForm,
@@ -361,12 +362,116 @@ textarea:focus {
   overflow-wrap: anywhere;
 }
 
+.resultBlock {
+  min-width: 0;
+  padding: 1rem;
+  margin-bottom: 1rem;
+  overflow-wrap: anywhere;
+}
+
+.message .resultBlock {
+  margin: 0.45rem 0 0;
+}
+
+.approvalResult {
+  border-color: rgba(255, 207, 139, 0.36);
+  background: rgba(48, 39, 24, 0.72);
+}
+
+.commandResultBlock {
+  border-color: rgba(142, 166, 194, 0.24);
+  background: rgba(13, 21, 31, 0.88);
+}
+
+.browserResultBlock {
+  border-color: rgba(96, 186, 196, 0.34);
+  background: rgba(20, 49, 56, 0.68);
+}
+
+.resultBlock p {
+  color: #d7e4f2;
+  line-height: 1.5;
+}
+
+.resultFields {
+  display: grid;
+  gap: 0.55rem;
+  margin: 0.85rem 0 0;
+}
+
+.resultField {
+  display: grid;
+  grid-template-columns: 9rem minmax(0, 1fr);
+  gap: 0.75rem;
+}
+
+.resultField dt {
+  color: #9fb4ca;
+  font-size: 0.78rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.resultField dd {
+  min-width: 0;
+  margin: 0;
+  color: #d7e4f2;
+  overflow-wrap: anywhere;
+}
+
+.resultOutputGrid {
+  display: grid;
+  gap: 0.75rem;
+  margin-top: 1rem;
+}
+
+.resultOutput {
+  min-height: 5rem;
+  max-height: 18rem;
+  margin: 0.4rem 0 0;
+  overflow: auto;
+  border-radius: 6px;
+  border: 1px solid rgba(142, 166, 194, 0.13);
+  background: rgba(4, 8, 12, 0.78);
+  color: #cdd8e5;
+  padding: 0.8rem;
+  white-space: pre-wrap;
+  font-family:
+    "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+  font-size: 0.85rem;
+  line-height: 1.45;
+}
+
 .clarificationComposer {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 0.75rem;
   align-items: end;
   margin-top: 1rem;
+}
+
+.clarificationSuggestions {
+  display: grid;
+  gap: 0.55rem;
+  margin-top: 0.85rem;
+}
+
+.chipRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.chipButton {
+  border-color: rgba(96, 186, 196, 0.34);
+  border-radius: 999px;
+  background: rgba(31, 111, 120, 0.28);
+  color: #dffcff;
+  padding: 0.35rem 0.65rem;
+}
+
+.chipButton:hover:not(:disabled) {
+  background: rgba(31, 111, 120, 0.52);
 }
 
 .cardTopline {
@@ -772,5 +877,10 @@ textarea:focus {
 
   .clarificationComposer {
     grid-template-columns: 1fr;
+  }
+
+  .resultField {
+    grid-template-columns: 1fr;
+    gap: 0.25rem;
   }
 }
