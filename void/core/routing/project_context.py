@@ -47,13 +47,26 @@ def _current_project_arg() -> str:
         return "current"
 
 
+def _project_options() -> list[str]:
+    try:
+        return sorted(
+            str(project["name"])
+            for project in project_context.list_projects()
+            if str(project.get("name", "")).strip()
+        )
+    except ValueError:
+        return []
+
+
 def _project_repo_browser_clarification() -> RouteResult:
+    options = _project_options()
     return _clarification_route(
         "Which project do you want to open?",
         "project_selection",
         {
             "original_action": "open_project_repo_in_browser",
             "missing_field": "project",
+            "available_projects": options,
         },
     )
 
@@ -171,12 +184,14 @@ def match(text: str, lowered: str) -> RouteResult | None:
         )
 
     if lowered in {"switch project", "переключи проект"}:
+        options = _project_options()
         return _clarification_route(
             "Which project do you want to switch to?",
             "project_selection",
             {
                 "original_action": "set_current_project",
                 "missing_field": "project",
+                "available_projects": options,
             },
         )
 

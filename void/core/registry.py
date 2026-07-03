@@ -35,6 +35,13 @@ class ToolRegistry:
                     "Action requires approval. "
                     f"Use /approve {approval_id} or /reject {approval_id}."
                 ),
+                data={
+                    "approval_id": approval_id,
+                    "action": action.action,
+                    "arguments": action.arguments,
+                    "category": tool.category,
+                    "risk_level": tool.risk_level,
+                },
                 terminal=True,
             )
 

@@ -141,6 +141,47 @@ opened.
 This does not attach to personal Chrome, does not use persistent browser
 profiles, and does not open arbitrary user-provided URLs.
 
+## Assistant Flows
+
+Void assistant flows are deterministic-first and tools-first. The router maps
+supported project and command requests to registered tools, asks for approval
+before state-changing actions, and uses the LLM only as a fallback.
+
+Supported project flows:
+
+- Show the current project.
+- Switch the current project.
+- Open a configured project repository in a managed browser session.
+
+Supported command flows:
+
+- List configured project commands.
+- Run configured project commands after approval.
+
+Supported clarification flows:
+
+- Missing project selection.
+- Missing command selection.
+
+Supported approval flows:
+
+- State-changing actions require approval before execution.
+- Approved actions return an inline final result, such as a command result,
+  browser session result, or project context update.
+
+Supported browser flows:
+
+- Opening a project repo creates a managed Void browser session.
+- Visible sessions open a Void-owned browser window and are not attached to a
+  personal browser profile.
+
+Limitations:
+
+- No arbitrary shell execution.
+- No planner.
+- No autonomous multi-step execution.
+- No attach-to-personal-browser support.
+
 ## Git Capability
 
 Examples:

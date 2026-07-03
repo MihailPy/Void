@@ -14,6 +14,8 @@ class ChatResponse(BaseModel):
     response: str
     result_type: str = "final_answer"
     clarification: dict[str, Any] | None = None
+    message: str | None = None
+    data: dict[str, Any] | None = None
 
 
 class HealthResponse(BaseModel):
@@ -25,6 +27,8 @@ class HealthResponse(BaseModel):
 class ApprovalResponse(BaseModel):
     ok: bool
     message: str
+    result_type: str = "message"
+    data: dict[str, Any] | None = None
 
 
 class ClarificationResponse(BaseModel):

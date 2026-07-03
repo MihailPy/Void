@@ -1,10 +1,12 @@
 from collections.abc import Mapping
+import sys
 from typing import Any
 
 import anyio
 import httpx
 
 from void.api.server import app
+from void.core import project_context
 
 
 async def _request(
@@ -28,6 +30,42 @@ def request(
     json: Mapping[str, Any] | None = None,
 ) -> httpx.Response:
     return anyio.run(_request, method, path, json)
+
+
+def _save_projects(projects: list[dict[str, Any]], current_project: str = "void") -> None:
+    project_context.save_project_context(
+        {
+            "current_project": current_project,
+            "projects": projects,
+        }
+    )
+
+
+def _void_project(commands: dict[str, str] | None = None) -> dict[str, Any]:
+    return {
+        "id": "void",
+        "name": "Void",
+        "aliases": ["void", "MihailPy/Void"],
+        "root_path": ".",
+        "repo_url": "https://github.com/MihailPy/Void",
+        "commands": commands
+        if commands is not None
+        else {
+            "verify": "make verify",
+            "test": "make verify",
+            "build": "cd web && npm run build",
+            "dev": "make web",
+        },
+    }
+
+
+def _approval_for(action: str) -> dict[str, Any]:
+    approvals_response = request("GET", "/approvals")
+    approvals = approvals_response.json()["pending"]
+    for approval in approvals:
+        if approval["action"] == action:
+            return approval
+    raise AssertionError(f"Approval not found for action: {action}")
 
 
 def test_health():
@@ -141,6 +179,8 @@ def test_set_current_project_endpoint_creates_approval():
     payload = response.json()
     assert payload["ok"] is True
     assert "approval" in payload["message"].lower()
+    assert payload["result_type"] == "approval"
+    assert payload["data"]["action"] == "set_current_project"
 
 
 def test_run_project_command_endpoint_creates_approval():
@@ -154,6 +194,7 @@ def test_run_project_command_endpoint_creates_approval():
     payload = response.json()
     assert payload["ok"] is True
     assert "approval" in payload["message"].lower()
+    assert payload["result_type"] == "approval"
 
 
 def test_open_project_repo_endpoint_creates_approval():
@@ -167,6 +208,7 @@ def test_open_project_repo_endpoint_creates_approval():
     payload = response.json()
     assert payload["ok"] is True
     assert "approval" in payload["message"].lower()
+    assert payload["result_type"] == "approval"
 
     approvals_response = request("GET", "/approvals")
     approvals = approvals_response.json()["pending"]
@@ -236,6 +278,126 @@ def test_clarification_endpoints_resume_action():
 
     cleared_response = request("GET", "/clarification")
     assert cleared_response.json()["pending"] is None
+
+
+def test_flow_open_project_on_github_clarifies_approves_and_opens_browser(monkeypatch):
+    opened: list[tuple[str, str]] = []
+
+    def open_session(url: str, mode: str) -> dict[str, Any]:
+        opened.append((url, mode))
+        return {
+            "session_id": "session_repo",
+            "mode": mode,
+            "url": url,
+            "title": "MihailPy/Void",
+            "created_at": "2026-07-03T12:00:00",
+            "last_used_at": "2026-07-03T12:00:00",
+        }
+
+    monkeypatch.setattr("void.tools.project_tools.browser_sessions.open_session", open_session)
+
+    first = request("POST", "/chat", json={"message": "open project on github"})
+    assert first.status_code == 200
+    assert first.json()["result_type"] == "clarification_request"
+    assert first.json()["clarification"]["context"]["available_projects"] == ["Void"]
+
+    second = request("POST", "/clarification/respond", json={"answer": "Void"})
+    assert second.status_code == 200
+    second_payload = second.json()
+    assert second_payload["result_type"] == "tool_call"
+    assert second_payload["data"]["approval_id"]
+
+    assert request("GET", "/clarification").json()["pending"] is None
+    approval = _approval_for("open_project_repo_in_browser")
+    assert approval["arguments"] == {"project": "Void"}
+
+    approved = request("POST", f"/approvals/{approval['id']}/approve")
+    assert approved.status_code == 200
+    approved_payload = approved.json()
+    assert approved_payload["ok"] is True
+    assert approved_payload["result_type"] == "browser_result"
+    assert approved_payload["data"]["project"]["name"] == "Void"
+    assert approved_payload["data"]["url"] == "https://github.com/MihailPy/Void"
+    assert approved_payload["data"]["session_id"] == "session_repo"
+    assert approved_payload["data"]["mode"] == "visible"
+    assert approved_payload["data"]["title"] == "MihailPy/Void"
+    assert opened == [("https://github.com/MihailPy/Void", "visible")]
+    assert request("GET", "/approvals").json()["pending"] == []
+
+
+def test_flow_run_project_command_clarifies_approves_and_executes():
+    command = f"{sys.executable} -c \"print('flow ok')\""
+    _save_projects([_void_project({"test": command, "verify": command})])
+
+    first = request("POST", "/chat", json={"message": "run project command"})
+    assert first.status_code == 200
+    first_payload = first.json()
+    assert first_payload["result_type"] == "clarification_request"
+    assert "test" in first_payload["clarification"]["context"]["available_commands"]
+
+    second = request("POST", "/clarification/respond", json={"answer": "test"})
+    assert second.status_code == 200
+    assert second.json()["data"]["action"] == "run_project_command"
+    assert request("GET", "/clarification").json()["pending"] is None
+
+    approval = _approval_for("run_project_command")
+    assert approval["arguments"]["command_key"] == "test"
+
+    approved = request("POST", f"/approvals/{approval['id']}/approve")
+    assert approved.status_code == 200
+    approved_payload = approved.json()
+    assert approved_payload["ok"] is True
+    assert approved_payload["result_type"] == "command_result"
+    assert approved_payload["data"]["command_key"] == "test"
+    assert approved_payload["data"]["command"] == command
+    assert approved_payload["data"]["returncode"] == 0
+    assert approved_payload["data"]["stdout"].strip() == "flow ok"
+    assert approved_payload["data"]["stderr"] == ""
+    assert request("GET", "/approvals").json()["pending"] == []
+
+
+def test_flow_switch_project_clarifies_approves_and_updates_context():
+    _save_projects(
+        [
+            _void_project({"test": f"{sys.executable} -c \"print('void')\""}),
+            {
+                "id": "docs",
+                "name": "Docs",
+                "aliases": ["documentation"],
+                "root_path": ".",
+                "repo_url": "https://github.com/MihailPy/Void",
+                "commands": {},
+            },
+        ]
+    )
+
+    first = request("POST", "/chat", json={"message": "switch project"})
+    assert first.status_code == 200
+    first_payload = first.json()
+    assert first_payload["result_type"] == "clarification_request"
+    assert first_payload["clarification"]["context"]["available_projects"] == [
+        "Docs",
+        "Void",
+    ]
+
+    second = request("POST", "/clarification/respond", json={"answer": "Docs"})
+    assert second.status_code == 200
+    assert second.json()["data"]["action"] == "set_current_project"
+    assert request("GET", "/clarification").json()["pending"] is None
+
+    approval = _approval_for("set_current_project")
+    assert approval["arguments"] == {"project": "Docs"}
+
+    approved = request("POST", f"/approvals/{approval['id']}/approve")
+    assert approved.status_code == 200
+    approved_payload = approved.json()
+    assert approved_payload["ok"] is True
+    assert approved_payload["result_type"] == "message"
+    assert approved_payload["data"]["project"]["id"] == "docs"
+    assert request("GET", "/approvals").json()["pending"] == []
+
+    current = request("GET", "/projects/current")
+    assert current.json()["project"]["id"] == "docs"
 
 
 def test_clarification_respond_without_pending_does_not_call_chat():

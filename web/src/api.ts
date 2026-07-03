@@ -14,6 +14,8 @@ export type ChatResponse = {
   response: string;
   result_type?: string;
   clarification?: ClarificationRequest | null;
+  message?: string;
+  data?: Record<string, unknown> | null;
 };
 
 export type ClarificationRequest = {
@@ -122,6 +124,8 @@ export type ApprovalsResponse = {
 export type ApprovalActionResponse = {
   ok: boolean;
   message: string;
+  result_type?: string;
+  data?: Record<string, unknown> | null;
 };
 
 export type ScheduledTask = {
