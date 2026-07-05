@@ -383,6 +383,11 @@ textarea:focus {
   background: rgba(13, 21, 31, 0.88);
 }
 
+.terminalResultBlock {
+  border-color: rgba(142, 166, 194, 0.24);
+  background: rgba(13, 21, 31, 0.88);
+}
+
 .browserResultBlock {
   border-color: rgba(96, 186, 196, 0.34);
   background: rgba(20, 49, 56, 0.68);
