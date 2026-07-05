@@ -139,6 +139,48 @@ def match(text: str, lowered: str) -> RouteResult | None:
             },
         )
 
+    if lowered in {
+        "run command in terminal",
+        "run project command in terminal",
+        "open terminal and run command",
+        "запусти команду в терминале",
+        "запусти команду проекта в терминале",
+        "открой терминал и запусти команду",
+    }:
+        options = project_command_options()
+        suffix = f" Available: {', '.join(options)}" if options else ""
+        return _clarification_route(
+            f"Which command do you want to run in terminal?{suffix}",
+            "command_selection",
+            {
+                "original_action": "run_project_command_visible",
+                "missing_field": "command_key",
+                "available_commands": options,
+            },
+        )
+
+    visible_command_match = re.match(
+        r"^run\s+project\s+command\s+(.+?)\s+in\s+terminal$",
+        text,
+        re.IGNORECASE | re.DOTALL,
+    )
+    if visible_command_match is None:
+        visible_command_match = re.match(
+            r"^запусти\s+команду\s+проекта\s+(.+?)\s+в\s+терминале$",
+            text,
+            re.IGNORECASE | re.DOTALL,
+        )
+    if visible_command_match:
+        return RouteResult(
+            matched=True,
+            confidence=0.95,
+            action=AgentAction(
+                "run_project_command_visible",
+                {"command_key": clean(visible_command_match.group(1))},
+                "User asks to run a predefined current-project command in a visible terminal.",
+            ),
+        )
+
     command_match = re.match(
         r"^run\s+project\s+command\s+(.+)$",
         text,
@@ -180,6 +222,35 @@ def match(text: str, lowered: str) -> RouteResult | None:
                 "run_project_command",
                 {"command_key": command_aliases[lowered]},
                 "User asks to run a mapped predefined current-project command.",
+            ),
+        )
+
+    visible_command_aliases = {
+        "run tests in terminal": "test",
+        "run test in terminal": "test",
+        "open terminal and run tests": "test",
+        "open terminal and run test": "test",
+        "run verification in terminal": "verify",
+        "run verify in terminal": "verify",
+        "run check in terminal": "verify",
+        "run build in terminal": "build",
+        "run dev in terminal": "dev",
+        "запусти тесты в терминале": "test",
+        "запусти тест в терминале": "test",
+        "запусти проверку в терминале": "verify",
+        "открой терминал и запусти тесты": "test",
+        "открой терминал и запусти тест": "test",
+        "запусти сборку в терминале": "build",
+        "запусти dev в терминале": "dev",
+    }
+    if lowered in visible_command_aliases:
+        return RouteResult(
+            matched=True,
+            confidence=0.95,
+            action=AgentAction(
+                "run_project_command_visible",
+                {"command_key": visible_command_aliases[lowered]},
+                "User asks to run a mapped predefined current-project command in a visible terminal.",
             ),
         )
 

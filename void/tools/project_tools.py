@@ -271,6 +271,29 @@ def run_project_command(command_key: str, timeout_seconds: int = 120) -> ToolRes
     return ToolResult(ok=payload["ok"], content="\n".join(lines), data=payload)
 
 
+def run_project_command_visible(command_key: str) -> ToolResult:
+    try:
+        payload = project_commands.run_project_command_visible(command_key)
+    except ValueError as error:
+        return ToolResult(ok=False, content=str(error), data={"command_key": command_key})
+
+    project = payload["project"]
+    terminal = payload["terminal"]
+    status = "launched" if payload["ok"] else "failed to launch"
+    lines = [
+        f"Project command {status} in visible terminal: {payload['command_key']}",
+        f"Project: {project['name']} ({project['id']})",
+        f"Command: {payload['command']}",
+        f"CWD: {payload['cwd']}",
+        f"Terminal: {terminal.get('terminal_type', 'unknown')}",
+        f"Status: {terminal.get('message', '')}",
+    ]
+    if terminal.get("pid") is not None:
+        lines.append(f"PID: {terminal['pid']}")
+
+    return ToolResult(ok=payload["ok"], content="\n".join(lines), data=payload)
+
+
 def definitions() -> list[ToolDefinition]:
     return [
         ToolDefinition(
@@ -335,6 +358,14 @@ def definitions() -> list[ToolDefinition]:
             "run_project_command",
             "Run a predefined command for the current project.",
             run_project_command,
+            requires_confirmation=True,
+            category="project",
+            risk_level="write",
+        ),
+        ToolDefinition(
+            "run_project_command_visible",
+            "Run a predefined command for the current project in a visible terminal.",
+            run_project_command_visible,
             requires_confirmation=True,
             category="project",
             risk_level="write",

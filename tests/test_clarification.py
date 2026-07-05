@@ -126,3 +126,20 @@ def test_agent_resumes_command_selection_with_approval():
     assert second.kind == "tool_call"
     assert "requires approval" in second.content.lower()
     assert has_pending_clarification() is False
+
+
+def test_agent_resumes_visible_command_selection_with_approval():
+    agent = Agent(registry=_project_registry())
+
+    first = agent.handle_result("run command in terminal")
+    second = agent.handle_result("test")
+
+    assert first.kind == "clarification_request"
+    assert first.clarification is not None
+    assert first.clarification.context["original_action"] == "run_project_command_visible"
+    assert second.kind == "tool_call"
+    assert second.tool_result is not None
+    assert second.tool_result.data is not None
+    assert second.tool_result.data["action"] == "run_project_command_visible"
+    assert "requires approval" in second.content.lower()
+    assert has_pending_clarification() is False

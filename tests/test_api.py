@@ -6,7 +6,7 @@ import anyio
 import httpx
 
 from void.api.server import app
-from void.core import project_context
+from void.core import project_commands, project_context
 
 
 async def _request(
@@ -197,6 +197,18 @@ def test_run_project_command_endpoint_creates_approval():
     assert payload["result_type"] == "approval"
 
 
+def test_run_project_command_visible_endpoint_creates_approval():
+    response = request("POST", "/projects/current/commands/test/run-visible")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["ok"] is True
+    assert "approval" in payload["message"].lower()
+    assert payload["result_type"] == "approval"
+    assert payload["data"]["action"] == "run_project_command_visible"
+    assert payload["data"]["arguments"] == {"command_key": "test"}
+
+
 def test_open_project_repo_endpoint_creates_approval():
     response = request(
         "POST",
@@ -353,6 +365,56 @@ def test_flow_run_project_command_clarifies_approves_and_executes():
     assert approved_payload["data"]["returncode"] == 0
     assert approved_payload["data"]["stdout"].strip() == "flow ok"
     assert approved_payload["data"]["stderr"] == ""
+    assert request("GET", "/approvals").json()["pending"] == []
+
+
+def test_flow_run_project_command_visible_clarifies_approves_and_launches(monkeypatch):
+    command = f"{sys.executable} -c \"print('flow ok')\""
+    _save_projects([_void_project({"test": command, "verify": command})])
+    launches = []
+
+    def fake_launch(command_text: str, cwd: str) -> dict[str, Any]:
+        launches.append((command_text, cwd))
+        return {
+            "ok": True,
+            "terminal_type": "fake-terminal",
+            "command": command_text,
+            "cwd": cwd,
+            "pid": 456,
+            "message": "Launched command in fake-terminal.",
+        }
+
+    monkeypatch.setattr(
+        project_commands.terminal_runner,
+        "launch_terminal_command",
+        fake_launch,
+    )
+
+    first = request("POST", "/chat", json={"message": "run command in terminal"})
+    assert first.status_code == 200
+    first_payload = first.json()
+    assert first_payload["result_type"] == "clarification_request"
+    assert first_payload["clarification"]["context"]["original_action"] == (
+        "run_project_command_visible"
+    )
+
+    second = request("POST", "/clarification/respond", json={"answer": "test"})
+    assert second.status_code == 200
+    assert second.json()["data"]["action"] == "run_project_command_visible"
+
+    approval = _approval_for("run_project_command_visible")
+    assert approval["arguments"]["command_key"] == "test"
+
+    approved = request("POST", f"/approvals/{approval['id']}/approve")
+    assert approved.status_code == 200
+    approved_payload = approved.json()
+    assert approved_payload["ok"] is True
+    assert approved_payload["result_type"] == "terminal_launch_result"
+    assert approved_payload["data"]["mode"] == "visible_terminal"
+    assert approved_payload["data"]["command_key"] == "test"
+    assert approved_payload["data"]["terminal"]["terminal_type"] == "fake-terminal"
+    assert approved_payload["data"]["terminal"]["pid"] == 456
+    assert launches == [(command, approved_payload["data"]["cwd"])]
     assert request("GET", "/approvals").json()["pending"] == []
 
 

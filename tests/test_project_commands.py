@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import sys
 
-from void.core import project_commands, project_context
+from void.core import project_commands, project_context, terminal_runner
 from void.core.permissions import approve, clear_approval, list_approvals
 from void.core.types import AgentAction
 from void.tools.builtin import build_registry
@@ -70,6 +70,46 @@ def test_run_project_command_timeout():
     assert "timed out" in result["error"]
 
 
+def test_terminal_supported_macos(monkeypatch):
+    monkeypatch.setattr(terminal_runner.platform, "system", lambda: "Darwin")
+    monkeypatch.setattr(terminal_runner.shutil, "which", lambda name: "/usr/bin/osascript")
+
+    assert terminal_runner.terminal_supported() is True
+
+
+def test_terminal_supported_linux_without_emulator(monkeypatch):
+    monkeypatch.setattr(terminal_runner.platform, "system", lambda: "Linux")
+    monkeypatch.setattr(terminal_runner.shutil, "which", lambda name: None)
+
+    assert terminal_runner.terminal_supported() is False
+
+
+def test_run_project_command_visible_uses_terminal_runner(monkeypatch):
+    _save_commands({"test": "python -V"})
+    launches = []
+
+    def fake_launch(command: str, cwd: str) -> dict:
+        launches.append((command, cwd))
+        return {
+            "ok": True,
+            "terminal_type": "fake-terminal",
+            "command": command,
+            "cwd": cwd,
+            "pid": 123,
+            "message": "Launched command in fake-terminal.",
+        }
+
+    monkeypatch.setattr(project_commands.terminal_runner, "launch_terminal_command", fake_launch)
+
+    result = project_commands.run_project_command_visible("test")
+
+    assert result["ok"] is True
+    assert result["mode"] == "visible_terminal"
+    assert result["command_key"] == "test"
+    assert result["terminal"]["terminal_type"] == "fake-terminal"
+    assert launches == [("python -V", result["cwd"])]
+
+
 def test_project_command_not_found_error():
     _save_commands({"test": "python -V"})
 
@@ -104,6 +144,22 @@ def test_run_project_command_tool_is_approval_gated():
     assert "approval" in result.content.lower()
     approvals = list_approvals()
     assert approvals[0]["action"] == "run_project_command"
+    assert approvals[0]["category"] == "project"
+    assert approvals[0]["risk_level"] == "write"
+
+
+def test_run_project_command_visible_tool_is_approval_gated():
+    _save_commands({"test": "python -V"})
+    registry = build_registry()
+
+    result = registry.execute(
+        AgentAction("run_project_command_visible", {"command_key": "test"}, "test")
+    )
+
+    assert result.ok is True
+    assert "approval" in result.content.lower()
+    approvals = list_approvals()
+    assert approvals[0]["action"] == "run_project_command_visible"
     assert approvals[0]["category"] == "project"
     assert approvals[0]["risk_level"] == "write"
 

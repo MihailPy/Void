@@ -80,6 +80,7 @@ def test_project_tools_registered_with_metadata():
         "open_project_repo_in_browser": ("project", "network", True),
         "list_project_commands": ("project", "read", False),
         "run_project_command": ("project", "write", True),
+        "run_project_command_visible": ("project", "write", True),
         "set_current_project": ("project", "write", True),
     }
 

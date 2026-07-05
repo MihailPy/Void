@@ -141,6 +141,43 @@ def test_router_run_tests_maps_to_project_command():
     assert route.action.arguments == {"command_key": "test"}
 
 
+def test_router_run_tests_in_terminal_maps_to_visible_project_command():
+    route = Router().route("run tests in terminal")
+
+    assert route.matched is True
+    assert route.action is not None
+    assert route.action.action == "run_project_command_visible"
+    assert route.action.arguments == {"command_key": "test"}
+
+
+def test_router_run_project_command_by_key_in_terminal():
+    route = Router().route("run project command verify in terminal")
+
+    assert route.matched is True
+    assert route.action is not None
+    assert route.action.action == "run_project_command_visible"
+    assert route.action.arguments == {"command_key": "verify"}
+
+
+def test_router_russian_run_verification_in_terminal_maps_to_visible_project_command():
+    route = Router().route("запусти проверку в терминале")
+
+    assert route.matched is True
+    assert route.action is not None
+    assert route.action.action == "run_project_command_visible"
+    assert route.action.arguments == {"command_key": "verify"}
+
+
+def test_router_run_command_in_terminal_requests_clarification():
+    route = Router().route("run command in terminal")
+
+    assert route.matched is True
+    assert route.action is None
+    assert route.clarification is not None
+    assert route.clarification.clarification_type == "command_selection"
+    assert route.clarification.context["original_action"] == "run_project_command_visible"
+
+
 def test_router_list_scheduled_tasks():
     route = Router().route("Покажи scheduled tasks")
 
