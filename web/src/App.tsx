@@ -168,6 +168,9 @@ function responseResultType(response: {
   if ("approval_id" in data) {
     return "approval";
   }
+  if (response.result_type === "terminal_launch_result") {
+    return "terminal_launch_result";
+  }
   if ("command_key" in data) {
     return "command_result";
   }
@@ -210,6 +213,7 @@ function ResultBlock({ result }: { result: StructuredResult }) {
   const data = result.data ?? {};
   const project = asRecord(data.project);
   const session = asRecord(data.session);
+  const terminal = asRecord(data.terminal);
   const type = result.resultType ?? "message";
 
   if (type === "approval") {
@@ -257,6 +261,30 @@ function ResultBlock({ result }: { result: StructuredResult }) {
             <pre className="resultOutput">{asText(data.stderr, "(empty)")}</pre>
           </div>
         </div>
+      </article>
+    );
+  }
+
+  if (type === "terminal_launch_result") {
+    return (
+      <article className="resultBlock terminalResultBlock">
+        <div className="cardTopline">
+          <span>Terminal launch</span>
+          <span>{terminal?.ok === false ? "failed" : "launched"}</span>
+        </div>
+        <FieldList
+          fields={[
+            ["Command key", data.command_key],
+            ["Command", data.command],
+            ["CWD", data.cwd],
+            ["Project", project?.name],
+            ["Terminal type", terminal?.terminal_type],
+            ["PID", terminal?.pid],
+            ["Status", terminal?.ok === false ? "failed" : "launched"],
+            ["Message", terminal?.message],
+            ["Mode", data.mode ?? "visible_terminal"],
+          ]}
+        />
       </article>
     );
   }
