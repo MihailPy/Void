@@ -359,6 +359,15 @@ export function runProjectCommand(
   );
 }
 
+export function runProjectCommandVisible(commandKey: string) {
+  return request<ApprovalActionResponse>(
+    `/projects/current/commands/${encodeURIComponent(commandKey)}/run-visible`,
+    {
+      method: "POST",
+    },
+  );
+}
+
 export function getApprovals() {
   return request<ApprovalsResponse>("/approvals");
 }

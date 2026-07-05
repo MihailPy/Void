@@ -54,8 +54,20 @@ Memory files live under `memory/` and runtime package defaults live under `void/
 - Command execution requires approval through the standard permission layer.
 - Approved commands run from the current project's safe root path.
 - stdout, stderr, return code, duration, command, cwd, and project identity are captured.
-- Visible terminal mode is not implemented yet.
-- Streaming logs, background jobs, and interactive stdin are not implemented yet.
+- Captured mode runs commands in the background and returns stdout, stderr, return code, and duration.
+- Visible terminal mode launches the predefined command in a local system terminal on the host machine running Void.
+- Visible terminal mode returns launch status, terminal type, command, cwd, and pid when available.
+- Visible terminal mode does not stream terminal output to the Web UI and does not provide stdin control from Void.
+- Streaming terminal logs, background daemon management, and attaching to existing terminal sessions are not implemented.
+
+## Visible Terminal Runner
+
+- `run_project_command_visible` runs only predefined current-project command keys.
+- The router maps explicit requests such as `run tests in terminal` to command keys like `test`.
+- Missing command keys use the existing `command_selection` clarification flow.
+- Approval is required before a terminal window is opened.
+- The terminal opens on the machine running Void, not necessarily on the user's browser device.
+- v1 supports macOS via Terminal.app, Linux best effort via common terminal emulators, and Windows best effort via `cmd.exe`.
 
 ## Permission Layer
 

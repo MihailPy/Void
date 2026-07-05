@@ -742,6 +742,11 @@ textarea:focus {
   color: #cdd8e5;
 }
 
+.commandItem .buttonRow {
+  margin-top: 0;
+  justify-content: flex-end;
+}
+
 .projectPanel label,
 .projectSwitcher label {
   display: grid;

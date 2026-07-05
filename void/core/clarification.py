@@ -158,6 +158,16 @@ def action_from_resolved_clarification(
             "User answered a project-command clarification.",
         )
 
+    if (
+        clarification_type == "command_selection"
+        and original_action == "run_project_command_visible"
+    ):
+        return AgentAction(
+            "run_project_command_visible",
+            {"command_key": answer},
+            "User answered a visible project-command clarification.",
+        )
+
     return None
 
 

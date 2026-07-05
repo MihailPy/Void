@@ -157,6 +157,7 @@ Supported command flows:
 
 - List configured project commands.
 - Run configured project commands after approval.
+- Run configured project commands in a visible terminal after approval.
 
 Supported clarification flows:
 
@@ -222,6 +223,7 @@ Supported v1 cases:
 
 - `open project on github` asks which project to open.
 - `run project command` asks which configured command key to run.
+- `run command in terminal` asks which configured command key to run visibly.
 - `switch project` asks which project to switch to.
 
 API endpoints:

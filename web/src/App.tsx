@@ -55,6 +55,7 @@ import {
   runBrowserTask,
   runDueTasksNow,
   runProjectCommand,
+  runProjectCommandVisible,
   runTask,
   sendChatMessage,
   setCurrentProject,
@@ -1389,6 +1390,7 @@ function ProjectTab() {
         (approval) =>
           approval.action === "set_current_project" ||
           approval.action === "run_project_command" ||
+          approval.action === "run_project_command_visible" ||
           approval.action === "open_project_repo_in_browser",
       );
       setInlineApproval(pendingApproval);
@@ -1450,6 +1452,28 @@ function ProjectTab() {
     }
   }
 
+  async function handleRunCommandVisible(commandKey: string) {
+    setError("");
+    setMessage(null);
+    setCommandResult(null);
+    setInlineApproval(null);
+    setRunningCommand(`${commandKey}:terminal`);
+    try {
+      const response = await runProjectCommandVisible(commandKey);
+      setMessage(toStructuredResult(response));
+      const pendingApproval = await fetchInlineApproval(
+        (approval) =>
+          approval.id === response.data?.approval_id ||
+          approval.action === "run_project_command_visible",
+      );
+      setInlineApproval(pendingApproval);
+    } catch (currentError) {
+      setError(getErrorMessage(currentError));
+    } finally {
+      setRunningCommand("");
+    }
+  }
+
   async function handleOpenRepo() {
     const project = currentProject?.id ?? currentProject?.name ?? "";
     if (!project) {
@@ -1488,6 +1512,7 @@ function ProjectTab() {
       if (
         action === "approve" &&
         (approvedAction === "run_project_command" ||
+          approvedAction === "run_project_command_visible" ||
           approvedAction === "open_project_repo_in_browser")
       ) {
         setCommandResult(toStructuredResult(response));
@@ -1528,6 +1553,7 @@ function ProjectTab() {
             approval.id === response.data?.approval_id ||
             approval.action === "set_current_project" ||
             approval.action === "run_project_command" ||
+            approval.action === "run_project_command_visible" ||
             approval.action === "open_project_repo_in_browser",
         );
         setInlineApproval(pendingApproval);
@@ -1684,13 +1710,25 @@ function ProjectTab() {
                   <h3>{key}</h3>
                   <code>{projectCommands[key]}</code>
                 </div>
-                <button
-                  type="button"
-                  disabled={Boolean(runningCommand)}
-                  onClick={() => void handleRunCommand(key)}
-                >
-                  {runningCommand === key ? "Requesting..." : "Run"}
-                </button>
+                <div className="buttonRow">
+                  <button
+                    type="button"
+                    disabled={Boolean(runningCommand)}
+                    onClick={() => void handleRunCommand(key)}
+                  >
+                    {runningCommand === key ? "Requesting..." : "Run"}
+                  </button>
+                  <button
+                    className="secondaryButton"
+                    type="button"
+                    disabled={Boolean(runningCommand)}
+                    onClick={() => void handleRunCommandVisible(key)}
+                  >
+                    {runningCommand === `${key}:terminal`
+                      ? "Requesting..."
+                      : "Run in Terminal"}
+                  </button>
+                </div>
               </article>
             ))
           )}

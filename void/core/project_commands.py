@@ -7,6 +7,7 @@ import time
 from pathlib import Path
 from typing import Any
 
+from void.core import terminal_runner
 from void.core.project_context import get_current_project
 from void.core.safety import PROJECT_ROOT, safe_project_path
 
@@ -150,3 +151,21 @@ def run_project_command(command_key: str, timeout_seconds: int = 120) -> dict[st
             "project": resolved["project"],
             "error": f"Project command timed out after {timeout} seconds.",
         }
+
+
+def run_project_command_visible(command_key: str) -> dict[str, Any]:
+    """Launch one predefined command for the current project in a visible terminal."""
+    resolved = get_project_command(command_key)
+    terminal = terminal_runner.launch_terminal_command(
+        resolved["command"],
+        resolved["cwd"],
+    )
+    return {
+        "ok": bool(terminal.get("ok")),
+        "mode": "visible_terminal",
+        "command_key": resolved["key"],
+        "command": resolved["command"],
+        "cwd": resolved["cwd"],
+        "project": resolved["project"],
+        "terminal": terminal,
+    }
