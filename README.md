@@ -4,7 +4,7 @@ Void — локальный AI-помощник с deterministic core, tools, sk
 
 ## Version
 
-Current version: **Void v1.4.0**
+The release version is centralized in `void/__version__.py`.
 
 ## Features
 
@@ -19,6 +19,13 @@ Current version: **Void v1.4.0**
 - Task Scheduler
 - Scheduler Worker
 - Browser Capability
+- Browser Interactive
+- Managed Browser Sessions
+- Project Context
+- Project Commands
+- Project Link Actions
+- Clarification Flow
+- Visible Terminal Runner
 - Git Capability
 - Memory layer
 - LLM fallback through LM Studio / OpenAI-compatible API
@@ -181,6 +188,7 @@ Limitations:
 - No arbitrary shell execution.
 - No planner.
 - No autonomous multi-step execution.
+- No terminal output streaming.
 - No attach-to-personal-browser support.
 
 ## Git Capability
@@ -193,7 +201,7 @@ CLI:
 git status
 покажи diff
 какой commit написать
-сделай commit с сообщением "Void v1.4: Git Capability"
+сделай commit с сообщением "Release hardening"
 ```
 
 Notes:
@@ -291,6 +299,7 @@ POST /approvals/{approval_id}/approve
 
 ```bash
 make check
+make verify
 make clean
 make cli
 make api
@@ -299,14 +308,12 @@ make web
 
 ## Development Status
 
-Current project metadata version: Void v1.4.0.
+Release version metadata is read from `void/__version__.py`.
 
 ## Roadmap
 
-- Interactive browser automation
-- Advanced git workflows with stronger approval controls
-- Better remote access
-- More skills
-- Web UI improvements
+- Release packaging
+- Remote access hardening
+- Plugin and skill marketplace
 
 See [docs/roadmap.md](docs/roadmap.md) for the concise roadmap.

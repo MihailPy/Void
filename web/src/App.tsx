@@ -97,7 +97,7 @@ const tabs: { id: Tab; label: string }[] = [
   { id: "chat", label: "Chat" },
   { id: "browser", label: "Browser" },
   { id: "git", label: "Git" },
-  { id: "project", label: "Project" },
+  { id: "project", label: "Projects" },
   { id: "approvals", label: "Approvals" },
   { id: "tasks", label: "Tasks" },
   { id: "capabilities", label: "Capabilities" },
@@ -730,9 +730,6 @@ function BrowserTab() {
   const [instruction, setInstruction] = useState("Изучи страницу кратко");
   const [loadingAction, setLoadingAction] = useState("");
   const [inlineApproval, setInlineApproval] = useState<Approval | null>(null);
-  const [inlineClarification, setInlineClarification] =
-    useState<ClarificationRequest | null>(null);
-  const [clarificationAnswer, setClarificationAnswer] = useState("");
   const [approvalActionId, setApprovalActionId] = useState("");
   const [result, setResult] = useState<StructuredResult | null>(null);
   const [error, setError] = useState("");
@@ -1323,7 +1320,7 @@ function GitTab() {
             disabled={Boolean(loadingAction)}
             onClick={() => void handleGitAction("staged")}
           >
-            {loadingAction === "staged" ? "Loading..." : "Staged Diff"}
+            {loadingAction === "staged" ? "Loading..." : "Staged diff"}
           </button>
           <button
             type="button"
@@ -1337,14 +1334,14 @@ function GitTab() {
             disabled={Boolean(loadingAction)}
             onClick={() => void handleGitAction("branch")}
           >
-            {loadingAction === "branch" ? "Loading..." : "Current Branch"}
+            {loadingAction === "branch" ? "Loading..." : "Current branch"}
           </button>
           <button
             type="button"
             disabled={Boolean(loadingAction)}
             onClick={() => void handleGitAction("suggest")}
           >
-            {loadingAction === "suggest" ? "Loading..." : "Suggest Commit Message"}
+            {loadingAction === "suggest" ? "Loading..." : "Suggest commit message"}
           </button>
         </div>
 
@@ -1354,7 +1351,7 @@ function GitTab() {
             <input
               value={commitMessage}
               onChange={(event) => setCommitMessage(event.target.value)}
-              placeholder='Void v1.4: Git Capability'
+              placeholder="Release hardening"
             />
           </label>
           <button
@@ -1606,7 +1603,7 @@ function ProjectTab() {
     <section className="panel">
       <div className="panelHeader">
         <div>
-          <h1>Project</h1>
+          <h1>Projects</h1>
           <p>Project context stored in local JSON memory.</p>
         </div>
         <button

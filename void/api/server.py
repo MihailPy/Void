@@ -154,7 +154,7 @@ async def validation_exception_handler(
 ) -> JSONResponse:
     return JSONResponse(
         status_code=422,
-        content=ErrorResponse(ok=False, error=str(exc)).model_dump(),
+        content=ErrorResponse(ok=False, error=str(exc), message=str(exc)).model_dump(),
     )
 
 
@@ -162,13 +162,13 @@ async def validation_exception_handler(
 async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:
     return JSONResponse(
         status_code=500,
-        content=ErrorResponse(ok=False, error=str(exc)).model_dump(),
+        content=ErrorResponse(ok=False, error=str(exc), message=str(exc)).model_dump(),
     )
 
 
 def _error(error: Exception | str) -> ErrorResponse:
     message = str(error)
-    return ErrorResponse(ok=False, error=message)
+    return ErrorResponse(ok=False, error=message, message=message)
 
 
 def _result_type(action: str | None, result: ToolResult) -> str:

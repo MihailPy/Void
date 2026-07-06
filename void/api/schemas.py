@@ -199,3 +199,6 @@ class GitCommitRequest(BaseModel):
 class ErrorResponse(BaseModel):
     ok: bool
     error: str
+    message: str | None = None
+    result_type: str = "error"
+    data: dict[str, Any] | None = None

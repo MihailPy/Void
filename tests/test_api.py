@@ -6,6 +6,7 @@ import anyio
 import httpx
 
 from void.api.server import app
+from void.__version__ import __version__
 from void.core import project_commands, project_context
 
 
@@ -73,6 +74,19 @@ def test_health():
 
     assert response.status_code == 200
     assert response.json()["ok"] is True
+    assert response.json()["version"] == __version__
+
+
+def test_error_response_shape_for_missing_approval():
+    response = request("POST", "/approvals/missing/approve")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["ok"] is False
+    assert payload["error"] == "Approval not found: missing"
+    assert payload["message"] == "Approval not found: missing"
+    assert payload["result_type"] == "error"
+    assert payload["data"] is None
 
 
 def test_skills():
