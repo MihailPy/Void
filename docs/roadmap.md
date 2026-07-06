@@ -14,6 +14,13 @@
 - Task Scheduler
 - Scheduler Worker
 - Browser Capability
+- Browser Interactive
+- Managed Browser Sessions
+- Project Context
+- Project Commands
+- Clarification Flow
+- Project Link Actions
+- Visible Terminal Runner
 - Git Capability
 - Auth
 - Tests
@@ -21,7 +28,5 @@
 ## Next
 
 - Release packaging
-- Better Web UI dashboards
-- Advanced browser automation
 - Remote access hardening
 - Plugin/skill marketplace

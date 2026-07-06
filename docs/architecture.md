@@ -107,5 +107,4 @@ Memory files live under `memory/` and runtime package defaults live under `void/
 - Common generated and cache directories are ignored where appropriate.
 - Protected actions require approval before execution.
 - API token auth protects endpoints when `VOID_API_TOKEN` is set.
-- Future interactive browser automation should be added as a separate capability with explicit approvals and tighter action controls.
-- Advanced git workflows should be added only with stronger approval controls.
+- New browser or Git write workflows should be added only as explicit capabilities with approval controls.
