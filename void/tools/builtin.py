@@ -3,6 +3,7 @@
 from void.core.registry import ToolRegistry
 from void.core.types import ToolDefinition, ToolResult
 from void.tools import (
+    activity_tools,
     browser_tools,
     capability_tools,
     file_tools,
@@ -21,6 +22,7 @@ def build_registry() -> ToolRegistry:
     registry = ToolRegistry()
 
     for module in (
+        activity_tools,
         file_tools,
         memory_tools,
         project_tools,

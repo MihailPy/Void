@@ -63,6 +63,25 @@ export type CapabilitiesResponse = {
   rejected: Capability[];
 };
 
+export type Activity = {
+  id?: string;
+  timestamp?: string;
+  activity_type?: string;
+  status?: string;
+  summary?: string;
+  metadata?: Record<string, unknown>;
+};
+
+export type ActivityResponse = {
+  ok: boolean;
+  activities: Activity[];
+};
+
+export type LastActivityResponse = {
+  ok: boolean;
+  activity: Activity | null;
+};
+
 export type Project = {
   id?: string;
   name?: string;
@@ -314,6 +333,20 @@ export function getSkills() {
 
 export function getCapabilities() {
   return request<CapabilitiesResponse>("/capabilities");
+}
+
+export function getActivity() {
+  return request<ActivityResponse>("/activity");
+}
+
+export function getLastActivity() {
+  return request<LastActivityResponse>("/activity/latest");
+}
+
+export function clearActivityHistory() {
+  return request<ApprovalActionResponse>("/activity/clear", {
+    method: "POST",
+  });
 }
 
 export function getProjects() {

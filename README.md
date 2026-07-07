@@ -27,6 +27,7 @@ The release version is centralized in `void/__version__.py`.
 - Clarification Flow
 - Visible Terminal Runner
 - Git Capability
+- Activity History
 - Memory layer
 - LLM fallback through LM Studio / OpenAI-compatible API
 
@@ -153,6 +154,33 @@ profiles, and does not open arbitrary user-provided URLs.
 Void assistant flows are deterministic-first and tools-first. The router maps
 supported project and command requests to registered tools, asks for approval
 before state-changing actions, and uses the LLM only as a fallback.
+
+## Activity History
+
+Void records a lightweight execution history in `memory/activity_history.json`.
+It is for completed actions such as project commands, visible terminal launches,
+browser session open/close events, project switches, repository opens, Git
+commits, and scheduler executions.
+
+Activity History is not long-term memory, semantic memory, conversation history,
+or prompt storage. It does not store chat messages, LLM responses, or reasoning.
+The newest entries are shown first in the CLI, API, and Web UI, and only the
+newest 200 entries are kept. Clearing activity history requires approval.
+
+Useful commands:
+
+```text
+/activity
+/last-activity
+```
+
+Useful API routes:
+
+```text
+GET /activity
+GET /activity/latest
+POST /activity/clear
+```
 
 Supported project flows:
 

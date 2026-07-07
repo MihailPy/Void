@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import {
+  Activity,
   Approval,
   BrowserSession,
   Capability,
@@ -11,6 +12,7 @@ import {
   ScheduledTask,
   Skill,
   approve,
+  clearActivityHistory,
   clickBrowserSession,
   clickBrowserSelector,
   clearStoredToken,
@@ -25,6 +27,7 @@ import {
   extractBrowserText,
   fillBrowserSession,
   fillBrowserSelector,
+  getActivity,
   getApprovals,
   getBrowserLinks,
   getBrowserScreenshot,
@@ -76,6 +79,7 @@ type Tab =
   | "tasks"
   | "capabilities"
   | "skills"
+  | "activity"
   | "memory";
 
 type Message = {
@@ -102,6 +106,7 @@ const tabs: { id: Tab; label: string }[] = [
   { id: "tasks", label: "Tasks" },
   { id: "capabilities", label: "Capabilities" },
   { id: "skills", label: "Skills" },
+  { id: "activity", label: "Activity" },
   { id: "memory", label: "Memory" },
 ];
 
@@ -2399,6 +2404,155 @@ function SkillsTab() {
   );
 }
 
+function activityIcon(type: string | undefined) {
+  switch (type) {
+    case "project_command":
+      return "CMD";
+    case "terminal":
+      return "TERM";
+    case "browser_session_open":
+    case "browser_session_close":
+    case "repo_open":
+      return "WEB";
+    case "git":
+      return "GIT";
+    case "scheduler_execution":
+      return "TASK";
+    case "project_switch":
+      return "PROJ";
+    default:
+      return "ACT";
+  }
+}
+
+function ActivityTab() {
+  const [activities, setActivities] = useState<Activity[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [clearing, setClearing] = useState(false);
+  const [inlineApproval, setInlineApproval] = useState<Approval | null>(null);
+  const [approvalActionId, setApprovalActionId] = useState("");
+  const [message, setMessage] = useState("");
+  const [error, setError] = useState("");
+
+  async function loadActivity() {
+    try {
+      setError("");
+      setLoading(true);
+      const [activityResponse, approval] = await Promise.all([
+        getActivity(),
+        fetchInlineApproval((item) => item.action === "clear_activity_history"),
+      ]);
+      setActivities(activityResponse.activities);
+      setInlineApproval(approval);
+    } catch (currentError) {
+      setError(getErrorMessage(currentError));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleClear() {
+    setError("");
+    setMessage("");
+    setClearing(true);
+    try {
+      const response = await clearActivityHistory();
+      setMessage(response.message);
+      const pendingApproval = await fetchInlineApproval(
+        (approval) =>
+          approval.id === response.data?.approval_id ||
+          approval.action === "clear_activity_history",
+      );
+      setInlineApproval(pendingApproval);
+    } catch (currentError) {
+      setError(getErrorMessage(currentError));
+    } finally {
+      setClearing(false);
+    }
+  }
+
+  async function handleApprovalAction(id: string, action: ApprovalAction) {
+    setApprovalActionId(id);
+    setError("");
+    setMessage("");
+    try {
+      const response = await resolveInlineApproval(id, action);
+      setMessage(response.message);
+      setInlineApproval(null);
+      await loadActivity();
+    } catch (currentError) {
+      setError(getErrorMessage(currentError));
+    } finally {
+      setApprovalActionId("");
+    }
+  }
+
+  useEffect(() => {
+    void loadActivity();
+  }, []);
+
+  return (
+    <section className="panel">
+      <div className="panelHeader">
+        <div>
+          <h1>Activity</h1>
+          <p>Execution history for completed Void actions.</p>
+        </div>
+        <div className="buttonRow panelActions">
+          <button
+            className="secondaryButton"
+            type="button"
+            onClick={() => void loadActivity()}
+          >
+            Refresh
+          </button>
+          <button
+            className="dangerButton"
+            type="button"
+            disabled={clearing}
+            onClick={() => void handleClear()}
+          >
+            {clearing ? "Requesting..." : "Clear history"}
+          </button>
+        </div>
+      </div>
+
+      {error ? <div className="error">{error}</div> : null}
+      {message ? <div className="notice">{message}</div> : null}
+      {inlineApproval ? (
+        <InlineApprovalCard
+          approval={inlineApproval}
+          resolving={approvalActionId === inlineApproval.id}
+          onResolve={handleApprovalAction}
+        />
+      ) : null}
+      {loading ? <EmptyState>Loading activity...</EmptyState> : null}
+      {!loading && activities.length === 0 ? (
+        <EmptyState>No activity history.</EmptyState>
+      ) : null}
+
+      <div className="activityList">
+        {activities.map((activity, index) => (
+          <article className="activityItem" key={activity.id ?? index}>
+            <div className="activityIcon">{activityIcon(activity.activity_type)}</div>
+            <div className="activityBody">
+              <div className="cardTopline">
+                <span>{activity.timestamp ?? "unknown time"}</span>
+                <span className={`activityStatus ${activity.status ?? ""}`}>
+                  {activity.status ?? "unknown"}
+                </span>
+              </div>
+              <h2>{activity.summary || "Untitled activity"}</h2>
+              <div className="activityType">{activity.activity_type ?? "unknown"}</div>
+              <JsonBlock value={activity.metadata ?? {}} />
+            </div>
+          </article>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 function MemoryBlock({
   title,
   memory,
@@ -2531,6 +2685,9 @@ function ActiveTab({ tab }: { tab: Tab }) {
   }
   if (tab === "skills") {
     return <SkillsTab />;
+  }
+  if (tab === "activity") {
+    return <ActivityTab />;
   }
   if (tab === "memory") {
     return <MemoryTab />;

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from void.core import activity_history
 from void.core import scheduler
 from void.core.types import ToolDefinition, ToolResult
 
@@ -93,19 +94,41 @@ def disable_scheduled_task(task_id: str) -> ToolResult:
 def run_scheduled_task(task_id: str) -> ToolResult:
     task = scheduler.get_task(task_id)
     if task is None:
+        activity_history.log_activity(
+            "scheduler_execution",
+            "failure",
+            f"Scheduled task not found: {task_id}",
+            {"task_id": task_id},
+        )
         return ToolResult(ok=False, content=f"Scheduled task not found: {task_id}", terminal=True)
 
     from void.core.agent import create_default_agent
 
     agent = create_default_agent()
-    result = agent.handle(task["prompt"])
-    updated_task = scheduler.mark_task_ran(task_id)
-    return ToolResult(
-        ok=True,
-        content=f"Task {task_id} result:\n{result}",
-        data={"task": updated_task or task, "result": result},
-        terminal=True,
-    )
+    try:
+        result = agent.handle(task["prompt"])
+        updated_task = scheduler.mark_task_ran(task_id)
+        activity_history.log_activity(
+            "scheduler_execution",
+            "success",
+            f"Ran scheduled task {task.get('title', task_id)}",
+            {"task_id": task_id, "title": task.get("title", "")},
+        )
+        return ToolResult(
+            ok=True,
+            content=f"Task {task_id} result:\n{result}",
+            data={"task": updated_task or task, "result": result},
+            terminal=True,
+        )
+    except Exception as error:
+        scheduler.mark_task_ran(task_id)
+        activity_history.log_activity(
+            "scheduler_execution",
+            "failure",
+            f"Scheduled task failed: {task.get('title', task_id)}",
+            {"task_id": task_id, "title": task.get("title", "")},
+        )
+        return ToolResult(ok=False, content=f"Scheduled task failed: {error}", terminal=True)
 
 
 def definitions() -> list[ToolDefinition]:

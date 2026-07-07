@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urljoin
 
+from void.core import activity_history
 from void.core import browser_safety
 from void.core.safety import safe_project_path
 from void.core.types import ToolDefinition, ToolResult
@@ -327,7 +328,27 @@ def browser_wait_for_selector(
 def browser_open_session(url: str, mode: str = "headless") -> ToolResult:
     from void.core import browser_sessions
 
-    session = browser_sessions.open_session(url, mode)
+    try:
+        session = browser_sessions.open_session(url, mode)
+    except Exception:
+        activity_history.log_activity(
+            "browser_session_open",
+            "failure",
+            f"Failed to open browser session for {url}",
+            {"url": url, "mode": mode},
+        )
+        raise
+
+    activity_history.log_activity(
+        "browser_session_open",
+        "success",
+        f"Opened {session['mode']} browser session",
+        {
+            "url": session.get("url"),
+            "mode": session.get("mode"),
+            "session_id": session.get("session_id"),
+        },
+    )
     return ToolResult(
         ok=True,
         content=(
@@ -376,7 +397,19 @@ def browser_close_session(session_id: str) -> ToolResult:
     from void.core import browser_sessions
 
     if not browser_sessions.close_session(session_id):
+        activity_history.log_activity(
+            "browser_session_close",
+            "failure",
+            f"Failed to close browser session {session_id}",
+            {"session_id": session_id},
+        )
         return ToolResult(ok=False, content=f"Browser session not found: {session_id}.")
+    activity_history.log_activity(
+        "browser_session_close",
+        "success",
+        f"Closed browser session {session_id}",
+        {"session_id": session_id},
+    )
     return ToolResult(ok=True, content=f"Closed browser session {session_id}.")
 
 
@@ -384,6 +417,12 @@ def browser_close_all_sessions() -> ToolResult:
     from void.core import browser_sessions
 
     count = browser_sessions.close_all_sessions()
+    activity_history.log_activity(
+        "browser_session_close",
+        "success",
+        f"Closed {count} browser session(s)",
+        {"session_id": "all", "count": count},
+    )
     return ToolResult(ok=True, content=f"Closed {count} browser session(s).")
 
 

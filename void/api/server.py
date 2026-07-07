@@ -14,6 +14,7 @@ from void.__version__ import __version__
 from void.api.auth import get_api_token, require_api_token
 from void.api.dependencies import get_agent, get_skill_registry, get_tool_registry
 from void.api.schemas import (
+    ActivityResponse,
     ApprovalResponse,
     BrowserFillRequest,
     BrowserLinksRequest,
@@ -36,6 +37,7 @@ from void.api.schemas import (
     ErrorResponse,
     GitCommitRequest,
     HealthResponse,
+    LastActivityResponse,
     ClarificationRespondRequest,
     ClarificationResponse,
     MemoryResponse,
@@ -333,6 +335,38 @@ def capabilities(
         )
     except Exception as error:
         return _error(error)
+
+
+@app.get("/activity", response_model=ActivityResponse | ErrorResponse)
+def activity(
+    _: None = Depends(require_api_token),
+    registry: ToolRegistry = Depends(get_tool_registry),
+) -> ActivityResponse | ErrorResponse:
+    try:
+        result = _execute_read_api_tool(registry, "list_recent_activity")
+        return ActivityResponse(ok=True, activities=(result.data or {}).get("activities", []))
+    except Exception as error:
+        return _error(error)
+
+
+@app.get("/activity/latest", response_model=LastActivityResponse | ErrorResponse)
+def latest_activity(
+    _: None = Depends(require_api_token),
+    registry: ToolRegistry = Depends(get_tool_registry),
+) -> LastActivityResponse | ErrorResponse:
+    try:
+        result = _execute_read_api_tool(registry, "get_last_activity")
+        return LastActivityResponse(ok=True, activity=(result.data or {}).get("activity"))
+    except Exception as error:
+        return _error(error)
+
+
+@app.post("/activity/clear", response_model=ApprovalResponse | ErrorResponse)
+def clear_activity(
+    _: None = Depends(require_api_token),
+    registry: ToolRegistry = Depends(get_tool_registry),
+) -> ApprovalResponse | ErrorResponse:
+    return _execute_api_tool(registry, "clear_activity_history", {})
 
 
 @app.get("/projects", response_model=ProjectsResponse | ErrorResponse)
