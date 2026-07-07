@@ -4,3 +4,4 @@ __pycache__/
 /.DS_Store
 .env
 /workspace/screenshots/.DS_Store
+memory/activity_history.json
