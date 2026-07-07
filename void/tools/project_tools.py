@@ -3,6 +3,7 @@
 from collections import Counter
 from pathlib import Path
 
+from void.core import activity_history
 from void.core import browser_sessions
 from void.core import project_commands
 from void.core import project_context
@@ -105,9 +106,21 @@ def get_current_project() -> ToolResult:
 def set_current_project(project: str) -> ToolResult:
     result = project_context.set_current_project(project)
     if not result["ok"]:
+        activity_history.log_activity(
+            "project_switch",
+            "failure",
+            f"Failed to switch project to {project}",
+            {"project": project},
+        )
         return ToolResult(ok=False, content=result["error"])
 
     selected = result["project"]
+    activity_history.log_activity(
+        "project_switch",
+        "success",
+        f"Switched project to {selected['name']}",
+        {"project": selected},
+    )
     return ToolResult(
         ok=True,
         content=f"Current project set to {selected['name']} ({selected['id']}).",
@@ -118,16 +131,34 @@ def set_current_project(project: str) -> ToolResult:
 def open_project_repo(project: str) -> ToolResult:
     selected = project_context.find_project(project)
     if selected is None:
+        activity_history.log_activity(
+            "repo_open",
+            "failure",
+            f"Failed to resolve project repo for {project}",
+            {"project": project},
+        )
         return ToolResult(ok=False, content=f"Project not found: {project}")
 
     repo_url = str(selected.get("repo_url") or "").strip()
     if not repo_url:
+        activity_history.log_activity(
+            "repo_open",
+            "failure",
+            f"Project has no repo_url configured: {selected['name']}",
+            {"project": selected},
+        )
         return ToolResult(
             ok=False,
             content=f"Project has no repo_url configured: {selected['name']}",
             data={"project": selected},
         )
 
+    activity_history.log_activity(
+        "repo_open",
+        "success",
+        f"Resolved repository for {selected['name']}",
+        {"project": selected, "url": repo_url},
+    )
     return ToolResult(
         ok=True,
         content=f"Project GitHub repository for {selected['name']}: {repo_url}",
@@ -147,10 +178,22 @@ def _find_project_or_current(project: str) -> dict | None:
 def open_project_repo_in_browser(project: str, mode: str = "visible") -> ToolResult:
     selected = _find_project_or_current(project)
     if selected is None:
+        activity_history.log_activity(
+            "repo_open",
+            "failure",
+            f"Failed to open project repo for {project}",
+            {"project": project, "mode": mode},
+        )
         return ToolResult(ok=False, content=f"Project not found: {project}")
 
     repo_url = str(selected.get("repo_url") or "").strip()
     if not repo_url:
+        activity_history.log_activity(
+            "repo_open",
+            "failure",
+            f"Project has no repo_url configured: {selected['name']}",
+            {"project": selected, "mode": mode},
+        )
         return ToolResult(
             ok=False,
             content=f"Project has no repo_url configured: {selected['name']}",
@@ -159,12 +202,24 @@ def open_project_repo_in_browser(project: str, mode: str = "visible") -> ToolRes
 
     clean_mode = mode.strip().casefold()
     if clean_mode not in {"visible", "headless"}:
+        activity_history.log_activity(
+            "repo_open",
+            "failure",
+            f"Invalid browser mode for project repo: {mode}",
+            {"project": selected, "mode": mode},
+        )
         return ToolResult(ok=False, content="Mode must be one of: visible, headless.")
 
     try:
         normalized_url = validate_url(repo_url)
         session = browser_sessions.open_session(normalized_url, clean_mode)
     except ValueError as error:
+        activity_history.log_activity(
+            "repo_open",
+            "failure",
+            f"Failed to open repository for {selected['name']}",
+            {"project": selected, "url": repo_url, "mode": clean_mode},
+        )
         return ToolResult(
             ok=False,
             content=f"Invalid repo_url for {selected['name']}: {error}",
@@ -182,6 +237,27 @@ def open_project_repo_in_browser(project: str, mode: str = "visible") -> ToolRes
     if title:
         lines.append(f"Title: {title}")
 
+    activity_history.log_activity(
+        "repo_open",
+        "success",
+        f"Opened repository for {selected['name']} in browser",
+        {
+            "project": selected,
+            "url": session.get("url", normalized_url),
+            "mode": session.get("mode", clean_mode),
+            "session_id": session.get("session_id"),
+        },
+    )
+    activity_history.log_activity(
+        "browser_session_open",
+        "success",
+        f"Opened {session.get('mode', clean_mode)} browser session",
+        {
+            "url": session.get("url", normalized_url),
+            "mode": session.get("mode", clean_mode),
+            "session_id": session.get("session_id"),
+        },
+    )
     return ToolResult(
         ok=True,
         content="\n".join(lines),
@@ -243,6 +319,12 @@ def run_project_command(command_key: str, timeout_seconds: int = 120) -> ToolRes
     try:
         payload = project_commands.run_project_command(command_key, timeout_seconds)
     except ValueError as error:
+        activity_history.log_activity(
+            "project_command",
+            "failure",
+            f"Failed to run project command {command_key}",
+            {"command_key": command_key},
+        )
         return ToolResult(ok=False, content=str(error), data={"command_key": command_key})
 
     project = payload["project"]
@@ -268,6 +350,17 @@ def run_project_command(command_key: str, timeout_seconds: int = 120) -> ToolRes
         ]
     )
 
+    activity_history.log_activity(
+        "project_command",
+        "success" if payload["ok"] else "failure",
+        f"Ran {payload['command_key']} for {project['name']}",
+        {
+            "project": project,
+            "command_key": payload["command_key"],
+            "cwd": payload["cwd"],
+            "returncode": payload["returncode"],
+        },
+    )
     return ToolResult(ok=payload["ok"], content="\n".join(lines), data=payload)
 
 
@@ -275,6 +368,12 @@ def run_project_command_visible(command_key: str) -> ToolResult:
     try:
         payload = project_commands.run_project_command_visible(command_key)
     except ValueError as error:
+        activity_history.log_activity(
+            "terminal",
+            "failure",
+            f"Failed to launch project command {command_key} in terminal",
+            {"command_key": command_key},
+        )
         return ToolResult(ok=False, content=str(error), data={"command_key": command_key})
 
     project = payload["project"]
@@ -291,6 +390,20 @@ def run_project_command_visible(command_key: str) -> ToolResult:
     if terminal.get("pid") is not None:
         lines.append(f"PID: {terminal['pid']}")
 
+    activity_history.log_activity(
+        "terminal",
+        "success" if payload["ok"] else "failure",
+        f"Launched {payload['command_key']} in visible terminal"
+        if payload["ok"]
+        else f"Failed to launch {payload['command_key']} in visible terminal",
+        {
+            "project": project,
+            "command_key": payload["command_key"],
+            "cwd": payload["cwd"],
+            "command": payload["command"],
+            "terminal_type": terminal.get("terminal_type"),
+        },
+    )
     return ToolResult(ok=payload["ok"], content="\n".join(lines), data=payload)
 
 

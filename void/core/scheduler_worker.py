@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 
+from void.core import activity_history
 from void.core import scheduler
 from void.tools.memory_tools import append_session
 
@@ -87,6 +88,12 @@ class SchedulerWorker:
                             "task": updated_task or task,
                         }
                     )
+                    activity_history.log_activity(
+                        "scheduler_execution",
+                        "success",
+                        f"Ran scheduled task {title}",
+                        {"task_id": task_id, "title": title},
+                    )
                     self._append_run_memory(task_id, title, prompt, output, None)
                 except Exception as error:
                     logger.exception("Scheduled task failed: %s", task_id)
@@ -94,6 +101,12 @@ class SchedulerWorker:
                     updated_task = scheduler.mark_task_ran(task_id)
                     result["error"] = error_text
                     result["task"] = updated_task or task
+                    activity_history.log_activity(
+                        "scheduler_execution",
+                        "failure",
+                        f"Scheduled task failed: {title}",
+                        {"task_id": task_id, "title": title},
+                    )
                     self._append_run_memory(task_id, title, prompt, None, error_text)
 
                 results.append(result)

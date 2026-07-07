@@ -536,6 +536,10 @@ textarea:focus {
   margin-top: 1rem;
 }
 
+.panelActions {
+  margin-top: 0;
+}
+
 .dangerButton {
   border-color: rgba(235, 122, 122, 0.45);
   background: #7d2d38;
@@ -571,6 +575,58 @@ textarea:focus {
 
 .memoryBlock {
   padding: 1rem;
+}
+
+.activityList {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.activityItem {
+  display: grid;
+  grid-template-columns: 3rem minmax(0, 1fr);
+  gap: 0.9rem;
+  align-items: start;
+  padding: 1rem;
+  border: 1px solid rgba(142, 166, 194, 0.16);
+  border-radius: 8px;
+  background: rgba(17, 25, 36, 0.82);
+}
+
+.activityIcon {
+  display: grid;
+  place-items: center;
+  width: 3rem;
+  height: 3rem;
+  border-radius: 8px;
+  background: rgba(31, 111, 120, 0.32);
+  color: #dffcff;
+  font-size: 0.72rem;
+  font-weight: 800;
+}
+
+.activityBody {
+  min-width: 0;
+}
+
+.activityBody h2 {
+  font-size: 1rem;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+.activityType {
+  color: #9fb4ca;
+  font-size: 0.85rem;
+  margin-top: 0.4rem;
+}
+
+.activityStatus.success {
+  color: #8ee4ae;
+}
+
+.activityStatus.failure {
+  color: #ff9a9a;
 }
 
 .taskForm {
@@ -866,6 +922,14 @@ textarea:focus {
   .composer button,
   .panelHeader button {
     width: 100%;
+  }
+
+  .panelActions {
+    width: 100%;
+  }
+
+  .activityItem {
+    grid-template-columns: 1fr;
   }
 
   .schedulerPanel {

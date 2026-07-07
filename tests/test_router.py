@@ -380,3 +380,35 @@ def test_router_git_commit_with_message():
     assert route.action is not None
     assert route.action.action == "git_commit"
     assert route.action.arguments == {"message": "test"}
+
+
+def test_router_list_recent_activity():
+    route = Router().route("show recent activity")
+
+    assert route.matched is True
+    assert route.action is not None
+    assert route.action.action == "list_recent_activity"
+
+
+def test_router_last_activity_ru():
+    route = Router().route("последнее действие")
+
+    assert route.matched is True
+    assert route.action is not None
+    assert route.action.action == "get_last_activity"
+
+
+def test_router_repeat_last_activity():
+    route = Router().route("repeat last action")
+
+    assert route.matched is True
+    assert route.action is not None
+    assert route.action.action == "repeat_last_activity"
+
+
+def test_router_clear_activity_history_ru():
+    route = Router().route("очистить историю действий")
+
+    assert route.matched is True
+    assert route.action is not None
+    assert route.action.action == "clear_activity_history"

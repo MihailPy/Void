@@ -52,6 +52,16 @@ class CapabilitiesResponse(BaseModel):
     rejected: list[Any]
 
 
+class ActivityResponse(BaseModel):
+    ok: bool
+    activities: list[dict[str, Any]]
+
+
+class LastActivityResponse(BaseModel):
+    ok: bool
+    activity: dict[str, Any] | None = None
+
+
 class ProjectsResponse(BaseModel):
     ok: bool
     projects: list[dict[str, Any]]

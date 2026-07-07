@@ -5,6 +5,7 @@ from __future__ import annotations
 import subprocess
 from pathlib import Path
 
+from void.core import activity_history
 from void.core.safety import PROJECT_ROOT, safe_project_path
 from void.core.types import ToolDefinition, ToolResult
 
@@ -183,8 +184,21 @@ def git_suggest_commit_message(cwd: str = ".") -> ToolResult:
 def git_commit(message: str, cwd: str = ".") -> ToolResult:
     clean_message = str(message).strip()
     if not clean_message:
+        activity_history.log_activity(
+            "git",
+            "failure",
+            "Failed to create Git commit",
+            {"operation": "commit", "cwd": cwd},
+        )
         return ToolResult(ok=False, content="Commit message is required.", terminal=True)
-    return run_git_command(["commit", "-m", clean_message], cwd=cwd)
+    result = run_git_command(["commit", "-m", clean_message], cwd=cwd)
+    activity_history.log_activity(
+        "git",
+        "success" if result.ok else "failure",
+        "Created Git commit" if result.ok else "Failed to create Git commit",
+        {"operation": "commit", "cwd": cwd},
+    )
+    return result
 
 
 def definitions() -> list[ToolDefinition]:

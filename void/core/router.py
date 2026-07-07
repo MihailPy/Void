@@ -1,6 +1,7 @@
 """Deterministic routing for common Void requests."""
 
 from void.core.routing import (
+    activity,
     browser,
     capabilities,
     files,
@@ -20,6 +21,7 @@ class Router:
         lowered = text.lower()
 
         for matcher in (
+            activity.match,
             git.match,
             project_context.match,
             browser.match,

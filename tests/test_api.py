@@ -7,6 +7,7 @@ import httpx
 
 from void.api.server import app
 from void.__version__ import __version__
+from void.core import activity_history
 from void.core import project_commands, project_context
 
 
@@ -146,6 +147,40 @@ def test_capabilities():
     assert payload["installed"] == []
     assert payload["requested"] == []
     assert payload["rejected"] == []
+
+
+def test_activity_endpoints_and_clear_approval():
+    activity_history.log_activity(
+        "project_command",
+        "success",
+        "Ran verify for Void",
+        {"command_key": "verify"},
+    )
+
+    response = request("GET", "/activity")
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["ok"] is True
+    assert payload["activities"][0]["summary"] == "Ran verify for Void"
+
+    latest_response = request("GET", "/activity/latest")
+    assert latest_response.status_code == 200
+    assert latest_response.json()["activity"]["activity_type"] == "project_command"
+
+    clear_response = request("POST", "/activity/clear")
+    assert clear_response.status_code == 200
+    clear_payload = clear_response.json()
+    assert clear_payload["ok"] is True
+    assert clear_payload["result_type"] == "approval"
+    assert clear_payload["data"]["action"] == "clear_activity_history"
+
+    assert request("GET", "/activity").json()["activities"]
+
+    approval = _approval_for("clear_activity_history")
+    approved = request("POST", f"/approvals/{approval['id']}/approve")
+    assert approved.status_code == 200
+    assert approved.json()["ok"] is True
+    assert request("GET", "/activity").json()["activities"] == []
 
 
 def test_projects_endpoint():

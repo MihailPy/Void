@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import sys
 
-from void.core import project_commands, project_context, terminal_runner
+from void.core import activity_history, project_commands, project_context, terminal_runner
 from void.core.permissions import approve, clear_approval, list_approvals
 from void.core.types import AgentAction
 from void.tools.builtin import build_registry
@@ -181,3 +181,42 @@ def test_run_project_command_executes_after_approval():
 
     assert approved_result.ok is True
     assert "approved" in approved_result.content
+    latest = activity_history.get_last_activity()
+    assert latest is not None
+    assert latest["activity_type"] == "project_command"
+    assert latest["status"] == "success"
+    assert latest["metadata"]["command_key"] == "test"
+
+
+def test_run_project_command_visible_logs_terminal_activity(monkeypatch):
+    _save_commands({"test": "python -V"})
+
+    def fake_launch(command: str, cwd: str) -> dict:
+        return {
+            "ok": True,
+            "terminal_type": "fake-terminal",
+            "command": command,
+            "cwd": cwd,
+            "pid": 123,
+            "message": "Launched command in fake-terminal.",
+        }
+
+    monkeypatch.setattr(project_commands.terminal_runner, "launch_terminal_command", fake_launch)
+
+    registry = build_registry()
+    request_result = registry.execute(
+        AgentAction("run_project_command_visible", {"command_key": "test"}, "test")
+    )
+    approval_id = list_approvals()[0]["id"]
+    action = approve(approval_id)
+
+    assert request_result.ok is True
+    assert action is not None
+    approved_result = registry.execute(action, bypass_confirmation=True)
+    clear_approval(approval_id)
+
+    assert approved_result.ok is True
+    latest = activity_history.get_last_activity()
+    assert latest is not None
+    assert latest["activity_type"] == "terminal"
+    assert latest["metadata"]["terminal_type"] == "fake-terminal"
