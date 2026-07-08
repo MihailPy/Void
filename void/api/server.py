@@ -369,6 +369,23 @@ def clear_activity(
     return _execute_api_tool(registry, "clear_activity_history", {})
 
 
+@app.post("/activity/replay/latest", response_model=ApprovalResponse | ErrorResponse)
+def replay_latest_activity(
+    _: None = Depends(require_api_token),
+    registry: ToolRegistry = Depends(get_tool_registry),
+) -> ApprovalResponse | ErrorResponse:
+    return _execute_api_tool(registry, "repeat_last_activity", {})
+
+
+@app.post("/activity/replay/{activity_id}", response_model=ApprovalResponse | ErrorResponse)
+def replay_activity(
+    activity_id: str,
+    _: None = Depends(require_api_token),
+    registry: ToolRegistry = Depends(get_tool_registry),
+) -> ApprovalResponse | ErrorResponse:
+    return _execute_api_tool(registry, "replay_activity", {"activity_id": activity_id})
+
+
 @app.get("/projects", response_model=ProjectsResponse | ErrorResponse)
 def projects(
     _: None = Depends(require_api_token),

@@ -183,6 +183,51 @@ def test_activity_endpoints_and_clear_approval():
     assert request("GET", "/activity").json()["activities"] == []
 
 
+def test_activity_replay_endpoints_create_target_approval():
+    activity = activity_history.log_activity(
+        "project_command",
+        "success",
+        "Ran verify for Void",
+        {"command_key": "verify", "timeout_seconds": 30},
+    )
+
+    latest_response = request("POST", "/activity/replay/latest")
+    assert latest_response.status_code == 200
+    latest_payload = latest_response.json()
+    assert latest_payload["ok"] is True
+    assert latest_payload["result_type"] == "approval"
+    assert latest_payload["data"]["action"] == "run_project_command"
+    assert latest_payload["data"]["arguments"] == {
+        "command_key": "verify",
+        "timeout_seconds": 30,
+    }
+    assert latest_payload["data"]["replayed_activity_id"] == activity["id"]
+
+    explicit_response = request("POST", f"/activity/replay/{activity['id']}")
+    assert explicit_response.status_code == 200
+    explicit_payload = explicit_response.json()
+    assert explicit_payload["ok"] is True
+    assert explicit_payload["result_type"] == "approval"
+    assert explicit_payload["data"]["action"] == "run_project_command"
+
+
+def test_activity_replay_endpoint_unsupported_action():
+    activity = activity_history.log_activity(
+        "git",
+        "success",
+        "Created Git commit",
+        {"operation": "commit"},
+    )
+
+    response = request("POST", f"/activity/replay/{activity['id']}")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["ok"] is True
+    assert payload["message"] == "Replay is not supported for this action."
+    assert payload["result_type"] == "message"
+
+
 def test_projects_endpoint():
     response = request("GET", "/projects")
 

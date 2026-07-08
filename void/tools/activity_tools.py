@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import json
-
 from void.core import activity_history
 from void.core.types import ToolDefinition, ToolResult
 
@@ -51,28 +49,6 @@ def get_last_activity() -> ToolResult:
     )
 
 
-def repeat_last_activity() -> ToolResult:
-    activity = activity_history.get_last_activity()
-    if activity is None:
-        return ToolResult(
-            ok=True,
-            content="Replay is not implemented yet.\nNo last action was found.",
-            data={"activity": None},
-            terminal=True,
-        )
-    return ToolResult(
-        ok=True,
-        content=(
-            "Replay is not implemented yet.\n"
-            f"Last action was: {_format_activity(activity)}\n"
-            "Metadata:\n"
-            f"{json.dumps(activity.get('metadata', {}), ensure_ascii=False, indent=2)}"
-        ),
-        data={"activity": activity},
-        terminal=True,
-    )
-
-
 def clear_activity_history() -> ToolResult:
     activity_history.clear_history()
     return ToolResult(
@@ -97,14 +73,6 @@ def definitions() -> list[ToolDefinition]:
             "get_last_activity",
             "Show the latest execution activity.",
             get_last_activity,
-            terminal=True,
-            category="activity",
-            risk_level="read",
-        ),
-        ToolDefinition(
-            "repeat_last_activity",
-            "Explain that activity replay is not implemented and show the last action.",
-            repeat_last_activity,
             terminal=True,
             category="activity",
             risk_level="read",

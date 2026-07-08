@@ -1,6 +1,7 @@
 """Registry construction for built-in tools."""
 
 from void.core.registry import ToolRegistry
+from void.core import replay
 from void.core.types import ToolDefinition, ToolResult
 from void.tools import (
     activity_tools,
@@ -33,6 +34,27 @@ def build_registry() -> ToolRegistry:
     ):
         for definition in module.definitions():
             registry.register(definition)
+
+    registry.register(
+        ToolDefinition(
+            "repeat_last_activity",
+            "Replay the latest supported deterministic activity.",
+            lambda: replay.replay_last_action(registry.execute),
+            terminal=True,
+            category="activity",
+            risk_level="write",
+        )
+    )
+    registry.register(
+        ToolDefinition(
+            "replay_activity",
+            "Replay one supported deterministic activity by id.",
+            lambda activity_id: replay.replay_activity(activity_id, registry.execute),
+            terminal=True,
+            category="activity",
+            risk_level="write",
+        )
+    )
 
     registry.register(
         ToolDefinition(

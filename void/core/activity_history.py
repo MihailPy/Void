@@ -83,5 +83,16 @@ def get_last_activity() -> dict[str, Any] | None:
     return activities[-1] if activities else None
 
 
+def get_activity(activity_id: str) -> dict[str, Any] | None:
+    clean_id = str(activity_id).strip()
+    if not clean_id:
+        return None
+
+    for activity in _load()["activities"]:
+        if activity.get("id") == clean_id:
+            return activity
+    return None
+
+
 def clear_history() -> None:
     _save(_empty_payload())

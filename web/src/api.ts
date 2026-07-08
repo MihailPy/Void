@@ -349,6 +349,18 @@ export function clearActivityHistory() {
   });
 }
 
+export function replayLatestActivity() {
+  return request<ApprovalActionResponse>("/activity/replay/latest", {
+    method: "POST",
+  });
+}
+
+export function replayActivity(id: string) {
+  return request<ApprovalActionResponse>(`/activity/replay/${encodeURIComponent(id)}`, {
+    method: "POST",
+  });
+}
+
 export function getProjects() {
   return request<ProjectsResponse>("/projects");
 }

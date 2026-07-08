@@ -25,6 +25,21 @@ def match(text: str, lowered: str) -> RouteResult | None:
             {},
             "User asks to repeat the latest action.",
         ),
+        "repeat previous action": (
+            "repeat_last_activity",
+            {},
+            "User asks to repeat the previous action.",
+        ),
+        "run that again": (
+            "repeat_last_activity",
+            {},
+            "User asks to repeat the latest action.",
+        ),
+        "do it again": (
+            "repeat_last_activity",
+            {},
+            "User asks to repeat the latest action.",
+        ),
         "clear activity history": (
             "clear_activity_history",
             {},
@@ -46,6 +61,16 @@ def match(text: str, lowered: str) -> RouteResult | None:
             "User asks for the latest executed action.",
         ),
         "повтори последнее действие": (
+            "repeat_last_activity",
+            {},
+            "User asks to repeat the latest action.",
+        ),
+        "повтори предыдущую команду": (
+            "repeat_last_activity",
+            {},
+            "User asks to repeat the previous command.",
+        ),
+        "сделай это еще раз": (
             "repeat_last_activity",
             {},
             "User asks to repeat the latest action.",
