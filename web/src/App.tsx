@@ -54,6 +54,7 @@ import {
   openBrowserSession,
   openProjectRepo,
   reject,
+  replayActivity,
   respondToClarification,
   runBrowserTask,
   runDueTasksNow,
@@ -2425,10 +2426,45 @@ function activityIcon(type: string | undefined) {
   }
 }
 
+function replayAction(activity: Activity) {
+  const metadata = activity.metadata ?? {};
+  const replay = asRecord(metadata.replay);
+  const explicitAction = asText(replay?.action);
+  if (
+    [
+      "run_project_command",
+      "run_project_command_visible",
+      "open_project_repo",
+      "open_project_repo_in_browser",
+      "set_current_project",
+    ].includes(explicitAction)
+  ) {
+    return explicitAction;
+  }
+
+  switch (activity.activity_type) {
+    case "project_command":
+      return metadata.command_key ? "run_project_command" : "";
+    case "terminal":
+      return metadata.command_key ? "run_project_command_visible" : "";
+    case "project_switch":
+      return metadata.project ? "set_current_project" : "";
+    case "repo_open":
+      return metadata.project
+        ? metadata.mode
+          ? "open_project_repo_in_browser"
+          : "open_project_repo"
+        : "";
+    default:
+      return "";
+  }
+}
+
 function ActivityTab() {
   const [activities, setActivities] = useState<Activity[]>([]);
   const [loading, setLoading] = useState(true);
   const [clearing, setClearing] = useState(false);
+  const [replayingId, setReplayingId] = useState("");
   const [inlineApproval, setInlineApproval] = useState<Approval | null>(null);
   const [approvalActionId, setApprovalActionId] = useState("");
   const [message, setMessage] = useState("");
@@ -2440,7 +2476,16 @@ function ActivityTab() {
       setLoading(true);
       const [activityResponse, approval] = await Promise.all([
         getActivity(),
-        fetchInlineApproval((item) => item.action === "clear_activity_history"),
+        fetchInlineApproval(
+          (item) =>
+            item.action === "clear_activity_history" ||
+            [
+              "run_project_command",
+              "run_project_command_visible",
+              "open_project_repo_in_browser",
+              "set_current_project",
+            ].includes(item.action ?? ""),
+        ),
       ]);
       setActivities(activityResponse.activities);
       setInlineApproval(approval);
@@ -2468,6 +2513,32 @@ function ActivityTab() {
       setError(getErrorMessage(currentError));
     } finally {
       setClearing(false);
+    }
+  }
+
+  async function handleReplay(activity: Activity) {
+    const id = activity.id ?? "";
+    if (!id) {
+      return;
+    }
+
+    setError("");
+    setMessage("");
+    setReplayingId(id);
+    try {
+      const response = await replayActivity(id);
+      setMessage(response.message);
+      const pendingApproval = await fetchInlineApproval(
+        (approval) =>
+          approval.id === response.data?.approval_id ||
+          approval.action === response.data?.action,
+      );
+      setInlineApproval(pendingApproval);
+      await loadActivity();
+    } catch (currentError) {
+      setError(getErrorMessage(currentError));
+    } finally {
+      setReplayingId("");
     }
   }
 
@@ -2532,22 +2603,36 @@ function ActivityTab() {
       ) : null}
 
       <div className="activityList">
-        {activities.map((activity, index) => (
-          <article className="activityItem" key={activity.id ?? index}>
-            <div className="activityIcon">{activityIcon(activity.activity_type)}</div>
-            <div className="activityBody">
-              <div className="cardTopline">
-                <span>{activity.timestamp ?? "unknown time"}</span>
-                <span className={`activityStatus ${activity.status ?? ""}`}>
-                  {activity.status ?? "unknown"}
-                </span>
+        {activities.map((activity, index) => {
+          const action = replayAction(activity);
+          const id = activity.id ?? "";
+          return (
+            <article className="activityItem" key={id || index}>
+              <div className="activityIcon">{activityIcon(activity.activity_type)}</div>
+              <div className="activityBody">
+                <div className="cardTopline">
+                  <span>{activity.timestamp ?? "unknown time"}</span>
+                  <span className={`activityStatus ${activity.status ?? ""}`}>
+                    {activity.status ?? "unknown"}
+                  </span>
+                </div>
+                <h2>{activity.summary || "Untitled activity"}</h2>
+                <div className="activityType">{activity.activity_type ?? "unknown"}</div>
+                <div className="buttonRow">
+                  <button
+                    className="secondaryButton"
+                    type="button"
+                    disabled={!action || !id || replayingId === id}
+                    onClick={() => void handleReplay(activity)}
+                  >
+                    {replayingId === id ? "Requesting..." : "Replay"}
+                  </button>
+                </div>
+                <JsonBlock value={activity.metadata ?? {}} />
               </div>
-              <h2>{activity.summary || "Untitled activity"}</h2>
-              <div className="activityType">{activity.activity_type ?? "unknown"}</div>
-              <JsonBlock value={activity.metadata ?? {}} />
-            </div>
-          </article>
-        ))}
+            </article>
+          );
+        })}
       </div>
     </section>
   );

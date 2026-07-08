@@ -110,7 +110,13 @@ def set_current_project(project: str) -> ToolResult:
             "project_switch",
             "failure",
             f"Failed to switch project to {project}",
-            {"project": project},
+            {
+                "project": project,
+                "replay": {
+                    "action": "set_current_project",
+                    "arguments": {"project": project},
+                },
+            },
         )
         return ToolResult(ok=False, content=result["error"])
 
@@ -119,7 +125,13 @@ def set_current_project(project: str) -> ToolResult:
         "project_switch",
         "success",
         f"Switched project to {selected['name']}",
-        {"project": selected},
+        {
+            "project": selected,
+            "replay": {
+                "action": "set_current_project",
+                "arguments": {"project": selected["id"]},
+            },
+        },
     )
     return ToolResult(
         ok=True,
@@ -135,7 +147,13 @@ def open_project_repo(project: str) -> ToolResult:
             "repo_open",
             "failure",
             f"Failed to resolve project repo for {project}",
-            {"project": project},
+            {
+                "project": project,
+                "replay": {
+                    "action": "open_project_repo",
+                    "arguments": {"project": project},
+                },
+            },
         )
         return ToolResult(ok=False, content=f"Project not found: {project}")
 
@@ -145,7 +163,13 @@ def open_project_repo(project: str) -> ToolResult:
             "repo_open",
             "failure",
             f"Project has no repo_url configured: {selected['name']}",
-            {"project": selected},
+            {
+                "project": selected,
+                "replay": {
+                    "action": "open_project_repo",
+                    "arguments": {"project": selected["id"]},
+                },
+            },
         )
         return ToolResult(
             ok=False,
@@ -157,7 +181,14 @@ def open_project_repo(project: str) -> ToolResult:
         "repo_open",
         "success",
         f"Resolved repository for {selected['name']}",
-        {"project": selected, "url": repo_url},
+        {
+            "project": selected,
+            "url": repo_url,
+            "replay": {
+                "action": "open_project_repo",
+                "arguments": {"project": selected["id"]},
+            },
+        },
     )
     return ToolResult(
         ok=True,
@@ -182,7 +213,14 @@ def open_project_repo_in_browser(project: str, mode: str = "visible") -> ToolRes
             "repo_open",
             "failure",
             f"Failed to open project repo for {project}",
-            {"project": project, "mode": mode},
+            {
+                "project": project,
+                "mode": mode,
+                "replay": {
+                    "action": "open_project_repo_in_browser",
+                    "arguments": {"project": project, "mode": mode},
+                },
+            },
         )
         return ToolResult(ok=False, content=f"Project not found: {project}")
 
@@ -192,7 +230,14 @@ def open_project_repo_in_browser(project: str, mode: str = "visible") -> ToolRes
             "repo_open",
             "failure",
             f"Project has no repo_url configured: {selected['name']}",
-            {"project": selected, "mode": mode},
+            {
+                "project": selected,
+                "mode": mode,
+                "replay": {
+                    "action": "open_project_repo_in_browser",
+                    "arguments": {"project": selected["id"], "mode": mode},
+                },
+            },
         )
         return ToolResult(
             ok=False,
@@ -206,7 +251,14 @@ def open_project_repo_in_browser(project: str, mode: str = "visible") -> ToolRes
             "repo_open",
             "failure",
             f"Invalid browser mode for project repo: {mode}",
-            {"project": selected, "mode": mode},
+            {
+                "project": selected,
+                "mode": mode,
+                "replay": {
+                    "action": "open_project_repo_in_browser",
+                    "arguments": {"project": selected["id"], "mode": mode},
+                },
+            },
         )
         return ToolResult(ok=False, content="Mode must be one of: visible, headless.")
 
@@ -218,7 +270,15 @@ def open_project_repo_in_browser(project: str, mode: str = "visible") -> ToolRes
             "repo_open",
             "failure",
             f"Failed to open repository for {selected['name']}",
-            {"project": selected, "url": repo_url, "mode": clean_mode},
+            {
+                "project": selected,
+                "url": repo_url,
+                "mode": clean_mode,
+                "replay": {
+                    "action": "open_project_repo_in_browser",
+                    "arguments": {"project": selected["id"], "mode": clean_mode},
+                },
+            },
         )
         return ToolResult(
             ok=False,
@@ -246,6 +306,10 @@ def open_project_repo_in_browser(project: str, mode: str = "visible") -> ToolRes
             "url": session.get("url", normalized_url),
             "mode": session.get("mode", clean_mode),
             "session_id": session.get("session_id"),
+            "replay": {
+                "action": "open_project_repo_in_browser",
+                "arguments": {"project": selected["id"], "mode": clean_mode},
+            },
         },
     )
     activity_history.log_activity(
@@ -256,6 +320,10 @@ def open_project_repo_in_browser(project: str, mode: str = "visible") -> ToolRes
             "url": session.get("url", normalized_url),
             "mode": session.get("mode", clean_mode),
             "session_id": session.get("session_id"),
+            "replay": {
+                "action": "open_project_repo_in_browser",
+                "arguments": {"project": selected["id"], "mode": clean_mode},
+            },
         },
     )
     return ToolResult(
@@ -357,8 +425,16 @@ def run_project_command(command_key: str, timeout_seconds: int = 120) -> ToolRes
         {
             "project": project,
             "command_key": payload["command_key"],
+            "timeout_seconds": timeout_seconds,
             "cwd": payload["cwd"],
             "returncode": payload["returncode"],
+            "replay": {
+                "action": "run_project_command",
+                "arguments": {
+                    "command_key": payload["command_key"],
+                    "timeout_seconds": timeout_seconds,
+                },
+            },
         },
     )
     return ToolResult(ok=payload["ok"], content="\n".join(lines), data=payload)
@@ -402,6 +478,10 @@ def run_project_command_visible(command_key: str) -> ToolResult:
             "cwd": payload["cwd"],
             "command": payload["command"],
             "terminal_type": terminal.get("terminal_type"),
+            "replay": {
+                "action": "run_project_command_visible",
+                "arguments": {"command_key": payload["command_key"]},
+            },
         },
     )
     return ToolResult(ok=payload["ok"], content="\n".join(lines), data=payload)

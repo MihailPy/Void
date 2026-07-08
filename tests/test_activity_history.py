@@ -51,6 +51,9 @@ def test_activity_tools_are_registered_and_clear_requires_approval():
     registry = build_registry()
 
     assert registry.get("list_recent_activity").risk_level == "read"
+    replay_tool = registry.get("repeat_last_activity")
+    assert replay_tool.risk_level == "write"
+    assert replay_tool.requires_confirmation is False
     clear_tool = registry.get("clear_activity_history")
     assert clear_tool.risk_level == "write"
     assert clear_tool.requires_confirmation is True
@@ -65,17 +68,16 @@ def test_activity_tools_are_registered_and_clear_requires_approval():
     assert activity_history.list_recent()
 
 
-def test_repeat_last_activity_does_not_replay():
+def test_repeat_last_activity_rejects_unsupported_action():
     registry = build_registry()
     activity_history.log_activity(
-        "project_command",
+        "git",
         "success",
-        "Ran test for Void",
-        {"command_key": "test"},
+        "Created Git commit",
+        {"operation": "commit"},
     )
 
     result = registry.execute(AgentAction("repeat_last_activity", {}, "Test repeat."))
 
     assert result.ok is True
-    assert "Replay is not implemented yet." in result.content
-    assert "Ran test for Void" in result.content
+    assert result.content == "Replay is not supported for this action."

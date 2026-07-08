@@ -167,11 +167,18 @@ or prompt storage. It does not store chat messages, LLM responses, or reasoning.
 The newest entries are shown first in the CLI, API, and Web UI, and only the
 newest 200 entries are kept. Clearing activity history requires approval.
 
+Replay is available only for supported deterministic actions that were executed
+through registered tools: project commands, visible project commands, project
+repository opens, project repository browser opens, and project switches. Replay
+is not a planner and does not replay arbitrary shell commands, chat messages, or
+LLM responses. Replayed actions always follow the normal approval process again.
+
 Useful commands:
 
 ```text
 /activity
 /last-activity
+/replay
 ```
 
 Useful API routes:
@@ -180,6 +187,8 @@ Useful API routes:
 GET /activity
 GET /activity/latest
 POST /activity/clear
+POST /activity/replay/latest
+POST /activity/replay/{activity_id}
 ```
 
 Supported project flows:

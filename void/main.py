@@ -42,6 +42,7 @@ def print_help() -> None:
     print(f"{Color.CYAN}/approvals{Color.RESET}     show pending approvals")
     print(f"{Color.CYAN}/activity{Color.RESET}      show recent activity")
     print(f"{Color.CYAN}/last-activity{Color.RESET} show latest activity")
+    print(f"{Color.CYAN}/replay{Color.RESET}        replay last supported action")
     print(f"{Color.CYAN}/tasks{Color.RESET}         show scheduled tasks")
     print(f"{Color.CYAN}/capabilities{Color.RESET}  show all capabilities")
     print(f"{Color.CYAN}/requested{Color.RESET}     show requested capabilities")
@@ -190,6 +191,12 @@ def main() -> None:
             if user_input == "/last-activity":
                 result = registry.execute(
                     AgentAction("get_last_activity", {}, "CLI command.")
+                )
+                print_response(result.content)
+                continue
+            if user_input == "/replay":
+                result = registry.execute(
+                    AgentAction("repeat_last_activity", {}, "CLI command.")
                 )
                 print_response(result.content)
                 continue
