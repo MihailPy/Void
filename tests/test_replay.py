@@ -116,6 +116,37 @@ def test_replay_browser_action_requires_approval_and_reopens_project_repo(monkey
     assert activity_history.list_recent()[0]["activity_type"] == "browser_session_open"
 
 
+def test_replay_repo_open_requires_approval_with_compact_project_metadata():
+    _save_projects([_project("void")])
+    registry = build_registry()
+    activity_history.log_activity(
+        "repo_open",
+        "success",
+        "Resolved repository for Void",
+        {
+            "project": {
+                "id": "void",
+                "name": "Void",
+                "root_path": ".",
+                "repo_url": "https://github.com/MihailPy/Void",
+            },
+            "url": "https://github.com/MihailPy/Void",
+        },
+    )
+
+    replay_request = registry.execute(AgentAction("repeat_last_activity", {}, "test"))
+
+    assert replay_request.ok is True
+    assert "https://github.com/MihailPy/Void" in replay_request.content
+    assert replay_request.data["replayed_activity_id"]
+    assert replay_request.data["replay_action"] == "open_project_repo"
+    assert list_approvals() == []
+    assert activity_history.get_last_activity()["metadata"]["project"] == {
+        "id": "void",
+        "name": "Void",
+    }
+
+
 def test_replay_project_switch_requires_approval_and_switches_again():
     _save_projects([_project("void"), _project("other")], current_project="void")
     registry = build_registry()

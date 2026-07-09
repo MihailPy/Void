@@ -63,13 +63,38 @@ def log_activity(
         "activity_type": str(activity_type).strip() or "unknown",
         "status": str(status).strip() or "unknown",
         "summary": str(summary).strip(),
-        "metadata": metadata or {},
+        "metadata": compact_metadata(metadata or {}),
     }
     payload = _load()
     payload["activities"].append(activity)
     payload["activities"] = payload["activities"][-MAX_ACTIVITIES:]
     _save(payload)
     return activity
+
+
+def compact_metadata(metadata: dict[str, Any]) -> dict[str, Any]:
+    """Keep persisted activity metadata small and replay-oriented."""
+    compact: dict[str, Any] = {}
+    for key, value in metadata.items():
+        if key == "project":
+            compact[key] = compact_project(value)
+        else:
+            compact[key] = value
+    return compact
+
+
+def compact_project(project: Any) -> Any:
+    if not isinstance(project, dict):
+        return project
+
+    compact: dict[str, Any] = {}
+    project_id = project.get("id")
+    name = project.get("name")
+    if isinstance(project_id, str) and project_id.strip():
+        compact["id"] = project_id.strip()
+    if isinstance(name, str) and name.strip():
+        compact["name"] = name.strip()
+    return compact
 
 
 def list_recent(limit: int = 20) -> list[dict[str, Any]]:

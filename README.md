@@ -160,7 +160,10 @@ before state-changing actions, and uses the LLM only as a fallback.
 Void records a lightweight execution history in `memory/activity_history.json`.
 It is for completed actions such as project commands, visible terminal launches,
 browser session open/close events, project switches, repository opens, Git
-commits, and scheduler executions.
+commits, and scheduler executions. Activity metadata is intentionally compact:
+project references store only the project id/name plus the fields needed to
+present or replay the action, such as command keys, working directories, browser
+URLs, modes, session ids, and return codes.
 
 Activity History is not long-term memory, semantic memory, conversation history,
 or prompt storage. It does not store chat messages, LLM responses, or reasoning.
@@ -171,7 +174,9 @@ Replay is available only for supported deterministic actions that were executed
 through registered tools: project commands, visible project commands, project
 repository opens, project repository browser opens, and project switches. Replay
 is not a planner and does not replay arbitrary shell commands, chat messages, or
-LLM responses. Replayed actions always follow the normal approval process again.
+LLM responses. Replay uses the current project configuration when it runs again;
+it does not restore old project snapshots from activity history. Replayed
+actions always follow the normal approval process again.
 
 Useful commands:
 
