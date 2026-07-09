@@ -186,6 +186,8 @@ def test_run_project_command_executes_after_approval():
     assert latest["activity_type"] == "project_command"
     assert latest["status"] == "success"
     assert latest["metadata"]["command_key"] == "test"
+    assert latest["metadata"]["project"] == {"id": "void", "name": "Void"}
+    assert "commands" not in latest["metadata"]["project"]
 
 
 def test_run_project_command_visible_logs_terminal_activity(monkeypatch):
@@ -220,3 +222,5 @@ def test_run_project_command_visible_logs_terminal_activity(monkeypatch):
     assert latest is not None
     assert latest["activity_type"] == "terminal"
     assert latest["metadata"]["terminal_type"] == "fake-terminal"
+    assert latest["metadata"]["project"] == {"id": "void", "name": "Void"}
+    assert "command" not in latest["metadata"]

@@ -12,6 +12,10 @@ from void.core.safety import IGNORED_NAMES, safe_project_path
 from void.core.types import ToolDefinition, ToolResult
 
 
+def _activity_project(project: dict) -> dict:
+    return activity_history.compact_project(project)
+
+
 def _should_skip(path: Path) -> bool:
     return any(part in IGNORED_NAMES for part in path.parts)
 
@@ -126,7 +130,7 @@ def set_current_project(project: str) -> ToolResult:
         "success",
         f"Switched project to {selected['name']}",
         {
-            "project": selected,
+            "project": _activity_project(selected),
             "replay": {
                 "action": "set_current_project",
                 "arguments": {"project": selected["id"]},
@@ -164,7 +168,7 @@ def open_project_repo(project: str) -> ToolResult:
             "failure",
             f"Project has no repo_url configured: {selected['name']}",
             {
-                "project": selected,
+                "project": _activity_project(selected),
                 "replay": {
                     "action": "open_project_repo",
                     "arguments": {"project": selected["id"]},
@@ -182,7 +186,7 @@ def open_project_repo(project: str) -> ToolResult:
         "success",
         f"Resolved repository for {selected['name']}",
         {
-            "project": selected,
+            "project": _activity_project(selected),
             "url": repo_url,
             "replay": {
                 "action": "open_project_repo",
@@ -231,7 +235,7 @@ def open_project_repo_in_browser(project: str, mode: str = "visible") -> ToolRes
             "failure",
             f"Project has no repo_url configured: {selected['name']}",
             {
-                "project": selected,
+                "project": _activity_project(selected),
                 "mode": mode,
                 "replay": {
                     "action": "open_project_repo_in_browser",
@@ -252,7 +256,7 @@ def open_project_repo_in_browser(project: str, mode: str = "visible") -> ToolRes
             "failure",
             f"Invalid browser mode for project repo: {mode}",
             {
-                "project": selected,
+                "project": _activity_project(selected),
                 "mode": mode,
                 "replay": {
                     "action": "open_project_repo_in_browser",
@@ -271,7 +275,7 @@ def open_project_repo_in_browser(project: str, mode: str = "visible") -> ToolRes
             "failure",
             f"Failed to open repository for {selected['name']}",
             {
-                "project": selected,
+                "project": _activity_project(selected),
                 "url": repo_url,
                 "mode": clean_mode,
                 "replay": {
@@ -302,7 +306,7 @@ def open_project_repo_in_browser(project: str, mode: str = "visible") -> ToolRes
         "success",
         f"Opened repository for {selected['name']} in browser",
         {
-            "project": selected,
+            "project": _activity_project(selected),
             "url": session.get("url", normalized_url),
             "mode": session.get("mode", clean_mode),
             "session_id": session.get("session_id"),
@@ -317,6 +321,7 @@ def open_project_repo_in_browser(project: str, mode: str = "visible") -> ToolRes
         "success",
         f"Opened {session.get('mode', clean_mode)} browser session",
         {
+            "project": _activity_project(selected),
             "url": session.get("url", normalized_url),
             "mode": session.get("mode", clean_mode),
             "session_id": session.get("session_id"),
@@ -423,7 +428,7 @@ def run_project_command(command_key: str, timeout_seconds: int = 120) -> ToolRes
         "success" if payload["ok"] else "failure",
         f"Ran {payload['command_key']} for {project['name']}",
         {
-            "project": project,
+            "project": _activity_project(project),
             "command_key": payload["command_key"],
             "timeout_seconds": timeout_seconds,
             "cwd": payload["cwd"],
@@ -473,10 +478,9 @@ def run_project_command_visible(command_key: str) -> ToolResult:
         if payload["ok"]
         else f"Failed to launch {payload['command_key']} in visible terminal",
         {
-            "project": project,
+            "project": _activity_project(project),
             "command_key": payload["command_key"],
             "cwd": payload["cwd"],
-            "command": payload["command"],
             "terminal_type": terminal.get("terminal_type"),
             "replay": {
                 "action": "run_project_command_visible",

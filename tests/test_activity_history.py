@@ -47,6 +47,30 @@ def test_activity_history_trims_to_newest_200():
     assert recent[-1]["metadata"]["index"] == 5
 
 
+def test_activity_history_compacts_project_metadata():
+    activity = activity_history.log_activity(
+        "project_command",
+        "success",
+        "Ran verify for Void",
+        {
+            "project": {
+                "id": "void",
+                "name": "Void",
+                "root_path": ".",
+                "repo_url": "https://github.com/MihailPy/Void",
+                "commands": {"verify": "make verify"},
+            },
+            "command_key": "verify",
+            "cwd": ".",
+            "returncode": 0,
+        },
+    )
+
+    assert activity["metadata"]["project"] == {"id": "void", "name": "Void"}
+    assert activity["metadata"]["command_key"] == "verify"
+    assert activity["metadata"]["returncode"] == 0
+
+
 def test_activity_tools_are_registered_and_clear_requires_approval():
     registry = build_registry()
 

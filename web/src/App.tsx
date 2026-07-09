@@ -2460,6 +2460,51 @@ function replayAction(activity: Activity) {
   }
 }
 
+function metadataSummary(activity: Activity) {
+  const metadata = activity.metadata ?? {};
+  const project = asRecord(metadata.project);
+  const terminal = asText(metadata.terminal_type);
+  const returncode = metadata.returncode;
+  const entries: { label: string; value: string }[] = [];
+
+  if (project) {
+    const projectName = asText(project.name, asText(project.id));
+    if (projectName) {
+      entries.push({ label: "Project", value: projectName });
+    }
+  } else {
+    const projectName = asText(metadata.project);
+    if (projectName) {
+      entries.push({ label: "Project", value: projectName });
+    }
+  }
+
+  const command = asText(metadata.command_key);
+  if (command) {
+    entries.push({ label: "Command", value: command });
+  }
+
+  const url = asText(metadata.url);
+  if (url) {
+    entries.push({ label: "URL", value: url });
+  }
+
+  const mode = asText(metadata.mode);
+  if (mode) {
+    entries.push({ label: "Mode", value: mode });
+  }
+
+  if (terminal) {
+    entries.push({ label: "Terminal", value: terminal });
+  }
+
+  if (typeof returncode === "number" || typeof returncode === "string") {
+    entries.push({ label: "Return code", value: String(returncode) });
+  }
+
+  return entries;
+}
+
 function ActivityTab() {
   const [activities, setActivities] = useState<Activity[]>([]);
   const [loading, setLoading] = useState(true);
@@ -2482,6 +2527,7 @@ function ActivityTab() {
             [
               "run_project_command",
               "run_project_command_visible",
+              "open_project_repo",
               "open_project_repo_in_browser",
               "set_current_project",
             ].includes(item.action ?? ""),
@@ -2606,6 +2652,9 @@ function ActivityTab() {
         {activities.map((activity, index) => {
           const action = replayAction(activity);
           const id = activity.id ?? "";
+          const summary = metadataSummary(activity);
+          const replayDisabled = !action || !id || replayingId === id;
+          const replayTitle = action ? "Replay activity" : "Replay not supported";
           return (
             <article className="activityItem" key={id || index}>
               <div className="activityIcon">{activityIcon(activity.activity_type)}</div>
@@ -2622,12 +2671,23 @@ function ActivityTab() {
                   <button
                     className="secondaryButton"
                     type="button"
-                    disabled={!action || !id || replayingId === id}
+                    disabled={replayDisabled}
                     onClick={() => void handleReplay(activity)}
+                    title={replayTitle}
                   >
                     {replayingId === id ? "Requesting..." : "Replay"}
                   </button>
                 </div>
+                {summary.length ? (
+                  <dl className="activityMetadataSummary">
+                    {summary.map((item) => (
+                      <div key={item.label}>
+                        <dt>{item.label}</dt>
+                        <dd>{item.value}</dd>
+                      </div>
+                    ))}
+                  </dl>
+                ) : null}
                 <JsonBlock value={activity.metadata ?? {}} />
               </div>
             </article>
