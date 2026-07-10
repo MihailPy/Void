@@ -60,7 +60,7 @@ def test_clear_pending_clarification():
 
 
 def test_router_open_project_github_requests_clarification():
-    route = Router().route("open project on github")
+    route = Router().route("open project github")
 
     assert route.matched is True
     assert route.action is None
@@ -93,7 +93,7 @@ def test_router_switch_project_requests_clarification():
 def test_agent_resumes_project_selection_to_browser_approval():
     agent = Agent(registry=_project_registry())
 
-    first = agent.handle_result("open project on github")
+    first = agent.handle_result("open project github")
     second = agent.handle_result("Void")
 
     assert first.kind == "clarification_request"

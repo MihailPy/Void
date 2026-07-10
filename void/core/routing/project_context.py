@@ -40,6 +40,21 @@ def _open_project_repo_browser_action(project: str, reason: str) -> RouteResult:
     )
 
 
+def _open_project_workspace_action(
+    target: str = "terminal",
+    project: str | None = None,
+    reason: str = "User asks to open a project workspace.",
+) -> RouteResult:
+    arguments = {"target": target}
+    if project:
+        arguments["project"] = project
+    return RouteResult(
+        matched=True,
+        confidence=0.95,
+        action=AgentAction("open_project_workspace", arguments, reason),
+    )
+
+
 def _current_project_arg() -> str:
     try:
         return str(project_context.get_current_project()["id"])
@@ -72,6 +87,59 @@ def _project_repo_browser_clarification() -> RouteResult:
 
 
 def match(text: str, lowered: str) -> RouteResult | None:
+    workspace_aliases = {
+        "open workspace": "terminal",
+        "open project": "terminal",
+        "open project workspace": "terminal",
+        "открой проект": "terminal",
+        "открой рабочее пространство": "terminal",
+    }
+    if lowered in workspace_aliases:
+        return _open_project_workspace_action(
+            workspace_aliases[lowered],
+            reason="User asks to open the current project workspace.",
+        )
+
+    workspace_target_aliases = {
+        "open project in finder": "finder",
+        "open project in file manager": "finder",
+        "open project on github": "github",
+        "open project in browser": "browser",
+        "open current project on github": "github",
+        "open current project in finder": "finder",
+        "open current project in browser": "browser",
+        "открой проект в finder": "finder",
+        "открой проект в файловом менеджере": "finder",
+        "открой проект на github": "github",
+        "открой текущий проект на github": "github",
+    }
+    if lowered in workspace_target_aliases:
+        return _open_project_workspace_action(
+            workspace_target_aliases[lowered],
+            reason="User asks to open a current project workspace target.",
+        )
+
+    workspace_patterns = [
+        (r"^open\s+(.+?)\s+project\s+workspace$", "terminal"),
+        (r"^open\s+(.+?)\s+project\s+in\s+finder$", "finder"),
+        (r"^open\s+(.+?)\s+project\s+in\s+file\s+manager$", "finder"),
+        (r"^open\s+(.+?)\s+project\s+on\s+github$", "github"),
+        (r"^open\s+(.+?)\s+project\s+in\s+browser$", "browser"),
+        (r"^open\s+project\s+(.+?)\s+in\s+finder$", "finder"),
+        (r"^open\s+project\s+(.+?)\s+on\s+github$", "github"),
+        (r"^open\s+project\s+(.+?)\s+in\s+browser$", "browser"),
+        (r"^открой\s+проект\s+(.+?)\s+в\s+finder$", "finder"),
+        (r"^открой\s+проект\s+(.+?)\s+на\s+github$", "github"),
+    ]
+    for pattern, target in workspace_patterns:
+        workspace_match = re.match(pattern, text, re.IGNORECASE | re.DOTALL)
+        if workspace_match:
+            return _open_project_workspace_action(
+                target,
+                clean(workspace_match.group(1)),
+                "User asks to open a configured project workspace target.",
+            )
+
     current_repo_phrases = {
         "open current project on github",
         "open current project repo",

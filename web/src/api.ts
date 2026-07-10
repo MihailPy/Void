@@ -89,6 +89,7 @@ export type Project = {
   root_path?: string;
   repo_url?: string;
   commands?: Record<string, string>;
+  workspace?: Record<string, Record<string, string>>;
 };
 
 export type ProjectsResponse = {
@@ -123,6 +124,10 @@ export type RunProjectCommandRequest = {
 export type OpenProjectRepoRequest = {
   project: string;
   mode: "visible" | "headless";
+};
+
+export type OpenProjectWorkspaceRequest = {
+  target?: "terminal" | "finder" | "github" | "browser";
 };
 
 export type Approval = {
@@ -382,6 +387,13 @@ export function setCurrentProject(payload: SetCurrentProjectRequest) {
 
 export function openProjectRepo(payload: OpenProjectRepoRequest) {
   return request<ApprovalActionResponse>("/projects/repo/open", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function openProjectWorkspace(payload: OpenProjectWorkspaceRequest = {}) {
+  return request<ApprovalActionResponse>("/projects/current/workspace", {
     method: "POST",
     body: JSON.stringify(payload),
   });

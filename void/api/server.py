@@ -42,6 +42,7 @@ from void.api.schemas import (
     ClarificationResponse,
     MemoryResponse,
     OpenProjectRepoRequest,
+    OpenProjectWorkspaceRequest,
     CurrentProjectResponse,
     ProjectCommandsResponse,
     ProjectDescriptionResponse,
@@ -177,7 +178,9 @@ def _result_type(action: str | None, result: ToolResult) -> str:
     data = result.data or {}
     if "approval_id" in data:
         return "approval"
-    if action == "run_project_command_visible":
+    if action in {"run_project_command_visible", "open_project_workspace"} and (
+        data.get("target") == "terminal" or data.get("mode") == "visible_terminal"
+    ):
         return "terminal_launch_result"
     if action == "run_project_command" or "command_key" in data:
         return "command_result"
@@ -429,6 +432,19 @@ def open_project_repo(
         registry,
         "open_project_repo_in_browser",
         {"project": request.project, "mode": request.mode},
+    )
+
+
+@app.post("/projects/current/workspace", response_model=ApprovalResponse | ErrorResponse)
+def open_current_project_workspace(
+    request: OpenProjectWorkspaceRequest,
+    _: None = Depends(require_api_token),
+    registry: ToolRegistry = Depends(get_tool_registry),
+) -> ApprovalResponse | ErrorResponse:
+    return _execute_api_tool(
+        registry,
+        "open_project_workspace",
+        {"target": request.target},
     )
 
 

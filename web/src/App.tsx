@@ -53,6 +53,7 @@ import {
   listBrowserSessions,
   openBrowserSession,
   openProjectRepo,
+  openProjectWorkspace,
   reject,
   replayActivity,
   respondToClarification,
@@ -1422,6 +1423,7 @@ function ProjectTab() {
           approval.action === "set_current_project" ||
           approval.action === "run_project_command" ||
           approval.action === "run_project_command_visible" ||
+          approval.action === "open_project_workspace" ||
           approval.action === "open_project_repo_in_browser",
       );
       setInlineApproval(pendingApproval);
@@ -1533,6 +1535,28 @@ function ProjectTab() {
     }
   }
 
+  async function handleOpenWorkspace(target: "terminal" | "finder" | "github" | "browser") {
+    setError("");
+    setMessage(null);
+    setCommandResult(null);
+    setInlineApproval(null);
+    setRunningCommand(`workspace:${target}`);
+    try {
+      const response = await openProjectWorkspace({ target });
+      setMessage(toStructuredResult(response));
+      const pendingApproval = await fetchInlineApproval(
+        (approval) =>
+          approval.id === response.data?.approval_id ||
+          approval.action === "open_project_workspace",
+      );
+      setInlineApproval(pendingApproval);
+    } catch (currentError) {
+      setError(getErrorMessage(currentError));
+    } finally {
+      setRunningCommand("");
+    }
+  }
+
   async function handleApprovalAction(id: string, action: ApprovalAction) {
     setApprovalActionId(id);
     setError("");
@@ -1544,7 +1568,8 @@ function ProjectTab() {
         action === "approve" &&
         (approvedAction === "run_project_command" ||
           approvedAction === "run_project_command_visible" ||
-          approvedAction === "open_project_repo_in_browser")
+          approvedAction === "open_project_repo_in_browser" ||
+          approvedAction === "open_project_workspace")
       ) {
         setCommandResult(toStructuredResult(response));
       } else {
@@ -1585,6 +1610,7 @@ function ProjectTab() {
             approval.action === "set_current_project" ||
             approval.action === "run_project_command" ||
             approval.action === "run_project_command_visible" ||
+            approval.action === "open_project_workspace" ||
             approval.action === "open_project_repo_in_browser",
         );
         setInlineApproval(pendingApproval);
@@ -1664,6 +1690,14 @@ function ProjectTab() {
             <span>Command keys</span>
             <p>{commandKeys.join(", ") || "none"}</p>
           </div>
+          <div className="field">
+            <span>Workspace targets</span>
+            <p>
+              {currentProject?.workspace
+                ? Object.keys(currentProject.workspace).sort().join(", ") || "none"
+                : "none"}
+            </p>
+          </div>
           <div className="buttonRow">
             <label className="timeoutControl">
               <span>Mode</span>
@@ -1710,6 +1744,48 @@ function ProjectTab() {
         <pre className="gitOutput">
           <code>{description || "No project description loaded."}</code>
         </pre>
+      </section>
+
+      <section className="contentSection">
+        <div className="sectionHeader">
+          <div>
+            <h2>Workspace</h2>
+            <p>{currentProject?.root_path || "."}</p>
+          </div>
+        </div>
+        <div className="buttonRow">
+          <button
+            type="button"
+            disabled={Boolean(runningCommand)}
+            onClick={() => void handleOpenWorkspace("terminal")}
+          >
+            {runningCommand === "workspace:terminal" ? "Requesting..." : "Open Workspace"}
+          </button>
+          <button
+            className="secondaryButton"
+            type="button"
+            disabled={Boolean(runningCommand)}
+            onClick={() => void handleOpenWorkspace("finder")}
+          >
+            {runningCommand === "workspace:finder" ? "Requesting..." : "Open Finder"}
+          </button>
+          <button
+            className="secondaryButton"
+            type="button"
+            disabled={Boolean(runningCommand) || !currentProject?.repo_url}
+            onClick={() => void handleOpenWorkspace("github")}
+          >
+            {runningCommand === "workspace:github" ? "Requesting..." : "Open GitHub"}
+          </button>
+          <button
+            className="secondaryButton"
+            type="button"
+            disabled={Boolean(runningCommand) || !currentProject?.repo_url}
+            onClick={() => void handleOpenWorkspace("browser")}
+          >
+            {runningCommand === "workspace:browser" ? "Requesting..." : "Open Browser"}
+          </button>
+        </div>
       </section>
 
       <section className="contentSection">

@@ -94,6 +94,10 @@ class OpenProjectRepoRequest(BaseModel):
     mode: Literal["visible", "headless"] = "visible"
 
 
+class OpenProjectWorkspaceRequest(BaseModel):
+    target: Literal["terminal", "finder", "github", "browser", "editor"] = "terminal"
+
+
 class RunProjectCommandRequest(BaseModel):
     timeout_seconds: int = Field(default=120, ge=1, le=3600)
 

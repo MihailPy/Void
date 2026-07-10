@@ -2,11 +2,18 @@
 
 from collections import Counter
 from pathlib import Path
+import platform
+import shlex
+import shutil
+import subprocess
+from typing import Any
 
 from void.core import activity_history
 from void.core import browser_sessions
 from void.core import project_commands
 from void.core import project_context
+from void.core import terminal_runner
+from void.core import workspace as workspace_core
 from void.core.browser_safety import validate_url
 from void.core.safety import IGNORED_NAMES, safe_project_path
 from void.core.types import ToolDefinition, ToolResult
@@ -210,6 +217,140 @@ def _find_project_or_current(project: str) -> dict | None:
     return project_context.find_project(project)
 
 
+def _optional_project_or_current(project: str | None) -> dict | None:
+    if project is None or not str(project).strip():
+        try:
+            return project_context.get_current_project()
+        except ValueError:
+            return None
+    return _find_project_or_current(str(project))
+
+
+def _log_workspace_open(
+    selected: dict[str, Any] | str,
+    target: str,
+    status: str,
+    summary: str,
+    project_arg: str | None,
+) -> None:
+    metadata_project: Any = (
+        _activity_project(selected) if isinstance(selected, dict) else selected
+    )
+    activity_history.log_activity(
+        "workspace_open",
+        status,
+        summary,
+        {
+            "project": metadata_project,
+            "target": target,
+            "status": status,
+            "replay": {
+                "action": "open_project_workspace",
+                "arguments": {
+                    "project": selected["id"] if isinstance(selected, dict) else project_arg,
+                    "target": target,
+                },
+            },
+        },
+    )
+
+
+def _launch_file_manager(root: str) -> dict[str, Any]:
+    system = platform.system()
+    try:
+        if system == "Darwin":
+            if shutil.which("open") is None:
+                return {"ok": False, "target": root, "message": "open is not available."}
+            process = subprocess.Popen(
+                ["open", root],
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+            return {"ok": True, "target": root, "launcher": "open", "pid": process.pid}
+        if system == "Windows":
+            process = subprocess.Popen(
+                ["explorer", root],
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+            return {"ok": True, "target": root, "launcher": "explorer", "pid": process.pid}
+        if system == "Linux":
+            if shutil.which("xdg-open") is None:
+                return {"ok": False, "target": root, "message": "xdg-open is not available."}
+            process = subprocess.Popen(
+                ["xdg-open", root],
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+            return {"ok": True, "target": root, "launcher": "xdg-open", "pid": process.pid}
+        return {
+            "ok": False,
+            "target": root,
+            "message": f"File manager launch is not supported on {system}.",
+        }
+    except OSError as error:
+        return {"ok": False, "target": root, "message": f"Failed to open file manager: {error}"}
+
+
+def _open_url_with_app(url: str, app: str) -> dict[str, Any]:
+    system = platform.system()
+    clean_app = app.strip()
+    try:
+        if system == "Darwin":
+            if shutil.which("open") is None:
+                return {"ok": False, "url": url, "message": "open is not available."}
+            args = ["open", "-a", clean_app, url] if clean_app else ["open", url]
+            process = subprocess.Popen(
+                args,
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+            return {"ok": True, "url": url, "browser_app": clean_app, "pid": process.pid}
+        return {
+            "ok": False,
+            "url": url,
+            "message": "Preferred browser app launch is only supported on macOS.",
+        }
+    except OSError as error:
+        return {"ok": False, "url": url, "message": f"Failed to open browser app: {error}"}
+
+
+def _open_workspace_url(url: str, config: dict[str, str]) -> tuple[bool, list[str], dict[str, Any]]:
+    normalized_url = validate_url(url)
+    app = str(config.get("app") or "").strip()
+    if app and app.casefold() not in {"default", "managed", "browser"}:
+        opened = _open_url_with_app(normalized_url, app)
+        lines = [
+            "Opened project URL in configured browser.",
+            f"Repo URL: {normalized_url}",
+            f"Browser app: {app}",
+            f"Status: {opened.get('message', 'launched')}",
+        ]
+        return bool(opened.get("ok")), lines, {"url": normalized_url, "browser": opened}
+
+    session = browser_sessions.open_session(normalized_url, "visible")
+    lines = [
+        "Opened project URL in browser.",
+        f"Repo URL: {session.get('url', normalized_url)}",
+        f"Mode: {session.get('mode', 'visible')}",
+        f"Session ID: {session.get('session_id', '')}",
+    ]
+    title = session.get("title")
+    if title:
+        lines.append(f"Title: {title}")
+    return True, lines, {
+        "url": session.get("url", normalized_url),
+        "mode": session.get("mode", "visible"),
+        "session_id": session.get("session_id"),
+        "title": title,
+        "session": session,
+    }
+
+
 def open_project_repo_in_browser(project: str, mode: str = "visible") -> ToolResult:
     selected = _find_project_or_current(project)
     if selected is None:
@@ -343,6 +484,179 @@ def open_project_repo_in_browser(project: str, mode: str = "visible") -> ToolRes
             "session": session,
         },
     )
+
+
+def open_project_workspace(project: str | None = None, target: str | None = None) -> ToolResult:
+    clean_target = (target or "terminal").strip().casefold()
+    selected = _optional_project_or_current(project)
+    if selected is None:
+        project_label = project or "current project"
+        _log_workspace_open(
+            project_label,
+            clean_target or "terminal",
+            "failure",
+            "Project not found",
+            project,
+        )
+        return ToolResult(ok=False, content=f"Project not found: {project_label}")
+
+    try:
+        resolved = workspace_core.resolve_workspace_target(selected, target)
+    except ValueError as error:
+        _log_workspace_open(
+            selected,
+            clean_target or "terminal",
+            "failure",
+            f"Failed to resolve workspace for {selected['name']}",
+            project,
+        )
+        return ToolResult(ok=False, content=str(error), data={"project": selected})
+
+    target_name = resolved["target"]
+    config = resolved["config"]
+    root = resolved["root"]
+
+    try:
+        if target_name == "editor":
+            _log_workspace_open(
+                selected,
+                target_name,
+                "failure",
+                f"Editor workspace is not implemented for {selected['name']}",
+                project,
+            )
+            return ToolResult(
+                ok=False,
+                content="Editor workspace is not implemented yet.",
+                data={"project": selected, "target": target_name},
+            )
+
+        if target_name == "terminal":
+            command = str(config.get("command") or "").strip()
+            if not command:
+                _log_workspace_open(
+                    selected,
+                    target_name,
+                    "failure",
+                    f"Workspace terminal command is not configured for {selected['name']}",
+                    project,
+                )
+                return ToolResult(
+                    ok=False,
+                    content=f"Workspace terminal command is not configured for {selected['name']}.",
+                    data={"project": selected, "target": target_name, "cwd": root},
+                )
+
+            command = command.replace("{root}", shlex.quote(root))
+            terminal = terminal_runner.launch_terminal_command(command, root)
+            status = "success" if terminal.get("ok") else "failure"
+            lines = [
+                "Project workspace terminal launch"
+                if terminal.get("ok")
+                else "Project workspace terminal launch failed",
+                f"Project: {selected['name']} ({selected['id']})",
+                f"Target: {target_name}",
+                f"Command: {command}",
+                f"CWD: {root}",
+                f"Terminal: {terminal.get('terminal_type', 'unknown')}",
+                f"Status: {terminal.get('message', '')}",
+            ]
+            if terminal.get("pid") is not None:
+                lines.append(f"PID: {terminal['pid']}")
+            _log_workspace_open(
+                selected,
+                target_name,
+                status,
+                f"Opened {target_name} workspace for {selected['name']}",
+                project,
+            )
+            return ToolResult(
+                ok=bool(terminal.get("ok")),
+                content="\n".join(lines),
+                data={
+                    "project": selected,
+                    "target": target_name,
+                    "command": command,
+                    "cwd": root,
+                    "mode": "visible_terminal",
+                    "terminal": terminal,
+                },
+            )
+
+        if target_name == "finder":
+            opened = _launch_file_manager(root)
+            status = "success" if opened.get("ok") else "failure"
+            _log_workspace_open(
+                selected,
+                target_name,
+                status,
+                f"Opened {target_name} workspace for {selected['name']}",
+                project,
+            )
+            return ToolResult(
+                ok=bool(opened.get("ok")),
+                content=(
+                    f"Opened project in file manager: {root}"
+                    if opened.get("ok")
+                    else str(opened.get("message", "Failed to open file manager."))
+                ),
+                data={
+                    "project": selected,
+                    "target": target_name,
+                    "cwd": root,
+                    "file_manager": opened,
+                },
+            )
+
+        if target_name in {"github", "browser"}:
+            repo_url = str(selected.get("repo_url") or "").strip()
+            if not repo_url:
+                _log_workspace_open(
+                    selected,
+                    target_name,
+                    "failure",
+                    f"Project has no repo_url configured: {selected['name']}",
+                    project,
+                )
+                return ToolResult(
+                    ok=False,
+                    content=f"Project has no repo_url configured: {selected['name']}",
+                    data={"project": selected, "target": target_name},
+                )
+            ok, lines, data = _open_workspace_url(repo_url, config if target_name == "browser" else {})
+            _log_workspace_open(
+                selected,
+                target_name,
+                "success" if ok else "failure",
+                f"Opened {target_name} workspace for {selected['name']}",
+                project,
+            )
+            return ToolResult(
+                ok=ok,
+                content="\n".join(
+                    [
+                        f"Project: {selected['name']} ({selected['id']})",
+                        f"Target: {target_name}",
+                        *lines,
+                    ]
+                ),
+                data={"project": selected, "target": target_name, **data},
+            )
+    except ValueError as error:
+        _log_workspace_open(
+            selected,
+            target_name,
+            "failure",
+            f"Failed to open {target_name} workspace for {selected['name']}",
+            project,
+        )
+        return ToolResult(
+            ok=False,
+            content=str(error),
+            data={"project": selected, "target": target_name},
+        )
+
+    return ToolResult(ok=False, content=f"Unsupported workspace target: {target_name}")
 
 
 def describe_current_project() -> ToolResult:
@@ -536,6 +850,14 @@ def definitions() -> list[ToolDefinition]:
             requires_confirmation=True,
             category="project",
             risk_level="network",
+        ),
+        ToolDefinition(
+            "open_project_workspace",
+            "Open a configured project workspace target.",
+            open_project_workspace,
+            requires_confirmation=True,
+            category="project",
+            risk_level="write",
         ),
         ToolDefinition(
             "describe_current_project",

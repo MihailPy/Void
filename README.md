@@ -23,6 +23,7 @@ The release version is centralized in `void/__version__.py`.
 - Managed Browser Sessions
 - Project Context
 - Project Commands
+- Project Workspace
 - Project Link Actions
 - Clarification Flow
 - Visible Terminal Runner
@@ -149,6 +150,52 @@ opened.
 This does not attach to personal Chrome, does not use persistent browser
 profiles, and does not open arbitrary user-provided URLs.
 
+## Project Workspace
+
+Projects may define an optional `workspace` block in `memory/projects.json`.
+The workspace describes how a user's project workspace should be opened without
+adding a database, planner, or environment automation layer.
+
+Example:
+
+```json
+{
+  "id": "void",
+  "name": "Void",
+  "root_path": ".",
+  "repo_url": "https://github.com/MihailPy/Void",
+  "workspace": {
+    "terminal": {
+      "app": "terminal",
+      "command": "cd {root} && nvim ."
+    },
+    "browser": {
+      "app": "default"
+    },
+    "file_manager": {
+      "app": "Finder"
+    }
+  }
+}
+```
+
+Supported workspace targets:
+
+- `terminal`: launches the configured `workspace.terminal.command` in the
+  existing visible terminal runner after replacing `{root}` with the project
+  root. Only commands stored in project configuration are eligible.
+- `finder`: opens the project root with the platform file manager (`open`,
+  `explorer`, or `xdg-open`).
+- `github`: opens the configured project repository URL.
+- `browser`: opens the configured project repository URL and may use
+  `workspace.browser.app` on supported platforms.
+- `editor`: reserved for future implementation. Void returns
+  `Editor workspace is not implemented yet.`
+
+Workspace opens require approval and are logged as `workspace_open` activities.
+Replay support replays the same `open_project_workspace` target through the
+normal approval flow.
+
 ## Assistant Flows
 
 Void assistant flows are deterministic-first and tools-first. The router maps
@@ -172,11 +219,12 @@ newest 200 entries are kept. Clearing activity history requires approval.
 
 Replay is available only for supported deterministic actions that were executed
 through registered tools: project commands, visible project commands, project
-repository opens, project repository browser opens, and project switches. Replay
-is not a planner and does not replay arbitrary shell commands, chat messages, or
-LLM responses. Replay uses the current project configuration when it runs again;
-it does not restore old project snapshots from activity history. Replayed
-actions always follow the normal approval process again.
+workspace opens, project repository opens, project repository browser opens, and
+project switches. Replay is not a planner and does not replay arbitrary shell
+commands, chat messages, or LLM responses. Replay uses the current project
+configuration when it runs again; it does not restore old project snapshots from
+activity history. Replayed actions always follow the normal approval process
+again.
 
 Useful commands:
 
@@ -200,6 +248,7 @@ Supported project flows:
 
 - Show the current project.
 - Switch the current project.
+- Open the current project workspace.
 - Open a configured project repository in a managed browser session.
 
 Supported command flows:
