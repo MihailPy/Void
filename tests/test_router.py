@@ -65,8 +65,8 @@ def test_router_open_project_repo():
 
     assert route.matched is True
     assert route.action is not None
-    assert route.action.action == "open_project_repo_in_browser"
-    assert route.action.arguments == {"project": "Void"}
+    assert route.action.action == "open_project_workspace"
+    assert route.action.arguments == {"target": "github", "project": "Void"}
 
 
 def test_router_open_project_repo_project_before_github():
@@ -74,8 +74,8 @@ def test_router_open_project_repo_project_before_github():
 
     assert route.matched is True
     assert route.action is not None
-    assert route.action.action == "open_project_repo_in_browser"
-    assert route.action.arguments == {"project": "Void"}
+    assert route.action.action == "open_project_workspace"
+    assert route.action.arguments == {"target": "github", "project": "Void"}
 
 
 def test_router_open_current_project_repo():
@@ -88,7 +88,7 @@ def test_router_open_current_project_repo():
 
 
 def test_router_open_project_repo_missing_project_requests_clarification():
-    route = Router().route("открой проект на github")
+    route = Router().route("открой проект github")
 
     assert route.matched is True
     assert route.action is None

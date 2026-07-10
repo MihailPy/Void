@@ -78,6 +78,7 @@ def test_project_tools_registered_with_metadata():
         "describe_current_project": ("project", "read", False),
         "open_project_repo": ("project", "read", False),
         "open_project_repo_in_browser": ("project", "network", True),
+        "open_project_workspace": ("project", "write", True),
         "list_project_commands": ("project", "read", False),
         "run_project_command": ("project", "write", True),
         "run_project_command_visible": ("project", "write", True),

@@ -21,6 +21,18 @@ DEFAULT_PROJECT_CONTEXT: dict[str, Any] = {
             "aliases": ["void", "MihailPy/Void"],
             "root_path": ".",
             "repo_url": "https://github.com/MihailPy/Void",
+            "workspace": {
+                "terminal": {
+                    "app": "terminal",
+                    "command": "cd {root} && nvim .",
+                },
+                "browser": {
+                    "app": "default",
+                },
+                "file_manager": {
+                    "app": "Finder",
+                },
+            },
             "commands": {
                 "verify": "make verify",
                 "test": "make verify",
@@ -62,8 +74,23 @@ def _clean_project(raw: dict[str, Any]) -> dict[str, Any]:
         for key, value in commands.items()
         if str(key).strip()
     }
+    workspace = raw.get("workspace", {})
+    if not isinstance(workspace, dict):
+        workspace = {}
+    clean_workspace: dict[str, dict[str, str]] = {}
+    for target, config in workspace.items():
+        target_key = str(target).strip()
+        if not target_key or not isinstance(config, dict):
+            continue
+        clean_config = {
+            str(key).strip(): str(value)
+            for key, value in config.items()
+            if str(key).strip() and str(value).strip()
+        }
+        if clean_config:
+            clean_workspace[target_key] = clean_config
 
-    return {
+    project = {
         "id": project_id,
         "name": name,
         "aliases": clean_aliases,
@@ -71,6 +98,9 @@ def _clean_project(raw: dict[str, Any]) -> dict[str, Any]:
         "repo_url": str(raw.get("repo_url") or ""),
         "commands": clean_commands,
     }
+    if clean_workspace:
+        project["workspace"] = clean_workspace
+    return project
 
 
 def _validate_payload(payload: dict[str, Any]) -> dict[str, Any]:
@@ -180,6 +210,7 @@ def describe_current_project() -> str:
     project = get_current_project()
     aliases = ", ".join(project.get("aliases", [])) or "none"
     command_keys = ", ".join(sorted(project.get("commands", {}).keys())) or "none"
+    workspace_targets = ", ".join(sorted(project.get("workspace", {}).keys())) or "none"
     repo_url = project.get("repo_url") or "none"
 
     return (
@@ -189,5 +220,6 @@ def describe_current_project() -> str:
         f"Root path: {project.get('root_path', '.')}\n"
         f"Repo URL: {repo_url}\n"
         f"Aliases: {aliases}\n"
-        f"Command keys: {command_keys}"
+        f"Command keys: {command_keys}\n"
+        f"Workspace targets: {workspace_targets}"
     )

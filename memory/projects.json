@@ -10,6 +10,18 @@
       ],
       "root_path": ".",
       "repo_url": "https://github.com/MihailPy/Void",
+      "workspace": {
+        "terminal": {
+          "app": "terminal",
+          "command": "cd {root} && nvim ."
+        },
+        "browser": {
+          "app": "default"
+        },
+        "file_manager": {
+          "app": "Finder"
+        }
+      },
       "commands": {
         "verify": "make verify",
         "test": "make verify",

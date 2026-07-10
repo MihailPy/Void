@@ -322,6 +322,22 @@ def test_open_project_repo_endpoint_creates_approval():
     assert approvals[0]["arguments"] == {"project": "Void", "mode": "visible"}
 
 
+def test_open_current_project_workspace_endpoint_creates_approval():
+    response = request(
+        "POST",
+        "/projects/current/workspace",
+        json={"target": "finder"},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["ok"] is True
+    assert "approval" in payload["message"].lower()
+    assert payload["result_type"] == "approval"
+    assert payload["data"]["action"] == "open_project_workspace"
+    assert payload["data"]["arguments"] == {"target": "finder"}
+
+
 def test_run_project_command_endpoint_validates_timeout():
     response = request(
         "POST",
@@ -351,7 +367,7 @@ def test_chat_uses_router_without_llm():
 
 
 def test_chat_returns_clarification_request():
-    response = request("POST", "/chat", json={"message": "open project on github"})
+    response = request("POST", "/chat", json={"message": "open project github"})
 
     assert response.status_code == 200
     payload = response.json()
@@ -362,7 +378,7 @@ def test_chat_returns_clarification_request():
 
 
 def test_clarification_endpoints_resume_action():
-    request("POST", "/chat", json={"message": "open project on github"})
+    request("POST", "/chat", json={"message": "open project github"})
 
     pending_response = request("GET", "/clarification")
     assert pending_response.status_code == 200
@@ -402,7 +418,7 @@ def test_flow_open_project_on_github_clarifies_approves_and_opens_browser(monkey
 
     monkeypatch.setattr("void.tools.project_tools.browser_sessions.open_session", open_session)
 
-    first = request("POST", "/chat", json={"message": "open project on github"})
+    first = request("POST", "/chat", json={"message": "open project github"})
     assert first.status_code == 200
     assert first.json()["result_type"] == "clarification_request"
     assert first.json()["clarification"]["context"]["available_projects"] == ["Void"]

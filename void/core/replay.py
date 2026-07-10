@@ -16,6 +16,7 @@ ReplayExecutor = Callable[[AgentAction], ToolResult]
 REPLAYABLE_ACTIONS = {
     "run_project_command",
     "run_project_command_visible",
+    "open_project_workspace",
     "open_project_repo",
     "open_project_repo_in_browser",
     "set_current_project",
@@ -111,6 +112,14 @@ def _action_from_activity(activity: dict[str, Any]) -> AgentAction | None:
                 {"project": project, "mode": mode},
             )
         return _allowed_action("open_project_repo", {"project": project})
+
+    if activity_type == "workspace_open":
+        project = _project_identifier(metadata.get("project")) or _text(metadata.get("project"))
+        target = _text(metadata.get("target")) or "terminal"
+        arguments: dict[str, Any] = {"target": target}
+        if project:
+            arguments["project"] = project
+        return _allowed_action("open_project_workspace", arguments)
 
     return None
 
