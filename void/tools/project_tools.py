@@ -623,7 +623,12 @@ def open_project_workspace(project: str | None = None, target: str | None = None
                     content=f"Project has no repo_url configured: {selected['name']}",
                     data={"project": selected, "target": target_name},
                 )
-            ok, lines, data = _open_workspace_url(repo_url, config if target_name == "browser" else {})
+            browser_config = (
+                resolved["workspace"].get("browser", {})
+                if target_name == "github"
+                else config
+            )
+            ok, lines, data = _open_workspace_url(repo_url, browser_config)
             _log_workspace_open(
                 selected,
                 target_name,

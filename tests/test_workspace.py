@@ -137,7 +137,7 @@ def test_open_workspace_finder_uses_platform_file_manager(monkeypatch):
     assert activity_history.get_last_activity()["metadata"]["target"] == "finder"
 
 
-def test_open_workspace_github_opens_repo_with_existing_browser(monkeypatch):
+def test_open_workspace_github_opens_repo_with_managed_browser_for_default(monkeypatch):
     _save_workspace({"browser": {"app": "default"}})
     opened: list[tuple[str, str]] = []
 
@@ -163,6 +163,60 @@ def test_open_workspace_github_opens_repo_with_existing_browser(monkeypatch):
     assert result.data["session_id"] == "repo-session"
     assert opened == [("https://github.com/MihailPy/Void", "visible")]
     assert activity_history.get_last_activity()["activity_type"] == "workspace_open"
+
+
+def test_open_workspace_github_opens_repo_with_managed_browser_for_managed(monkeypatch):
+    _save_workspace({"browser": {"app": "managed"}})
+    opened: list[tuple[str, str]] = []
+
+    def fake_open_session(url: str, mode: str) -> dict[str, Any]:
+        opened.append((url, mode))
+        return {
+            "session_id": "repo-session",
+            "mode": mode,
+            "url": url,
+            "title": "Repo",
+        }
+
+    monkeypatch.setattr("void.tools.project_tools.browser_sessions.open_session", fake_open_session)
+    registry = build_registry()
+
+    registry.execute(
+        AgentAction("open_project_workspace", {"target": "github"}, "test")
+    )
+    result = _approve_latest(registry)
+
+    assert result.ok is True
+    assert result.data["target"] == "github"
+    assert result.data["session_id"] == "repo-session"
+    assert opened == [("https://github.com/MihailPy/Void", "visible")]
+
+
+def test_open_workspace_github_uses_configured_browser_app(monkeypatch):
+    _save_workspace({"browser": {"app": "Safari"}})
+    monkeypatch.setattr("void.tools.project_tools.platform.system", lambda: "Darwin")
+    monkeypatch.setattr("void.tools.project_tools.shutil.which", lambda name: "/usr/bin/open")
+    calls: list[list[str]] = []
+
+    class FakeProcess:
+        pid = 789
+
+    def fake_popen(args, **kwargs):
+        calls.append(args)
+        return FakeProcess()
+
+    monkeypatch.setattr("void.tools.project_tools.subprocess.Popen", fake_popen)
+    registry = build_registry()
+
+    registry.execute(
+        AgentAction("open_project_workspace", {"target": "github"}, "test")
+    )
+    result = _approve_latest(registry)
+
+    assert result.ok is True
+    assert result.data["target"] == "github"
+    assert result.data["browser"]["browser_app"] == "Safari"
+    assert calls == [["open", "-a", "Safari", "https://github.com/MihailPy/Void"]]
 
 
 def test_open_workspace_editor_is_reserved():
@@ -216,12 +270,10 @@ def test_router_workspace_phrases():
         "open project": {"target": "terminal"},
         "open project workspace": {"target": "terminal"},
         "open project in finder": {"target": "finder"},
-        "open project on github": {"target": "github"},
         "open project in browser": {"target": "browser"},
         "открой проект": {"target": "terminal"},
         "открой рабочее пространство": {"target": "terminal"},
         "открой проект в Finder": {"target": "finder"},
-        "открой проект на GitHub": {"target": "github"},
     }
 
     for phrase, arguments in cases.items():
@@ -230,3 +282,21 @@ def test_router_workspace_phrases():
         assert route.action is not None
         assert route.action.action == "open_project_workspace"
         assert route.action.arguments == arguments
+
+
+def test_router_open_project_on_github_requests_clarification():
+    route = Router().route("Open project on GitHub")
+
+    assert route.matched is True
+    assert route.action is None
+    assert route.clarification is not None
+    assert route.clarification.clarification_type == "project_selection"
+
+
+def test_router_open_current_project_on_github_uses_current_project():
+    route = Router().route("Open current project on GitHub")
+
+    assert route.matched is True
+    assert route.action is not None
+    assert route.action.action == "open_project_workspace"
+    assert route.action.arguments == {"target": "github"}

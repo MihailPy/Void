@@ -103,14 +103,12 @@ def match(text: str, lowered: str) -> RouteResult | None:
     workspace_target_aliases = {
         "open project in finder": "finder",
         "open project in file manager": "finder",
-        "open project on github": "github",
         "open project in browser": "browser",
         "open current project on github": "github",
         "open current project in finder": "finder",
         "open current project in browser": "browser",
         "открой проект в finder": "finder",
         "открой проект в файловом менеджере": "finder",
-        "открой проект на github": "github",
         "открой текущий проект на github": "github",
     }
     if lowered in workspace_target_aliases:
