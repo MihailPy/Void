@@ -110,6 +110,137 @@ def test_open_workspace_terminal_uses_configured_command(monkeypatch):
     assert latest["metadata"]["status"] == "success"
 
 
+def test_open_workspace_iterm2_config_uses_adapter(monkeypatch):
+    _save_workspace(
+        {
+            "terminal": {
+                "app": "iTerm2",
+                "command": "cd {root} && nvim .",
+                "reuse_existing": "yes",
+                "open_mode": "tab",
+                "profile": "Default",
+                "window_bounds": "100,80,1500,950",
+            }
+        }
+    )
+    calls: list[dict[str, Any]] = []
+
+    monkeypatch.setattr("void.tools.project_tools.platform.system", lambda: "Darwin")
+
+    def fake_open_workspace(root_path: str, command: str, **kwargs: Any) -> dict[str, Any]:
+        calls.append({"root_path": root_path, "command": command, **kwargs})
+        return {
+            "ok": True,
+            "app": "iterm2",
+            "action": "opened_tab",
+            "window_id": "101",
+            "tab_id": "202",
+            "session_id": "303",
+            "command": command,
+            "cwd": root_path,
+            "message": "Opened iTerm2 workspace.",
+        }
+
+    monkeypatch.setattr("void.tools.project_tools.iterm2.open_workspace", fake_open_workspace)
+    registry = build_registry()
+
+    registry.execute(AgentAction("open_project_workspace", {}, "test"))
+    result = _approve_latest(registry)
+
+    assert result.ok is True
+    assert result.data["mode"] == "iterm2_workspace"
+    assert result.data["terminal"]["action"] == "opened_tab"
+    assert calls[0]["project_id"] == "void"
+    assert calls[0]["reuse_existing"] is True
+    assert calls[0]["open_mode"] == "tab"
+    assert calls[0]["profile"] == "Default"
+    assert calls[0]["window_bounds"] == {
+        "left": 100,
+        "top": 80,
+        "right": 1500,
+        "bottom": 950,
+    }
+    latest = activity_history.get_last_activity()
+    assert latest["activity_type"] == "workspace_open"
+    assert latest["metadata"]["terminal_app"] == "iterm2"
+    assert latest["metadata"]["workspace_action"] == "opened_tab"
+    assert latest["metadata"]["replay"]["action"] == "open_project_workspace"
+
+
+def test_iterm2_boolean_configuration_parsing(monkeypatch):
+    _save_workspace(
+        {
+            "terminal": {
+                "app": "iterm",
+                "command": "nvim .",
+                "reuse_existing": "off",
+            }
+        }
+    )
+    calls: list[dict[str, Any]] = []
+    monkeypatch.setattr("void.tools.project_tools.platform.system", lambda: "Darwin")
+
+    def fake_open_workspace(root_path: str, command: str, **kwargs: Any) -> dict[str, Any]:
+        calls.append(kwargs)
+        return {
+            "ok": True,
+            "app": "iterm2",
+            "action": "opened_tab",
+            "command": command,
+            "cwd": root_path,
+            "message": "Opened.",
+        }
+
+    monkeypatch.setattr("void.tools.project_tools.iterm2.open_workspace", fake_open_workspace)
+    registry = build_registry()
+
+    registry.execute(AgentAction("open_project_workspace", {}, "test"))
+    result = _approve_latest(registry)
+
+    assert result.ok is True
+    assert calls[0]["reuse_existing"] is False
+
+
+def test_invalid_iterm2_boolean_configuration_is_rejected(monkeypatch):
+    _save_workspace(
+        {
+            "terminal": {
+                "app": "iterm2",
+                "command": "nvim .",
+                "reuse_existing": "sometimes",
+            }
+        }
+    )
+    monkeypatch.setattr("void.tools.project_tools.platform.system", lambda: "Darwin")
+    registry = build_registry()
+
+    registry.execute(AgentAction("open_project_workspace", {}, "test"))
+    result = _approve_latest(registry)
+
+    assert result.ok is False
+    assert "reuse_existing" in result.content
+
+
+def test_invalid_iterm2_window_bounds_configuration_is_rejected(monkeypatch):
+    _save_workspace(
+        {
+            "terminal": {
+                "app": "iterm2",
+                "command": "nvim .",
+                "window_bounds": "100,80,50,950",
+            }
+        }
+    )
+    monkeypatch.setattr("void.tools.project_tools.platform.system", lambda: "Darwin")
+    registry = build_registry()
+
+    registry.execute(AgentAction("open_project_workspace", {}, "test"))
+    result = _approve_latest(registry)
+
+    assert result.ok is False
+    assert "window_bounds" in result.content
+
+
 def test_open_workspace_finder_uses_platform_file_manager(monkeypatch):
     _save_workspace({"file_manager": {"app": "Finder"}})
     monkeypatch.setattr("void.tools.project_tools.platform.system", lambda: "Darwin")
