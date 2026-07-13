@@ -17,6 +17,7 @@ from void.core import workspace as workspace_core
 from void.core.browser_safety import validate_url
 from void.core.safety import IGNORED_NAMES, safe_project_path
 from void.core.types import ToolDefinition, ToolResult
+from void.integrations import iterm2
 
 
 def _activity_project(project: dict) -> dict:
@@ -232,27 +233,61 @@ def _log_workspace_open(
     status: str,
     summary: str,
     project_arg: str | None,
+    extra_metadata: dict[str, Any] | None = None,
 ) -> None:
     metadata_project: Any = (
         _activity_project(selected) if isinstance(selected, dict) else selected
     )
+    metadata = {
+        "project": metadata_project,
+        "target": target,
+        "status": status,
+        "replay": {
+            "action": "open_project_workspace",
+            "arguments": {
+                "project": selected["id"] if isinstance(selected, dict) else project_arg,
+                "target": target,
+            },
+        },
+    }
+    if extra_metadata:
+        metadata.update(extra_metadata)
     activity_history.log_activity(
         "workspace_open",
         status,
         summary,
-        {
-            "project": metadata_project,
-            "target": target,
-            "status": status,
-            "replay": {
-                "action": "open_project_workspace",
-                "arguments": {
-                    "project": selected["id"] if isinstance(selected, dict) else project_arg,
-                    "target": target,
-                },
-            },
-        },
+        metadata,
     )
+
+
+def _is_iterm2_app(value: Any) -> bool:
+    return str(value or "").strip().casefold() in {"iterm2", "iterm"}
+
+
+def _parse_workspace_bool(value: Any, *, default: bool, field: str) -> tuple[bool | None, str | None]:
+    if value is None or str(value).strip() == "":
+        return default, None
+    clean = str(value).strip().casefold()
+    if clean in {"true", "1", "yes", "on"}:
+        return True, None
+    if clean in {"false", "0", "no", "off"}:
+        return False, None
+    return None, f"Invalid {field}: {value}. Expected true, false, 1, 0, yes, no, on, or off."
+
+
+def _parse_window_bounds(value: Any) -> tuple[dict[str, int] | None, str | None]:
+    if value is None or str(value).strip() == "":
+        return None, None
+    parts = [part.strip() for part in str(value).split(",")]
+    if len(parts) != 4:
+        return None, "Invalid window_bounds: expected left,top,right,bottom."
+    try:
+        left, top, right, bottom = [int(part) for part in parts]
+    except ValueError:
+        return None, "Invalid window_bounds: values must be integers."
+    if left >= right or top >= bottom:
+        return None, "Invalid window_bounds: expected left < right and top < bottom."
+    return {"left": left, "top": top, "right": right, "bottom": bottom}, None
 
 
 def _launch_file_manager(root: str) -> dict[str, Any]:
@@ -548,6 +583,125 @@ def open_project_workspace(project: str | None = None, target: str | None = None
                 )
 
             command = command.replace("{root}", shlex.quote(root))
+            if _is_iterm2_app(config.get("app")) and platform.system() == "Darwin":
+                reuse_existing, bool_error = _parse_workspace_bool(
+                    config.get("reuse_existing"),
+                    default=True,
+                    field="workspace.terminal.reuse_existing",
+                )
+                if bool_error:
+                    _log_workspace_open(
+                        selected,
+                        target_name,
+                        "failure",
+                        f"Invalid iTerm2 workspace configuration for {selected['name']}",
+                        project,
+                        {
+                            "terminal_app": "iterm2",
+                            "workspace_action": "failed",
+                        },
+                    )
+                    return ToolResult(
+                        ok=False,
+                        content=bool_error,
+                        data={"project": selected, "target": target_name, "cwd": root},
+                    )
+
+                open_mode = str(config.get("open_mode") or "tab").strip().casefold()
+                if open_mode not in {"tab", "window"}:
+                    message = (
+                        f"Invalid workspace.terminal.open_mode: {open_mode}. "
+                        "Expected tab or window."
+                    )
+                    _log_workspace_open(
+                        selected,
+                        target_name,
+                        "failure",
+                        f"Invalid iTerm2 workspace configuration for {selected['name']}",
+                        project,
+                        {
+                            "terminal_app": "iterm2",
+                            "workspace_action": "failed",
+                        },
+                    )
+                    return ToolResult(
+                        ok=False,
+                        content=message,
+                        data={"project": selected, "target": target_name, "cwd": root},
+                    )
+
+                window_bounds, bounds_error = _parse_window_bounds(config.get("window_bounds"))
+                if bounds_error:
+                    _log_workspace_open(
+                        selected,
+                        target_name,
+                        "failure",
+                        f"Invalid iTerm2 workspace configuration for {selected['name']}",
+                        project,
+                        {
+                            "terminal_app": "iterm2",
+                            "workspace_action": "failed",
+                        },
+                    )
+                    return ToolResult(
+                        ok=False,
+                        content=bounds_error,
+                        data={"project": selected, "target": target_name, "cwd": root},
+                    )
+
+                terminal = iterm2.open_workspace(
+                    root,
+                    command,
+                    project_id=selected["id"],
+                    reuse_existing=bool(reuse_existing),
+                    open_mode=open_mode,
+                    profile=str(config.get("profile")).strip() if config.get("profile") else None,
+                    window_bounds=window_bounds,
+                )
+                status = "success" if terminal.get("ok") else "failure"
+                lines = [
+                    "Project iTerm2 workspace"
+                    if terminal.get("ok")
+                    else "Project iTerm2 workspace failed",
+                    f"Project: {selected['name']} ({selected['id']})",
+                    f"Target: {target_name}",
+                    f"Command: {command}",
+                    f"CWD: {root}",
+                    f"Terminal app: {terminal.get('app', 'iterm2')}",
+                    f"Workspace action: {terminal.get('action', 'failed')}",
+                    f"Status: {terminal.get('message', '')}",
+                ]
+                for label, key in (
+                    ("Window ID", "window_id"),
+                    ("Tab ID", "tab_id"),
+                    ("Session ID", "session_id"),
+                ):
+                    if terminal.get(key):
+                        lines.append(f"{label}: {terminal[key]}")
+                _log_workspace_open(
+                    selected,
+                    target_name,
+                    status,
+                    f"Opened {target_name} workspace for {selected['name']}",
+                    project,
+                    {
+                        "terminal_app": "iterm2",
+                        "workspace_action": terminal.get("action"),
+                    },
+                )
+                return ToolResult(
+                    ok=bool(terminal.get("ok")),
+                    content="\n".join(lines),
+                    data={
+                        "project": selected,
+                        "target": target_name,
+                        "command": command,
+                        "cwd": root,
+                        "mode": "iterm2_workspace",
+                        "terminal": terminal,
+                    },
+                )
+
             terminal = terminal_runner.launch_terminal_command(command, root)
             status = "success" if terminal.get("ok") else "failure"
             lines = [

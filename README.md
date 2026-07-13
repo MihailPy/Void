@@ -196,6 +196,49 @@ Workspace opens require approval and are logged as `workspace_open` activities.
 Replay support replays the same `open_project_workspace` target through the
 normal approval flow.
 
+### Smart iTerm2 Workspaces
+
+On macOS, `workspace.terminal.app` may be set to `iterm2`, `iterm`, or `iTerm2`
+to use Smart iTerm2 Workspaces. Void uses an exact iTerm2 session marker based
+on the project id:
+
+```text
+void-workspace:<project_id>
+```
+
+When `reuse_existing` is enabled, Void looks only for an iTerm2 session whose
+name exactly matches that marker. If one exists, Void activates its window, tab,
+and session. If no marked session exists, Void creates a new tab or window,
+sets the marker as the session name, and runs the configured
+`workspace.terminal.command`. Void does not inspect terminal contents, shell
+history, process lists, visible text, or partial filesystem paths. It also does
+not control Neovim after launching it.
+
+Approval is always required, including when Void only activates an existing
+marked iTerm2 workspace. The command always comes from project configuration;
+raw terminal commands are not accepted from the router, API, or Web UI.
+
+Example:
+
+```json
+{
+  "workspace": {
+    "terminal": {
+      "app": "iterm2",
+      "command": "cd {root} && nvim .",
+      "reuse_existing": "true",
+      "open_mode": "tab",
+      "profile": "Default",
+      "window_bounds": "100,80,1500,950"
+    }
+  }
+}
+```
+
+Defaults are `reuse_existing=true` and `open_mode=tab`. `profile` and
+`window_bounds` are optional. `window_bounds` uses `left,top,right,bottom` and
+must contain four integers with `left < right` and `top < bottom`.
+
 ## Assistant Flows
 
 Void assistant flows are deterministic-first and tools-first. The router maps
