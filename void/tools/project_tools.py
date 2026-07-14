@@ -174,27 +174,31 @@ def get_workspace_preferences(project: str | None = None) -> ToolResult:
 
 
 def update_workspace_preferences(
-    section: str,
-    field: str,
-    value: str,
+    changes: list[dict[str, Any]] | None = None,
     project: str | None = None,
+    section: str | None = None,
+    field: str | None = None,
+    value: Any | None = None,
 ) -> ToolResult:
+    if changes is None:
+        if section is None or field is None or value is None:
+            return ToolResult(ok=False, content="changes is required.")
+        changes = [{"section": section, "field": field, "value": value}]
+
     try:
-        result = workspace_preferences.update_workspace_preference(
+        result = workspace_preferences.update_workspace_preferences(
             project,
-            section,
-            field,
-            value,
+            changes,
         )
     except ValueError as error:
         return ToolResult(ok=False, content=str(error))
 
     project_name = result["project"].get("name") or result["project"].get("id")
+    change_count = len(result["changes"])
     return ToolResult(
         ok=True,
         content=(
-            f"Updated workspace preference for {project_name}: "
-            f"{result['section']}.{result['field']} = {result['new_value']}"
+            f"Updated {change_count} workspace preference(s) for {project_name}."
         ),
         data=result,
     )
@@ -1052,7 +1056,7 @@ def definitions() -> list[ToolDefinition]:
         ),
         ToolDefinition(
             "update_workspace_preferences",
-            "Update one editable workspace preference after approval.",
+            "Update editable workspace preferences as one approved batch.",
             update_workspace_preferences,
             requires_confirmation=True,
             category="project",

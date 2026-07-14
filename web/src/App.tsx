@@ -1702,15 +1702,12 @@ function ProjectTab() {
     setInlineApproval(null);
     setSavingWorkspacePreferences(true);
     try {
-      let lastResponse: Awaited<ReturnType<typeof updateWorkspacePreferences>> | null = null;
-      for (const change of changes) {
-        lastResponse = await updateWorkspacePreferences(change);
-      }
-      if (lastResponse) {
-        setMessage(toStructuredResult(lastResponse));
-      }
+      const response = await updateWorkspacePreferences({ changes });
+      setMessage(toStructuredResult(response));
       const pendingApproval = await fetchInlineApproval(
-        (approval) => approval.action === "update_workspace_preferences",
+        (approval) =>
+          approval.id === response.data?.approval_id ||
+          approval.action === "update_workspace_preferences",
       );
       setInlineApproval(pendingApproval);
     } catch (currentError) {
@@ -1739,7 +1736,9 @@ function ProjectTab() {
         setMessage(toStructuredResult(response));
       }
       setInlineApproval(null);
-      await loadProjectContext();
+      if (action === "approve" || approvedAction !== "update_workspace_preferences") {
+        await loadProjectContext();
+      }
     } catch (currentError) {
       setError(getErrorMessage(currentError));
     } finally {
@@ -1960,10 +1959,17 @@ function ProjectTab() {
           </div>
           <button
             type="button"
-            disabled={savingWorkspacePreferences}
+            disabled={
+              savingWorkspacePreferences ||
+              inlineApproval?.action === "update_workspace_preferences"
+            }
             onClick={() => void handleSaveWorkspacePreferences()}
           >
-            {savingWorkspacePreferences ? "Requesting..." : "Save"}
+            {savingWorkspacePreferences
+              ? "Requesting..."
+              : inlineApproval?.action === "update_workspace_preferences"
+                ? "Pending approval"
+                : "Save"}
           </button>
         </div>
         <div className="formGrid">

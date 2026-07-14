@@ -78,7 +78,15 @@ def _update_workspace_preferences_action(
         confidence=0.95,
         action=AgentAction(
             "update_workspace_preferences",
-            {"section": section, "field": field, "value": value},
+            {
+                "changes": [
+                    {
+                        "section": section,
+                        "field": field,
+                        "value": value,
+                    }
+                ]
+            },
             reason,
         ),
     )

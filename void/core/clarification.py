@@ -168,6 +168,28 @@ def action_from_resolved_clarification(
             "User answered a visible project-command clarification.",
         )
 
+    if (
+        clarification_type == "workspace_preference_value"
+        and original_action == "update_workspace_preferences"
+    ):
+        section = str(context.get("section", "")).strip()
+        field = str(context.get("field", "")).strip()
+        if not section or not field:
+            return None
+        return AgentAction(
+            "update_workspace_preferences",
+            {
+                "changes": [
+                    {
+                        "section": section,
+                        "field": field,
+                        "value": answer,
+                    }
+                ]
+            },
+            "User answered a workspace preference clarification.",
+        )
+
     return None
 
 

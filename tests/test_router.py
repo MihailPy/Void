@@ -121,9 +121,13 @@ def test_router_set_workspace_terminal_preference():
     assert route.action is not None
     assert route.action.action == "update_workspace_preferences"
     assert route.action.arguments == {
-        "section": "terminal",
-        "field": "app",
-        "value": "iterm2",
+        "changes": [
+            {
+                "section": "terminal",
+                "field": "app",
+                "value": "iterm2",
+            }
+        ]
     }
 
 
@@ -134,9 +138,13 @@ def test_router_set_workspace_browser_preference():
     assert route.action is not None
     assert route.action.action == "update_workspace_preferences"
     assert route.action.arguments == {
-        "section": "browser",
-        "field": "app",
-        "value": "Safari",
+        "changes": [
+            {
+                "section": "browser",
+                "field": "app",
+                "value": "Safari",
+            }
+        ]
     }
 
 
@@ -147,9 +155,13 @@ def test_router_russian_workspace_preference_infers_browser():
     assert route.action is not None
     assert route.action.action == "update_workspace_preferences"
     assert route.action.arguments == {
-        "section": "browser",
-        "field": "app",
-        "value": "Safari",
+        "changes": [
+            {
+                "section": "browser",
+                "field": "app",
+                "value": "Safari",
+            }
+        ]
     }
 
 

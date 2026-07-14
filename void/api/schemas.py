@@ -105,11 +105,18 @@ class WorkspacePreferencesResponse(BaseModel):
     editable_fields: dict[str, list[str]]
 
 
-class UpdateWorkspacePreferencesRequest(BaseModel):
-    project: str | None = None
+class WorkspacePreferenceChange(BaseModel):
     section: str
     field: str
-    value: str
+    value: Any
+
+
+class UpdateWorkspacePreferencesRequest(BaseModel):
+    project: str | None = None
+    changes: list[WorkspacePreferenceChange] | None = None
+    section: str | None = None
+    field: str | None = None
+    value: Any | None = None
 
 
 class RunProjectCommandRequest(BaseModel):

@@ -132,6 +132,12 @@ export type OpenProjectWorkspaceRequest = {
 
 export type WorkspacePreferences = Record<string, Record<string, string>>;
 
+export type WorkspacePreferenceChange = {
+  section: string;
+  field: string;
+  value: string;
+};
+
 export type WorkspacePreferencesResponse = {
   ok: boolean;
   project: Pick<Project, "id" | "name">;
@@ -141,9 +147,7 @@ export type WorkspacePreferencesResponse = {
 
 export type UpdateWorkspacePreferencesRequest = {
   project?: string | null;
-  section: string;
-  field: string;
-  value: string;
+  changes: WorkspacePreferenceChange[];
 };
 
 export type Approval = {

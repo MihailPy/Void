@@ -99,21 +99,123 @@ def test_workspace_preferences_update_preserves_unknown_keys_and_saves():
     assert project["workspace"]["terminal"]["profile"] == "Development"
     latest = activity_history.get_last_activity()
     assert latest["activity_type"] == "workspace_preferences_update"
-    assert latest["metadata"]["section"] == "terminal"
-    assert latest["metadata"]["field"] == "profile"
-    assert latest["metadata"]["old_value"] is None
-    assert latest["metadata"]["new_value"] == "Development"
+    assert latest["metadata"]["changes"] == [
+        {
+            "section": "terminal",
+            "field": "profile",
+            "old_value": None,
+            "new_value": "Development",
+        }
+    ]
     assert "replay" not in latest["metadata"]
 
 
-def test_workspace_preferences_tool_update_requires_approval():
+def test_workspace_preferences_batch_saves_once_and_logs_once(monkeypatch):
+    _save_project(
+        {
+            "terminal": {
+                "app": "terminal",
+                "command": "cd {root} && nvim .",
+            },
+            "browser": {"app": "Default"},
+        }
+    )
+    original_save = project_context.save_project_context
+    save_calls = []
+
+    def tracking_save(payload):
+        save_calls.append(payload)
+        return original_save(payload)
+
+    monkeypatch.setattr(project_context, "save_project_context", tracking_save)
+
+    result = workspace_preferences.update_workspace_preferences(
+        None,
+        [
+            {"section": "terminal", "field": "open_mode", "value": "tab"},
+            {"section": "browser", "field": "app", "value": "Safari"},
+        ],
+    )
+
+    assert len(save_calls) == 1
+    assert result["changes"] == [
+        {
+            "section": "terminal",
+            "field": "open_mode",
+            "old_value": None,
+            "new_value": "tab",
+        },
+        {
+            "section": "browser",
+            "field": "app",
+            "old_value": "Default",
+            "new_value": "Safari",
+        },
+    ]
+    project = project_context.get_current_project()
+    assert project["workspace"]["terminal"]["open_mode"] == "tab"
+    assert project["workspace"]["browser"]["app"] == "Safari"
+    activities = activity_history.list_recent()
+    assert len(activities) == 1
+    assert activities[0]["activity_type"] == "workspace_preferences_update"
+    assert activities[0]["metadata"]["changes"] == result["changes"]
+
+
+def test_workspace_preferences_invalid_second_change_saves_nothing():
+    _save_project(
+        {
+            "terminal": {
+                "app": "terminal",
+                "command": "cd {root} && nvim .",
+            },
+        }
+    )
+
+    with pytest.raises(ValueError, match="open_mode"):
+        workspace_preferences.update_workspace_preferences(
+            None,
+            [
+                {"section": "terminal", "field": "profile", "value": "Development"},
+                {"section": "terminal", "field": "open_mode", "value": "pane"},
+            ],
+        )
+
+    project = project_context.get_current_project()
+    assert "profile" not in project["workspace"]["terminal"]
+    assert activity_history.get_last_activity() is None
+
+
+def test_workspace_preferences_duplicate_and_empty_changes_are_rejected():
+    _save_project({"browser": {"app": "Default"}})
+
+    with pytest.raises(ValueError, match="at least one"):
+        workspace_preferences.update_workspace_preferences(None, [])
+
+    with pytest.raises(ValueError, match="Duplicate"):
+        workspace_preferences.update_workspace_preferences(
+            None,
+            [
+                {"section": "browser", "field": "app", "value": "Safari"},
+                {"section": "browser", "field": "app", "value": "Chrome"},
+            ],
+        )
+
+    assert project_context.get_current_project()["workspace"]["browser"]["app"] == "Default"
+
+
+def test_workspace_preferences_tool_batch_update_requires_one_approval():
     _save_project({"browser": {"app": "Default"}})
     registry = build_registry()
 
     response = registry.execute(
         AgentAction(
             "update_workspace_preferences",
-            {"section": "browser", "field": "app", "value": "Safari"},
+            {
+                "changes": [
+                    {"section": "browser", "field": "app", "value": "Safari"},
+                    {"section": "terminal", "field": "profile", "value": "Development"},
+                ]
+            },
             "test",
         )
     )
@@ -122,6 +224,12 @@ def test_workspace_preferences_tool_update_requires_approval():
     assert "approval" in response.content.lower()
     approval = list_approvals()[0]
     assert approval["action"] == "update_workspace_preferences"
+    assert approval["arguments"] == {
+        "changes": [
+            {"section": "browser", "field": "app", "value": "Safari"},
+            {"section": "terminal", "field": "profile", "value": "Development"},
+        ]
+    }
     assert approval["category"] == "project"
     assert approval["risk_level"] == "write"
     assert project_context.get_current_project()["workspace"]["browser"]["app"] == "Default"
@@ -130,3 +238,29 @@ def test_workspace_preferences_tool_update_requires_approval():
 
     assert result.ok is True
     assert project_context.get_current_project()["workspace"]["browser"]["app"] == "Safari"
+    assert project_context.get_current_project()["workspace"]["terminal"]["profile"] == "Development"
+
+
+def test_workspace_preferences_tool_legacy_single_field_still_works():
+    _save_project({"browser": {"app": "Default"}})
+    registry = build_registry()
+
+    registry.execute(
+        AgentAction(
+            "update_workspace_preferences",
+            {"section": "browser", "field": "app", "value": "Safari"},
+            "test",
+        )
+    )
+    result = _approve_latest(registry)
+
+    assert result.ok is True
+    assert result.data is not None
+    assert result.data["changes"] == [
+        {
+            "section": "browser",
+            "field": "app",
+            "old_value": "Default",
+            "new_value": "Safari",
+        }
+    ]
