@@ -55,6 +55,48 @@ def _open_project_workspace_action(
     )
 
 
+def _workspace_preferences_action() -> RouteResult:
+    return RouteResult(
+        matched=True,
+        confidence=0.95,
+        action=AgentAction(
+            "get_workspace_preferences",
+            {},
+            "User asks to show workspace preferences.",
+        ),
+    )
+
+
+def _update_workspace_preferences_action(
+    section: str,
+    field: str,
+    value: str,
+    reason: str = "User asks to update workspace preferences.",
+) -> RouteResult:
+    return RouteResult(
+        matched=True,
+        confidence=0.95,
+        action=AgentAction(
+            "update_workspace_preferences",
+            {"section": section, "field": field, "value": value},
+            reason,
+        ),
+    )
+
+
+def _workspace_preference_clarification(section: str, field: str) -> RouteResult:
+    return _clarification_route(
+        f"What value should I use for workspace {section}.{field}?",
+        "workspace_preference_value",
+        {
+            "original_action": "update_workspace_preferences",
+            "missing_field": "value",
+            "section": section,
+            "field": field,
+        },
+    )
+
+
 def _current_project_arg() -> str:
     try:
         return str(project_context.get_current_project()["id"])
@@ -87,6 +129,49 @@ def _project_repo_browser_clarification() -> RouteResult:
 
 
 def match(text: str, lowered: str) -> RouteResult | None:
+    if lowered in {
+        "show workspace settings",
+        "workspace settings",
+        "show workspace preferences",
+        "workspace preferences",
+        "покажи настройки рабочего пространства",
+        "настройки workspace",
+    }:
+        return _workspace_preferences_action()
+
+    missing_workspace_value_patterns = [
+        (r"^set\s+workspace\s+terminal\s+to\s*$", "terminal", "app"),
+        (r"^set\s+browser\s+to\s*$", "browser", "app"),
+        (r"^set\s+workspace\s+profile\s+to\s*$", "terminal", "profile"),
+        (r"^используй\s*$", "terminal", "app"),
+        (r"^используй\s+профиль\s*$", "terminal", "profile"),
+    ]
+    for pattern, section, field in missing_workspace_value_patterns:
+        if re.match(pattern, text, re.IGNORECASE | re.DOTALL):
+            return _workspace_preference_clarification(section, field)
+
+    workspace_preference_patterns = [
+        (r"^set\s+workspace\s+terminal\s+to\s+(.+)$", "terminal", "app"),
+        (r"^set\s+browser\s+to\s+(.+)$", "browser", "app"),
+        (r"^set\s+workspace\s+profile\s+to\s+(.+)$", "terminal", "profile"),
+        (r"^используй\s+профиль\s+(.+)$", "terminal", "profile"),
+    ]
+    for pattern, section, field in workspace_preference_patterns:
+        preference_match = re.match(pattern, text, re.IGNORECASE | re.DOTALL)
+        if preference_match:
+            return _update_workspace_preferences_action(
+                section,
+                field,
+                clean(preference_match.group(1)),
+            )
+
+    use_match = re.match(r"^используй\s+(.+)$", text, re.IGNORECASE | re.DOTALL)
+    if use_match:
+        value = clean(use_match.group(1))
+        if value.casefold() in {"terminal", "iterm", "iterm2"}:
+            return _update_workspace_preferences_action("terminal", "app", value)
+        return _update_workspace_preferences_action("browser", "app", value)
+
     workspace_aliases = {
         "open workspace": "terminal",
         "open project": "terminal",

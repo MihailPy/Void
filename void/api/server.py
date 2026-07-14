@@ -43,6 +43,8 @@ from void.api.schemas import (
     MemoryResponse,
     OpenProjectRepoRequest,
     OpenProjectWorkspaceRequest,
+    UpdateWorkspacePreferencesRequest,
+    WorkspacePreferencesResponse,
     CurrentProjectResponse,
     ProjectCommandsResponse,
     ProjectDescriptionResponse,
@@ -446,6 +448,46 @@ def open_current_project_workspace(
         "open_project_workspace",
         {"target": request.target},
     )
+
+
+@app.get(
+    "/projects/current/workspace/preferences",
+    response_model=WorkspacePreferencesResponse | ErrorResponse,
+)
+def current_workspace_preferences(
+    _: None = Depends(require_api_token),
+    registry: ToolRegistry = Depends(get_tool_registry),
+) -> WorkspacePreferencesResponse | ErrorResponse:
+    try:
+        result = _execute_read_api_tool(registry, "get_workspace_preferences")
+        data = result.data or {}
+        return WorkspacePreferencesResponse(
+            ok=True,
+            project=data.get("project", {}),
+            preferences=data.get("preferences", {}),
+            editable_fields=data.get("editable_fields", {}),
+        )
+    except Exception as error:
+        return _error(error)
+
+
+@app.post(
+    "/projects/current/workspace/preferences",
+    response_model=ApprovalResponse | ErrorResponse,
+)
+def update_current_workspace_preferences(
+    request: UpdateWorkspacePreferencesRequest,
+    _: None = Depends(require_api_token),
+    registry: ToolRegistry = Depends(get_tool_registry),
+) -> ApprovalResponse | ErrorResponse:
+    arguments = {
+        "section": request.section,
+        "field": request.field,
+        "value": request.value,
+    }
+    if request.project:
+        arguments["project"] = request.project
+    return _execute_api_tool(registry, "update_workspace_preferences", arguments)
 
 
 @app.get(

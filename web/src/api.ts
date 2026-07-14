@@ -130,6 +130,22 @@ export type OpenProjectWorkspaceRequest = {
   target?: "terminal" | "finder" | "github" | "browser";
 };
 
+export type WorkspacePreferences = Record<string, Record<string, string>>;
+
+export type WorkspacePreferencesResponse = {
+  ok: boolean;
+  project: Pick<Project, "id" | "name">;
+  preferences: WorkspacePreferences;
+  editable_fields: Record<string, string[]>;
+};
+
+export type UpdateWorkspacePreferencesRequest = {
+  project?: string | null;
+  section: string;
+  field: string;
+  value: string;
+};
+
 export type Approval = {
   id?: string;
   action?: string;
@@ -394,6 +410,17 @@ export function openProjectRepo(payload: OpenProjectRepoRequest) {
 
 export function openProjectWorkspace(payload: OpenProjectWorkspaceRequest = {}) {
   return request<ApprovalActionResponse>("/projects/current/workspace", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function getWorkspacePreferences() {
+  return request<WorkspacePreferencesResponse>("/projects/current/workspace/preferences");
+}
+
+export function updateWorkspacePreferences(payload: UpdateWorkspacePreferencesRequest) {
+  return request<ApprovalActionResponse>("/projects/current/workspace/preferences", {
     method: "POST",
     body: JSON.stringify(payload),
   });

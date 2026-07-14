@@ -106,6 +106,63 @@ def test_router_open_russian_project_repo():
     assert route.action.arguments == {"project": "Void"}
 
 
+def test_router_show_workspace_settings():
+    route = Router().route("show workspace settings")
+
+    assert route.matched is True
+    assert route.action is not None
+    assert route.action.action == "get_workspace_preferences"
+
+
+def test_router_set_workspace_terminal_preference():
+    route = Router().route("set workspace terminal to iterm2")
+
+    assert route.matched is True
+    assert route.action is not None
+    assert route.action.action == "update_workspace_preferences"
+    assert route.action.arguments == {
+        "section": "terminal",
+        "field": "app",
+        "value": "iterm2",
+    }
+
+
+def test_router_set_workspace_browser_preference():
+    route = Router().route("set browser to Safari")
+
+    assert route.matched is True
+    assert route.action is not None
+    assert route.action.action == "update_workspace_preferences"
+    assert route.action.arguments == {
+        "section": "browser",
+        "field": "app",
+        "value": "Safari",
+    }
+
+
+def test_router_russian_workspace_preference_infers_browser():
+    route = Router().route("используй Safari")
+
+    assert route.matched is True
+    assert route.action is not None
+    assert route.action.action == "update_workspace_preferences"
+    assert route.action.arguments == {
+        "section": "browser",
+        "field": "app",
+        "value": "Safari",
+    }
+
+
+def test_router_workspace_preference_missing_value_requests_clarification():
+    route = Router().route("set workspace terminal to")
+
+    assert route.matched is True
+    assert route.action is None
+    assert route.clarification is not None
+    assert route.clarification.clarification_type == "workspace_preference_value"
+    assert route.clarification.context["original_action"] == "update_workspace_preferences"
+
+
 def test_router_list_project_commands():
     route = Router().route("покажи команды проекта")
 

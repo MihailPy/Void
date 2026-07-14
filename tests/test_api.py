@@ -338,6 +338,66 @@ def test_open_current_project_workspace_endpoint_creates_approval():
     assert payload["data"]["arguments"] == {"target": "finder"}
 
 
+def test_current_workspace_preferences_endpoint_reads_preferences():
+    project = _void_project()
+    project["workspace"] = {
+        "terminal": {"app": "terminal", "command": "cd {root} && nvim ."},
+        "browser": {"app": "Safari"},
+    }
+    _save_projects([project])
+
+    response = request("GET", "/projects/current/workspace/preferences")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["ok"] is True
+    assert payload["project"]["id"] == "void"
+    assert payload["preferences"]["terminal"]["command"] == "cd {root} && nvim ."
+    assert "command" in payload["editable_fields"]["terminal"]
+
+
+def test_update_workspace_preferences_endpoint_creates_approval():
+    project = _void_project()
+    project["workspace"] = {"browser": {"app": "Default"}}
+    _save_projects([project])
+
+    response = request(
+        "POST",
+        "/projects/current/workspace/preferences",
+        json={"section": "browser", "field": "app", "value": "Safari"},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["ok"] is True
+    assert payload["result_type"] == "approval"
+    assert payload["data"]["action"] == "update_workspace_preferences"
+    assert payload["data"]["arguments"] == {
+        "section": "browser",
+        "field": "app",
+        "value": "Safari",
+    }
+
+
+def test_update_workspace_preferences_endpoint_saves_after_approval():
+    project = _void_project()
+    project["workspace"] = {"terminal": {"app": "terminal", "command": "cd {root} && nvim ."}}
+    _save_projects([project])
+    response = request(
+        "POST",
+        "/projects/current/workspace/preferences",
+        json={"section": "terminal", "field": "open_mode", "value": "tab"},
+    )
+    approval_id = response.json()["data"]["approval_id"]
+
+    approved = request("POST", f"/approvals/{approval_id}/approve")
+
+    assert approved.status_code == 200
+    assert approved.json()["ok"] is True
+    preferences = request("GET", "/projects/current/workspace/preferences").json()
+    assert preferences["preferences"]["terminal"]["open_mode"] == "tab"
+
+
 def test_run_project_command_endpoint_validates_timeout():
     response = request(
         "POST",
