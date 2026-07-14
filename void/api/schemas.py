@@ -98,6 +98,27 @@ class OpenProjectWorkspaceRequest(BaseModel):
     target: Literal["terminal", "finder", "github", "browser", "editor"] = "terminal"
 
 
+class WorkspacePreferencesResponse(BaseModel):
+    ok: bool
+    project: dict[str, Any]
+    preferences: dict[str, Any]
+    editable_fields: dict[str, list[str]]
+
+
+class WorkspacePreferenceChange(BaseModel):
+    section: str
+    field: str
+    value: Any
+
+
+class UpdateWorkspacePreferencesRequest(BaseModel):
+    project: str | None = None
+    changes: list[WorkspacePreferenceChange] | None = None
+    section: str | None = None
+    field: str | None = None
+    value: Any | None = None
+
+
 class RunProjectCommandRequest(BaseModel):
     timeout_seconds: int = Field(default=120, ge=1, le=3600)
 

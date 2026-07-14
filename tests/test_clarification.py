@@ -116,6 +116,32 @@ def test_action_from_resolved_clarification_opens_project_repo_in_browser():
     assert action.arguments == {"project": "Void"}
 
 
+def test_action_from_workspace_preference_clarification_uses_batch_shape():
+    resolved = {
+        "type": "workspace_preference_value",
+        "context": {
+            "original_action": "update_workspace_preferences",
+            "section": "terminal",
+            "field": "app",
+        },
+        "answer": "iterm2",
+    }
+
+    action = clarification.action_from_resolved_clarification(resolved)
+
+    assert action is not None
+    assert action.action == "update_workspace_preferences"
+    assert action.arguments == {
+        "changes": [
+            {
+                "section": "terminal",
+                "field": "app",
+                "value": "iterm2",
+            }
+        ]
+    }
+
+
 def test_agent_resumes_command_selection_with_approval():
     agent = Agent(registry=_project_registry())
 

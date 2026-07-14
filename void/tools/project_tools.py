@@ -14,6 +14,7 @@ from void.core import project_commands
 from void.core import project_context
 from void.core import terminal_runner
 from void.core import workspace as workspace_core
+from void.core import workspace_preferences
 from void.core.browser_safety import validate_url
 from void.core.safety import IGNORED_NAMES, safe_project_path
 from void.core.types import ToolDefinition, ToolResult
@@ -149,6 +150,57 @@ def set_current_project(project: str) -> ToolResult:
         ok=True,
         content=f"Current project set to {selected['name']} ({selected['id']}).",
         data={"project": selected},
+    )
+
+
+def get_workspace_preferences(project: str | None = None) -> ToolResult:
+    try:
+        result = workspace_preferences.get_workspace_preferences(project)
+    except ValueError as error:
+        return ToolResult(ok=False, content=str(error))
+
+    project_name = result["project"].get("name") or result["project"].get("id")
+    preferences = result["preferences"]
+    lines = [f"Workspace preferences for {project_name}", ""]
+    for section in ("terminal", "browser", "file_manager"):
+        config = preferences.get(section, {})
+        lines.append(f"{section}:")
+        if isinstance(config, dict) and config:
+            for key in sorted(config):
+                lines.append(f"  {key}: {config[key]}")
+        else:
+            lines.append("  none")
+    return ToolResult(ok=True, content="\n".join(lines), data=result)
+
+
+def update_workspace_preferences(
+    changes: list[dict[str, Any]] | None = None,
+    project: str | None = None,
+    section: str | None = None,
+    field: str | None = None,
+    value: Any | None = None,
+) -> ToolResult:
+    if changes is None:
+        if section is None or field is None or value is None:
+            return ToolResult(ok=False, content="changes is required.")
+        changes = [{"section": section, "field": field, "value": value}]
+
+    try:
+        result = workspace_preferences.update_workspace_preferences(
+            project,
+            changes,
+        )
+    except ValueError as error:
+        return ToolResult(ok=False, content=str(error))
+
+    project_name = result["project"].get("name") or result["project"].get("id")
+    change_count = len(result["changes"])
+    return ToolResult(
+        ok=True,
+        content=(
+            f"Updated {change_count} workspace preference(s) for {project_name}."
+        ),
+        data=result,
     )
 
 
@@ -991,6 +1043,21 @@ def definitions() -> list[ToolDefinition]:
             "set_current_project",
             "Set the current project context by id, name, or alias.",
             set_current_project,
+            requires_confirmation=True,
+            category="project",
+            risk_level="write",
+        ),
+        ToolDefinition(
+            "get_workspace_preferences",
+            "Show editable workspace preferences for the current or named project.",
+            get_workspace_preferences,
+            category="project",
+            risk_level="read",
+        ),
+        ToolDefinition(
+            "update_workspace_preferences",
+            "Update editable workspace preferences as one approved batch.",
+            update_workspace_preferences,
             requires_confirmation=True,
             category="project",
             risk_level="write",

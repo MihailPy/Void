@@ -43,6 +43,8 @@ from void.api.schemas import (
     MemoryResponse,
     OpenProjectRepoRequest,
     OpenProjectWorkspaceRequest,
+    UpdateWorkspacePreferencesRequest,
+    WorkspacePreferencesResponse,
     CurrentProjectResponse,
     ProjectCommandsResponse,
     ProjectDescriptionResponse,
@@ -56,6 +58,7 @@ from void.api.schemas import (
 )
 from void.core.agent import Agent
 from void.core import browser_sessions
+from void.core import workspace_preferences
 from void.core.capabilities import list_capabilities
 from void.core.clarification import load_pending_clarification
 from void.core.permissions import approve, clear_approval, list_approvals, reject
@@ -446,6 +449,61 @@ def open_current_project_workspace(
         "open_project_workspace",
         {"target": request.target},
     )
+
+
+@app.get(
+    "/projects/current/workspace/preferences",
+    response_model=WorkspacePreferencesResponse | ErrorResponse,
+)
+def current_workspace_preferences(
+    _: None = Depends(require_api_token),
+    registry: ToolRegistry = Depends(get_tool_registry),
+) -> WorkspacePreferencesResponse | ErrorResponse:
+    try:
+        result = _execute_read_api_tool(registry, "get_workspace_preferences")
+        data = result.data or {}
+        return WorkspacePreferencesResponse(
+            ok=True,
+            project=data.get("project", {}),
+            preferences=data.get("preferences", {}),
+            editable_fields=data.get("editable_fields", {}),
+        )
+    except Exception as error:
+        return _error(error)
+
+
+@app.post(
+    "/projects/current/workspace/preferences",
+    response_model=ApprovalResponse | ErrorResponse,
+)
+def update_current_workspace_preferences(
+    request: UpdateWorkspacePreferencesRequest,
+    _: None = Depends(require_api_token),
+    registry: ToolRegistry = Depends(get_tool_registry),
+) -> ApprovalResponse | ErrorResponse:
+    changes = request.changes
+    if changes is None:
+        if request.section is None or request.field is None or request.value is None:
+            return _error("changes is required.")
+        changes_payload: list[dict[str, Any]] = [
+            {
+                "section": request.section,
+                "field": request.field,
+                "value": request.value,
+            }
+        ]
+    else:
+        changes_payload = [change.model_dump() for change in changes]
+
+    if not changes_payload:
+        return _error("changes must contain at least one workspace preference change.")
+    if len(changes_payload) > workspace_preferences.MAX_CHANGES:
+        return _error(f"changes must contain at most {workspace_preferences.MAX_CHANGES} items.")
+
+    arguments = {"changes": changes_payload}
+    if request.project:
+        arguments["project"] = request.project
+    return _execute_api_tool(registry, "update_workspace_preferences", arguments)
 
 
 @app.get(

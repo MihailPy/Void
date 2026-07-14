@@ -196,6 +196,30 @@ Workspace opens require approval and are logged as `workspace_open` activities.
 Replay support replays the same `open_project_workspace` target through the
 normal approval flow.
 
+### Workspace Preferences
+
+Workspace preferences can be viewed and edited through Void without manually
+editing `memory/projects.json`. Reads do not require approval. Updates require
+approval and are saved back through Project Context JSON persistence.
+
+Editable fields:
+
+- `workspace.terminal.app`: `terminal`, `iterm`, or `iterm2`.
+- `workspace.terminal.command`: non-empty and must contain `{root}`.
+- `workspace.terminal.reuse_existing`: accepts `true`, `false`, `yes`, `no`,
+  `1`, `0`, `on`, or `off`, and is saved as `true` or `false`.
+- `workspace.terminal.open_mode`: `tab` or `window`.
+- `workspace.terminal.profile`: non-empty string.
+- `workspace.terminal.window_bounds`: `left,top,right,bottom`, four integers
+  with `left < right` and `top < bottom`.
+- `workspace.browser.app`: any non-empty string, for example `Safari`,
+  `Google Chrome`, `Arc`, `Zen`, `Default`, or `Managed`.
+- `workspace.file_manager.app`: any non-empty string.
+
+Only these fields are editable. Unknown workspace keys are preserved for
+backward compatibility. Preference updates are logged as
+`workspace_preferences_update` activities and are not replayable.
+
 ### Smart iTerm2 Workspaces
 
 On macOS, `workspace.terminal.app` may be set to `iterm2`, `iterm`, or `iTerm2`

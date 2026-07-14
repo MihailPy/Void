@@ -49,6 +49,7 @@ import {
   getSkills,
   getTasks,
   getStoredToken,
+  getWorkspacePreferences,
   health,
   listBrowserSessions,
   openBrowserSession,
@@ -68,6 +69,7 @@ import {
   submitBrowserSession,
   submitBrowserSelector,
   suggestGitCommitMessage,
+  updateWorkspacePreferences,
   waitForBrowserSession,
   waitForBrowserSelector,
 } from "./api";
@@ -97,6 +99,28 @@ type StructuredResult = {
   message: string;
   resultType?: string;
   data?: Record<string, unknown> | null;
+};
+
+type WorkspacePreferenceForm = {
+  terminalApp: string;
+  terminalCommand: string;
+  terminalReuseExisting: string;
+  terminalOpenMode: string;
+  terminalProfile: string;
+  terminalWindowBounds: string;
+  browserApp: string;
+  fileManagerApp: string;
+};
+
+const emptyWorkspacePreferenceForm: WorkspacePreferenceForm = {
+  terminalApp: "",
+  terminalCommand: "",
+  terminalReuseExisting: "",
+  terminalOpenMode: "",
+  terminalProfile: "",
+  terminalWindowBounds: "",
+  browserApp: "",
+  fileManagerApp: "",
 };
 
 const tabs: { id: Tab; label: string }[] = [
@@ -165,6 +189,24 @@ function asRecord(value: unknown): Record<string, unknown> | null {
 
 function asText(value: unknown, fallback = "") {
   return typeof value === "string" && value.trim() ? value : fallback;
+}
+
+function workspaceFormFromPreferences(
+  preferences: Record<string, Record<string, string>>,
+): WorkspacePreferenceForm {
+  const terminal = preferences.terminal ?? {};
+  const browser = preferences.browser ?? {};
+  const fileManager = preferences.file_manager ?? {};
+  return {
+    terminalApp: terminal.app ?? "",
+    terminalCommand: terminal.command ?? "",
+    terminalReuseExisting: terminal.reuse_existing ?? "",
+    terminalOpenMode: terminal.open_mode ?? "",
+    terminalProfile: terminal.profile ?? "",
+    terminalWindowBounds: terminal.window_bounds ?? "",
+    browserApp: browser.app ?? "",
+    fileManagerApp: fileManager.app ?? "",
+  };
 }
 
 function responseResultType(response: {
@@ -1391,6 +1433,11 @@ function ProjectTab() {
   const [currentProject, setCurrentProjectState] = useState<Project | null>(null);
   const [projectCommands, setProjectCommands] = useState<Record<string, string>>({});
   const [projectCommandCwd, setProjectCommandCwd] = useState("");
+  const [workspacePreferences, setWorkspacePreferences] = useState<
+    Record<string, Record<string, string>>
+  >({});
+  const [workspacePreferenceForm, setWorkspacePreferenceForm] =
+    useState<WorkspacePreferenceForm>(emptyWorkspacePreferenceForm);
   const [description, setDescription] = useState("");
   const [projectInput, setProjectInput] = useState("Void");
   const [timeoutSeconds, setTimeoutSeconds] = useState(120);
@@ -1402,6 +1449,7 @@ function ProjectTab() {
   const [approvalActionId, setApprovalActionId] = useState("");
   const [loading, setLoading] = useState(true);
   const [setting, setSetting] = useState(false);
+  const [savingWorkspacePreferences, setSavingWorkspacePreferences] = useState(false);
   const [runningCommand, setRunningCommand] = useState("");
   const [commandResult, setCommandResult] = useState<StructuredResult | null>(null);
   const [message, setMessage] = useState<StructuredResult | null>(null);
@@ -1411,16 +1459,26 @@ function ProjectTab() {
     try {
       setError("");
       setLoading(true);
-      const [projectsResponse, descriptionResponse, commandsResponse] = await Promise.all([
+      const [
+        projectsResponse,
+        descriptionResponse,
+        commandsResponse,
+        workspacePreferencesResponse,
+      ] = await Promise.all([
         getProjects(),
         describeCurrentProject(),
         getProjectCommands(),
+        getWorkspacePreferences(),
       ]);
       const clarificationResponse = await getClarification();
       setProjects(projectsResponse.projects);
       setCurrentProjectState(descriptionResponse.project);
       setProjectCommands(commandsResponse.commands);
       setProjectCommandCwd(commandsResponse.cwd);
+      setWorkspacePreferences(workspacePreferencesResponse.preferences);
+      setWorkspacePreferenceForm(
+        workspaceFormFromPreferences(workspacePreferencesResponse.preferences),
+      );
       setDescription(descriptionResponse.description);
       setInlineClarification(normalizeClarification(clarificationResponse.pending));
       const pendingApproval = await fetchInlineApproval(
@@ -1429,7 +1487,8 @@ function ProjectTab() {
           approval.action === "run_project_command" ||
           approval.action === "run_project_command_visible" ||
           approval.action === "open_project_workspace" ||
-          approval.action === "open_project_repo_in_browser",
+          approval.action === "open_project_repo_in_browser" ||
+          approval.action === "update_workspace_preferences",
       );
       setInlineApproval(pendingApproval);
     } catch (currentError) {
@@ -1562,6 +1621,102 @@ function ProjectTab() {
     }
   }
 
+  function updateWorkspacePreferenceForm(
+    field: keyof WorkspacePreferenceForm,
+    value: string,
+  ) {
+    setWorkspacePreferenceForm((current) => ({ ...current, [field]: value }));
+  }
+
+  async function handleSaveWorkspacePreferences() {
+    const original = workspaceFormFromPreferences(workspacePreferences);
+    const changes: Array<{ section: string; field: string; value: string }> = [
+      {
+        section: "terminal",
+        field: "app",
+        value: workspacePreferenceForm.terminalApp,
+      },
+      {
+        section: "terminal",
+        field: "command",
+        value: workspacePreferenceForm.terminalCommand,
+      },
+      {
+        section: "terminal",
+        field: "reuse_existing",
+        value: workspacePreferenceForm.terminalReuseExisting,
+      },
+      {
+        section: "terminal",
+        field: "open_mode",
+        value: workspacePreferenceForm.terminalOpenMode,
+      },
+      {
+        section: "terminal",
+        field: "profile",
+        value: workspacePreferenceForm.terminalProfile,
+      },
+      {
+        section: "terminal",
+        field: "window_bounds",
+        value: workspacePreferenceForm.terminalWindowBounds,
+      },
+      {
+        section: "browser",
+        field: "app",
+        value: workspacePreferenceForm.browserApp,
+      },
+      {
+        section: "file_manager",
+        field: "app",
+        value: workspacePreferenceForm.fileManagerApp,
+      },
+    ].filter((change) => {
+      const key =
+        change.section === "terminal" && change.field === "app"
+          ? "terminalApp"
+          : change.section === "terminal" && change.field === "command"
+            ? "terminalCommand"
+            : change.section === "terminal" && change.field === "reuse_existing"
+              ? "terminalReuseExisting"
+              : change.section === "terminal" && change.field === "open_mode"
+                ? "terminalOpenMode"
+                : change.section === "terminal" && change.field === "profile"
+                  ? "terminalProfile"
+                  : change.section === "terminal" && change.field === "window_bounds"
+                    ? "terminalWindowBounds"
+                    : change.section === "browser"
+                      ? "browserApp"
+                      : "fileManagerApp";
+      return change.value !== original[key as keyof WorkspacePreferenceForm];
+    });
+
+    if (changes.length === 0) {
+      setMessage({ message: "No workspace preference changes to save." });
+      return;
+    }
+
+    setError("");
+    setMessage(null);
+    setCommandResult(null);
+    setInlineApproval(null);
+    setSavingWorkspacePreferences(true);
+    try {
+      const response = await updateWorkspacePreferences({ changes });
+      setMessage(toStructuredResult(response));
+      const pendingApproval = await fetchInlineApproval(
+        (approval) =>
+          approval.id === response.data?.approval_id ||
+          approval.action === "update_workspace_preferences",
+      );
+      setInlineApproval(pendingApproval);
+    } catch (currentError) {
+      setError(getErrorMessage(currentError));
+    } finally {
+      setSavingWorkspacePreferences(false);
+    }
+  }
+
   async function handleApprovalAction(id: string, action: ApprovalAction) {
     setApprovalActionId(id);
     setError("");
@@ -1581,7 +1736,9 @@ function ProjectTab() {
         setMessage(toStructuredResult(response));
       }
       setInlineApproval(null);
-      await loadProjectContext();
+      if (action === "approve" || approvedAction !== "update_workspace_preferences") {
+        await loadProjectContext();
+      }
     } catch (currentError) {
       setError(getErrorMessage(currentError));
     } finally {
@@ -1616,7 +1773,8 @@ function ProjectTab() {
             approval.action === "run_project_command" ||
             approval.action === "run_project_command_visible" ||
             approval.action === "open_project_workspace" ||
-            approval.action === "open_project_repo_in_browser",
+            approval.action === "open_project_repo_in_browser" ||
+            approval.action === "update_workspace_preferences",
         );
         setInlineApproval(pendingApproval);
       } else {
@@ -1790,6 +1948,121 @@ function ProjectTab() {
           >
             {runningCommand === "workspace:browser" ? "Requesting..." : "Open Browser"}
           </button>
+        </div>
+      </section>
+
+      <section className="contentSection">
+        <div className="sectionHeader">
+          <div>
+            <h2>Workspace Preferences</h2>
+            <p>Editable project workspace configuration.</p>
+          </div>
+          <button
+            type="button"
+            disabled={
+              savingWorkspacePreferences ||
+              inlineApproval?.action === "update_workspace_preferences"
+            }
+            onClick={() => void handleSaveWorkspacePreferences()}
+          >
+            {savingWorkspacePreferences
+              ? "Requesting..."
+              : inlineApproval?.action === "update_workspace_preferences"
+                ? "Pending approval"
+                : "Save"}
+          </button>
+        </div>
+        <div className="formGrid">
+          <label>
+            <span>Terminal app</span>
+            <select
+              value={workspacePreferenceForm.terminalApp}
+              onChange={(event) =>
+                updateWorkspacePreferenceForm("terminalApp", event.target.value)
+              }
+            >
+              <option value="">unset</option>
+              <option value="terminal">terminal</option>
+              <option value="iterm">iterm</option>
+              <option value="iterm2">iterm2</option>
+            </select>
+          </label>
+          <label>
+            <span>Command</span>
+            <input
+              value={workspacePreferenceForm.terminalCommand}
+              onChange={(event) =>
+                updateWorkspacePreferenceForm("terminalCommand", event.target.value)
+              }
+              placeholder="cd {root} && nvim ."
+            />
+          </label>
+          <label>
+            <span>Reuse existing</span>
+            <select
+              value={workspacePreferenceForm.terminalReuseExisting}
+              onChange={(event) =>
+                updateWorkspacePreferenceForm("terminalReuseExisting", event.target.value)
+              }
+            >
+              <option value="">unset</option>
+              <option value="true">true</option>
+              <option value="false">false</option>
+            </select>
+          </label>
+          <label>
+            <span>Open mode</span>
+            <select
+              value={workspacePreferenceForm.terminalOpenMode}
+              onChange={(event) =>
+                updateWorkspacePreferenceForm("terminalOpenMode", event.target.value)
+              }
+            >
+              <option value="">unset</option>
+              <option value="tab">tab</option>
+              <option value="window">window</option>
+            </select>
+          </label>
+          <label>
+            <span>Profile</span>
+            <input
+              value={workspacePreferenceForm.terminalProfile}
+              onChange={(event) =>
+                updateWorkspacePreferenceForm("terminalProfile", event.target.value)
+              }
+              placeholder="Development"
+            />
+          </label>
+          <label>
+            <span>Window bounds</span>
+            <input
+              value={workspacePreferenceForm.terminalWindowBounds}
+              onChange={(event) =>
+                updateWorkspacePreferenceForm("terminalWindowBounds", event.target.value)
+              }
+              placeholder="100,80,1500,950"
+            />
+          </label>
+          <label>
+            <span>Browser</span>
+            <input
+              value={workspacePreferenceForm.browserApp}
+              onChange={(event) =>
+                updateWorkspacePreferenceForm("browserApp", event.target.value)
+              }
+              placeholder="Safari"
+            />
+          </label>
+          <label>
+            <span>File manager</span>
+            <input
+              value={workspacePreferenceForm.fileManagerApp}
+              onChange={(event) =>
+                updateWorkspacePreferenceForm("fileManagerApp", event.target.value)
+              }
+              placeholder="Finder"
+            />
+          </label>
         </div>
       </section>
 
