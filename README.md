@@ -196,6 +196,20 @@ Workspace opens require approval and are logged as `workspace_open` activities.
 Replay support replays the same `open_project_workspace` target through the
 normal approval flow.
 
+Example commands:
+
+```text
+Open workspace
+Open project in Finder
+Open current project on GitHub
+Open project in browser
+Run project command verify
+Покажи команды проекта
+Открой проект в Finder
+Открой текущий проект на GitHub
+Используй профиль Development
+```
+
 ### Workspace Preferences
 
 Workspace preferences can be viewed and edited through Void without manually
@@ -219,6 +233,10 @@ Editable fields:
 Only these fields are editable. Unknown workspace keys are preserved for
 backward compatibility. Preference updates are logged as
 `workspace_preferences_update` activities and are not replayable.
+
+Preference saves are atomic batches: one Save request creates one approval, all
+values are validated before persistence, and a rejected approval leaves
+`memory/projects.json` unchanged.
 
 ### Smart iTerm2 Workspaces
 

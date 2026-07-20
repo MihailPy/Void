@@ -77,29 +77,32 @@ def _clean_project(raw: dict[str, Any]) -> dict[str, Any]:
     workspace = raw.get("workspace", {})
     if not isinstance(workspace, dict):
         workspace = {}
-    clean_workspace: dict[str, dict[str, str]] = {}
+    clean_workspace: dict[str, Any] = {}
     for target, config in workspace.items():
         target_key = str(target).strip()
-        if not target_key or not isinstance(config, dict):
+        if not target_key:
+            continue
+        if not isinstance(config, dict):
+            clean_workspace[target_key] = deepcopy(config)
             continue
         clean_config = {
-            str(key).strip(): str(value)
+            str(key).strip(): deepcopy(value)
             for key, value in config.items()
-            if str(key).strip() and str(value).strip()
+            if str(key).strip()
         }
-        if clean_config:
-            clean_workspace[target_key] = clean_config
+        clean_workspace[target_key] = clean_config
 
-    project = {
-        "id": project_id,
-        "name": name,
-        "aliases": clean_aliases,
-        "root_path": str(raw.get("root_path") or "."),
-        "repo_url": str(raw.get("repo_url") or ""),
-        "commands": clean_commands,
-    }
+    project = deepcopy(raw)
+    project["id"] = project_id
+    project["name"] = name
+    project["aliases"] = clean_aliases
+    project["root_path"] = str(raw.get("root_path") or ".")
+    project["repo_url"] = str(raw.get("repo_url") or "")
+    project["commands"] = clean_commands
     if clean_workspace:
         project["workspace"] = clean_workspace
+    else:
+        project.pop("workspace", None)
     return project
 
 
@@ -130,7 +133,10 @@ def _validate_payload(payload: dict[str, Any]) -> dict[str, Any]:
     if not any(_normalize(project["id"]) == _normalize(current_project) for project in clean_projects):
         raise ValueError(f"Current project is not defined: {current_project}")
 
-    return {"current_project": current_project, "projects": clean_projects}
+    clean_payload = deepcopy(payload)
+    clean_payload["current_project"] = current_project
+    clean_payload["projects"] = clean_projects
+    return clean_payload
 
 
 def ensure_project_context() -> None:

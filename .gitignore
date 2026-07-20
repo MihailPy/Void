@@ -5,3 +5,13 @@ __pycache__/
 .env
 /workspace/screenshots/.DS_Store
 memory/activity_history.json
+memory/approvals.json
+memory/pending_approvals.json
+memory/clarifications.json
+memory/pending_clarification.json
+memory/scheduler.json
+memory/scheduled_tasks.json
+memory/browser_sessions.json
+.pytest_cache/
+web/node_modules/
+web/dist/

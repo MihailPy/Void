@@ -55,6 +55,77 @@ def test_set_current_project_by_alias(temp_memory_dir):
     assert project_context.get_current_project()["name"] == "Notes"
 
 
+def test_missing_optional_project_fields_are_compatible():
+    project_context.save_project_context(
+        {
+            "current_project": "void",
+            "projects": [
+                {
+                    "id": "void",
+                    "root_path": ".",
+                }
+            ],
+        }
+    )
+
+    project = project_context.get_current_project()
+
+    assert project["id"] == "void"
+    assert project["name"] == "void"
+    assert project["aliases"] == []
+    assert project["repo_url"] == ""
+    assert project["commands"] == {}
+    assert "workspace" not in project
+
+
+def test_unknown_project_context_fields_are_preserved_on_save():
+    project_context.save_project_context(
+        {
+            "current_project": "void",
+            "schema_note": {"keep": True},
+            "projects": [
+                {
+                    "id": "void",
+                    "name": "Void",
+                    "root_path": ".",
+                    "repo_url": "https://github.com/MihailPy/Void",
+                    "custom_project": {"owner": "local"},
+                    "workspace": {
+                        "terminal": {
+                            "app": "terminal",
+                            "command": "cd {root} && nvim .",
+                            "custom_flag": False,
+                        },
+                        "custom_target": {
+                            "enabled": True,
+                            "count": 2,
+                        },
+                        "empty_custom_target": {},
+                        "scalar_custom_target": "keep",
+                    },
+                },
+                {
+                    "id": "docs",
+                    "name": "Docs",
+                    "root_path": ".",
+                },
+            ],
+        }
+    )
+
+    result = project_context.set_current_project("docs")
+    payload = project_context.load_project_context()
+    project = payload["projects"][0]
+
+    assert result["ok"] is True
+    assert payload["schema_note"] == {"keep": True}
+    assert project["custom_project"] == {"owner": "local"}
+    assert project["workspace"]["terminal"]["custom_flag"] is False
+    assert project["workspace"]["custom_target"] == {"enabled": True, "count": 2}
+    assert project["workspace"]["empty_custom_target"] == {}
+    assert project["workspace"]["scalar_custom_target"] == "keep"
+
+
 def test_invalid_project_id_rejected():
     try:
         project_context.save_project_context(
