@@ -110,6 +110,49 @@ def test_workspace_preferences_update_preserves_unknown_keys_and_saves():
     assert "replay" not in latest["metadata"]
 
 
+def test_workspace_preferences_update_preserves_unknown_project_and_workspace_fields():
+    project_context.save_project_context(
+        {
+            "current_project": "void",
+            "projects": [
+                {
+                    "id": "void",
+                    "name": "Void",
+                    "root_path": ".",
+                    "repo_url": "https://github.com/MihailPy/Void",
+                    "custom_project": {"color": "blue"},
+                    "workspace": {
+                        "terminal": {
+                            "app": "terminal",
+                            "command": "cd {root} && nvim .",
+                            "custom_flag": False,
+                        },
+                        "custom_target": {
+                            "enabled": True,
+                            "count": 2,
+                        },
+                        "empty_custom_target": {},
+                        "scalar_custom_target": "keep",
+                    },
+                }
+            ],
+        }
+    )
+
+    workspace_preferences.update_workspace_preferences(
+        None,
+        [{"section": "browser", "field": "app", "value": "Safari"}],
+    )
+
+    project = project_context.get_current_project()
+    assert project["custom_project"] == {"color": "blue"}
+    assert project["workspace"]["terminal"]["custom_flag"] is False
+    assert project["workspace"]["custom_target"] == {"enabled": True, "count": 2}
+    assert project["workspace"]["empty_custom_target"] == {}
+    assert project["workspace"]["scalar_custom_target"] == "keep"
+    assert project["workspace"]["browser"]["app"] == "Safari"
+
+
 def test_workspace_preferences_batch_saves_once_and_logs_once(monkeypatch):
     _save_project(
         {
