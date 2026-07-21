@@ -89,15 +89,21 @@ export type Project = {
   root_path?: string;
   repo_url?: string;
   commands?: Record<string, string>;
-  workspace?: Record<string, Record<string, string>>;
+  workspace?: Record<string, Record<string, unknown>>;
 };
 
 export type ProjectsResponse = {
   ok: boolean;
   projects: Project[];
+  current_project?: string | null;
 };
 
 export type CurrentProjectResponse = {
+  ok: boolean;
+  project: Project;
+};
+
+export type ProjectResponse = {
   ok: boolean;
   project: Project;
 };
@@ -115,6 +121,15 @@ export type ProjectCommandsResponse = {
 
 export type SetCurrentProjectRequest = {
   project: string;
+};
+
+export type ProjectRegistryRequest = {
+  project: Project;
+  duplicate_source_id?: string | null;
+};
+
+export type DeleteProjectRequest = {
+  confirm_current?: boolean;
 };
 
 export type RunProjectCommandRequest = {
@@ -392,6 +407,40 @@ export function getProjects() {
 
 export function getCurrentProject() {
   return request<CurrentProjectResponse>("/projects/current");
+}
+
+export function getProject(projectId: string) {
+  return request<ProjectResponse>(`/projects/${encodeURIComponent(projectId)}`);
+}
+
+export function createProject(payload: ProjectRegistryRequest) {
+  return request<ApprovalActionResponse>("/projects", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function updateProject(projectId: string, payload: ProjectRegistryRequest) {
+  return request<ApprovalActionResponse>(`/projects/${encodeURIComponent(projectId)}`, {
+    method: "PUT",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function deleteProject(projectId: string, payload: DeleteProjectRequest = {}) {
+  return request<ApprovalActionResponse>(`/projects/${encodeURIComponent(projectId)}`, {
+    method: "DELETE",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function duplicateProject(projectId: string) {
+  return request<ProjectResponse>(
+    `/projects/${encodeURIComponent(projectId)}/duplicate`,
+    {
+      method: "POST",
+    },
+  );
 }
 
 export function describeCurrentProject() {

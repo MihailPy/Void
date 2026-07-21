@@ -22,6 +22,7 @@ class ToolDefinition:
     requires_confirmation: bool = False
     category: str = "unknown"
     risk_level: str = "unknown"
+    confirmation_validator: Callable[..., None] | None = None
 
 
 @dataclass

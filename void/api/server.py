@@ -34,6 +34,7 @@ from void.api.schemas import (
     ChatRequest,
     ChatResponse,
     CreateScheduledTaskRequest,
+    DeleteProjectRequest,
     ErrorResponse,
     GitCommitRequest,
     HealthResponse,
@@ -43,6 +44,8 @@ from void.api.schemas import (
     MemoryResponse,
     OpenProjectRepoRequest,
     OpenProjectWorkspaceRequest,
+    ProjectRegistryRequest,
+    ProjectResponse,
     UpdateWorkspacePreferencesRequest,
     WorkspacePreferencesResponse,
     CurrentProjectResponse,
@@ -219,9 +222,10 @@ def _execute_api_tool(
     registry: ToolRegistry,
     action: str,
     arguments: dict[str, Any],
+    reason: str = "API request.",
 ) -> ApprovalResponse | ErrorResponse:
     try:
-        result = registry.execute(AgentAction(action, arguments, "API request."))
+        result = registry.execute(AgentAction(action, arguments, reason))
         return _approval_response(result, action)
     except Exception as error:
         return _error(error)
@@ -399,9 +403,36 @@ def projects(
 ) -> ProjectsResponse | ErrorResponse:
     try:
         result = _execute_read_api_tool(registry, "list_projects")
-        return ProjectsResponse(ok=True, projects=(result.data or {}).get("projects", []))
+        data = result.data or {}
+        return ProjectsResponse(
+            ok=True,
+            projects=data.get("projects", []),
+            current_project=data.get("current_project"),
+        )
     except Exception as error:
         return _error(error)
+
+
+@app.post("/projects", response_model=ApprovalResponse | ErrorResponse)
+def create_project_entry(
+    request: ProjectRegistryRequest,
+    _: None = Depends(require_api_token),
+    registry: ToolRegistry = Depends(get_tool_registry),
+) -> ApprovalResponse | ErrorResponse:
+    project = request.project
+    arguments = {"project": project}
+    if request.duplicate_source_id:
+        arguments["duplicate_source_id"] = request.duplicate_source_id
+    return _execute_api_tool(
+        registry,
+        "create_project",
+        arguments,
+        (
+            "Create project:\n\n"
+            f"Project: {project.get('name') or project.get('id') or ''}\n"
+            f"Root path: {project.get('root_path') or ''}"
+        ),
+    )
 
 
 @app.get("/projects/current", response_model=CurrentProjectResponse | ErrorResponse)
@@ -423,6 +454,70 @@ def set_current_project(
     registry: ToolRegistry = Depends(get_tool_registry),
 ) -> ApprovalResponse | ErrorResponse:
     return _execute_api_tool(registry, "set_current_project", {"project": request.project})
+
+
+@app.get("/projects/{project_id}", response_model=ProjectResponse | ErrorResponse)
+def project_entry(
+    project_id: str,
+    _: None = Depends(require_api_token),
+    registry: ToolRegistry = Depends(get_tool_registry),
+) -> ProjectResponse | ErrorResponse:
+    try:
+        result = _execute_read_api_tool(registry, "get_project", {"project": project_id})
+        return ProjectResponse(ok=True, project=(result.data or {}).get("project", {}))
+    except Exception as error:
+        return _error(error)
+
+
+@app.put("/projects/{project_id}", response_model=ApprovalResponse | ErrorResponse)
+def update_project_entry(
+    project_id: str,
+    request: ProjectRegistryRequest,
+    _: None = Depends(require_api_token),
+    registry: ToolRegistry = Depends(get_tool_registry),
+) -> ApprovalResponse | ErrorResponse:
+    project = request.project
+    return _execute_api_tool(
+        registry,
+        "update_project",
+        {"project_id": project_id, "project": project},
+        (
+            "Update project:\n\n"
+            f"Project: {project.get('name') or project.get('id') or project_id}\n"
+            f"Root path: {project.get('root_path') or ''}"
+        ),
+    )
+
+
+@app.delete("/projects/{project_id}", response_model=ApprovalResponse | ErrorResponse)
+def delete_project_entry(
+    project_id: str,
+    request: DeleteProjectRequest | None = None,
+    _: None = Depends(require_api_token),
+    registry: ToolRegistry = Depends(get_tool_registry),
+) -> ApprovalResponse | ErrorResponse:
+    return _execute_api_tool(
+        registry,
+        "delete_project",
+        {
+            "project_id": project_id,
+            "confirm_current": bool(request.confirm_current) if request else False,
+        },
+        f"Delete project:\n\nProject: {project_id}",
+    )
+
+
+@app.post("/projects/{project_id}/duplicate", response_model=ProjectResponse | ErrorResponse)
+def duplicate_project_entry(
+    project_id: str,
+    _: None = Depends(require_api_token),
+    registry: ToolRegistry = Depends(get_tool_registry),
+) -> ProjectResponse | ErrorResponse:
+    try:
+        result = _execute_read_api_tool(registry, "duplicate_project", {"project_id": project_id})
+        return ProjectResponse(ok=True, project=(result.data or {}).get("project", {}))
+    except Exception as error:
+        return _error(error)
 
 
 @app.post("/projects/repo/open", response_model=ApprovalResponse | ErrorResponse)

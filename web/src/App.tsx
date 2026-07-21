@@ -18,11 +18,14 @@ import {
   clearStoredToken,
   closeAllBrowserSessions,
   closeBrowserSession,
+  createProject,
   createGitCommit,
   createTask,
+  deleteProject,
   deleteTask,
   describeCurrentProject,
   disableTask,
+  duplicateProject,
   enableTask,
   extractBrowserText,
   fillBrowserSession,
@@ -68,6 +71,7 @@ import {
   setStoredToken,
   submitBrowserSession,
   submitBrowserSelector,
+  updateProject,
   suggestGitCommitMessage,
   updateWorkspacePreferences,
   waitForBrowserSession,
@@ -112,6 +116,24 @@ type WorkspacePreferenceForm = {
   fileManagerApp: string;
 };
 
+type ProjectCommandRow = {
+  id: string;
+  key: string;
+  command: string;
+};
+
+type ProjectEditorState = {
+  originalId: string | null;
+  duplicateSourceId: string | null;
+  id: string;
+  name: string;
+  rootPath: string;
+  repoUrl: string;
+  aliases: string[];
+  commands: ProjectCommandRow[];
+  workspace: WorkspacePreferenceForm;
+};
+
 const emptyWorkspacePreferenceForm: WorkspacePreferenceForm = {
   terminalApp: "",
   terminalCommand: "",
@@ -122,6 +144,20 @@ const emptyWorkspacePreferenceForm: WorkspacePreferenceForm = {
   browserApp: "",
   fileManagerApp: "",
 };
+
+function emptyProjectEditorState(): ProjectEditorState {
+  return {
+    originalId: null,
+    duplicateSourceId: null,
+    id: "",
+    name: "",
+    rootPath: ".",
+    repoUrl: "",
+    aliases: [],
+    commands: [],
+    workspace: emptyWorkspacePreferenceForm,
+  };
+}
 
 const tabs: { id: Tab; label: string }[] = [
   { id: "chat", label: "Chat" },
@@ -191,21 +227,76 @@ function asText(value: unknown, fallback = "") {
   return typeof value === "string" && value.trim() ? value : fallback;
 }
 
+function stringFromUnknown(value: unknown) {
+  return typeof value === "string" ? value : value == null ? "" : String(value);
+}
+
 function workspaceFormFromPreferences(
-  preferences: Record<string, Record<string, string>>,
+  preferences: Record<string, Record<string, unknown>>,
 ): WorkspacePreferenceForm {
   const terminal = preferences.terminal ?? {};
   const browser = preferences.browser ?? {};
   const fileManager = preferences.file_manager ?? {};
   return {
-    terminalApp: terminal.app ?? "",
-    terminalCommand: terminal.command ?? "",
-    terminalReuseExisting: terminal.reuse_existing ?? "",
-    terminalOpenMode: terminal.open_mode ?? "",
-    terminalProfile: terminal.profile ?? "",
-    terminalWindowBounds: terminal.window_bounds ?? "",
-    browserApp: browser.app ?? "",
-    fileManagerApp: fileManager.app ?? "",
+    terminalApp: stringFromUnknown(terminal.app),
+    terminalCommand: stringFromUnknown(terminal.command),
+    terminalReuseExisting: stringFromUnknown(terminal.reuse_existing),
+    terminalOpenMode: stringFromUnknown(terminal.open_mode),
+    terminalProfile: stringFromUnknown(terminal.profile),
+    terminalWindowBounds: stringFromUnknown(terminal.window_bounds),
+    browserApp: stringFromUnknown(browser.app),
+    fileManagerApp: stringFromUnknown(fileManager.app),
+  };
+}
+
+function workspaceFromForm(form: WorkspacePreferenceForm) {
+  const workspace: Record<string, Record<string, string>> = {};
+  const terminal: Record<string, string> = {};
+  if (form.terminalApp) terminal.app = form.terminalApp;
+  if (form.terminalCommand) terminal.command = form.terminalCommand;
+  if (form.terminalReuseExisting) terminal.reuse_existing = form.terminalReuseExisting;
+  if (form.terminalOpenMode) terminal.open_mode = form.terminalOpenMode;
+  if (form.terminalProfile) terminal.profile = form.terminalProfile;
+  if (form.terminalWindowBounds) terminal.window_bounds = form.terminalWindowBounds;
+  if (Object.keys(terminal).length > 0) workspace.terminal = terminal;
+  if (form.browserApp) workspace.browser = { app: form.browserApp };
+  if (form.fileManagerApp) workspace.file_manager = { app: form.fileManagerApp };
+  return workspace;
+}
+
+function projectEditorFromProject(
+  project: Project,
+  duplicateSourceId: string | null = null,
+): ProjectEditorState {
+  return {
+    originalId: duplicateSourceId ? null : project.id ?? null,
+    duplicateSourceId,
+    id: project.id ?? "",
+    name: project.name ?? "",
+    rootPath: project.root_path ?? ".",
+    repoUrl: project.repo_url ?? "",
+    aliases: [...(project.aliases ?? [])],
+    commands: Object.entries(project.commands ?? {}).map(([key, command], index) => ({
+      id: `${key || "command"}-${index}`,
+      key,
+      command,
+    })),
+    workspace: workspaceFormFromPreferences(project.workspace ?? {}),
+  };
+}
+
+function projectPayloadFromEditor(editor: ProjectEditorState): Project {
+  return {
+    id: editor.id.trim(),
+    name: editor.name.trim(),
+    root_path: editor.rootPath.trim(),
+    repo_url: editor.repoUrl.trim(),
+    aliases: editor.aliases.map((alias) => alias.trim()).filter(Boolean),
+    commands: editor.commands.reduce<Record<string, string>>((payload, row) => {
+      payload[row.key.trim()] = row.command;
+      return payload;
+    }, {}),
+    workspace: workspaceFromForm(editor.workspace),
   };
 }
 
@@ -1438,6 +1529,8 @@ function ProjectTab() {
   >({});
   const [workspacePreferenceForm, setWorkspacePreferenceForm] =
     useState<WorkspacePreferenceForm>(emptyWorkspacePreferenceForm);
+  const [editor, setEditor] = useState<ProjectEditorState>(emptyProjectEditorState);
+  const [editorDirty, setEditorDirty] = useState(false);
   const [description, setDescription] = useState("");
   const [projectInput, setProjectInput] = useState("Void");
   const [timeoutSeconds, setTimeoutSeconds] = useState(120);
@@ -1449,6 +1542,7 @@ function ProjectTab() {
   const [approvalActionId, setApprovalActionId] = useState("");
   const [loading, setLoading] = useState(true);
   const [setting, setSetting] = useState(false);
+  const [submittingProjectRegistry, setSubmittingProjectRegistry] = useState(false);
   const [savingWorkspacePreferences, setSavingWorkspacePreferences] = useState(false);
   const [runningCommand, setRunningCommand] = useState("");
   const [commandResult, setCommandResult] = useState<StructuredResult | null>(null);
@@ -1480,6 +1574,12 @@ function ProjectTab() {
         workspaceFormFromPreferences(workspacePreferencesResponse.preferences),
       );
       setDescription(descriptionResponse.description);
+      setEditor((current) => {
+        if (editorDirty) {
+          return current;
+        }
+        return projectEditorFromProject(descriptionResponse.project);
+      });
       setInlineClarification(normalizeClarification(clarificationResponse.pending));
       const pendingApproval = await fetchInlineApproval(
         (approval) =>
@@ -1488,7 +1588,10 @@ function ProjectTab() {
           approval.action === "run_project_command_visible" ||
           approval.action === "open_project_workspace" ||
           approval.action === "open_project_repo_in_browser" ||
-          approval.action === "update_workspace_preferences",
+          approval.action === "update_workspace_preferences" ||
+          approval.action === "create_project" ||
+          approval.action === "update_project" ||
+          approval.action === "delete_project",
       );
       setInlineApproval(pendingApproval);
     } catch (currentError) {
@@ -1511,6 +1614,166 @@ function ProjectTab() {
     setSetting(true);
     try {
       const response = await setCurrentProject({ project });
+      setMessage(toStructuredResult(response));
+      const pendingApproval = await fetchInlineApproval(
+        (approval) =>
+          approval.id === response.data?.approval_id ||
+          approval.action === "set_current_project",
+      );
+      setInlineApproval(pendingApproval);
+    } catch (currentError) {
+      setError(getErrorMessage(currentError));
+    } finally {
+      setSetting(false);
+    }
+  }
+
+  function selectEditorProject(project: Project) {
+    setEditor(projectEditorFromProject(project));
+    setEditorDirty(false);
+    setMessage(null);
+    setError("");
+  }
+
+  function updateEditor(changes: Partial<ProjectEditorState>) {
+    setEditor((current) => ({ ...current, ...changes }));
+    setEditorDirty(true);
+  }
+
+  function updateEditorWorkspace(field: keyof WorkspacePreferenceForm, value: string) {
+    setEditor((current) => ({
+      ...current,
+      workspace: { ...current.workspace, [field]: value },
+    }));
+    setEditorDirty(true);
+  }
+
+  function validateEditor() {
+    const project = projectPayloadFromEditor(editor);
+    if (!project.id) return "Project ID is required.";
+    if (!/^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/.test(project.id)) {
+      return "Project ID must start with a letter or number and contain only letters, numbers, underscores, or hyphens.";
+    }
+    if (!project.name) return "Project name is required.";
+    if (!project.root_path) return "Root path is required.";
+    const aliases = project.aliases ?? [];
+    if (new Set(aliases.map((alias) => alias.toLowerCase())).size !== aliases.length) {
+      return "Duplicate aliases are not allowed.";
+    }
+    const commandKeys = editor.commands.map((row) => row.key.trim());
+    if (commandKeys.some((key) => !key)) return "Command keys must not be empty.";
+    if (new Set(commandKeys.map((key) => key.toLowerCase())).size !== commandKeys.length) {
+      return "Duplicate command keys are not allowed.";
+    }
+    return "";
+  }
+
+  function handleCreateEditor() {
+    setEditor(emptyProjectEditorState());
+    setEditorDirty(true);
+    setMessage(null);
+    setError("");
+  }
+
+  async function handleDuplicateEditor(project: Project) {
+    const id = project.id;
+    if (!id) return;
+    setError("");
+    setMessage(null);
+    try {
+      const response = await duplicateProject(id);
+      setEditor(projectEditorFromProject(response.project, id));
+      setEditorDirty(true);
+    } catch (currentError) {
+      setError(getErrorMessage(currentError));
+    }
+  }
+
+  async function handleSaveProjectRegistry() {
+    const validationError = validateEditor();
+    if (validationError) {
+      setError(validationError);
+      return;
+    }
+    const project = projectPayloadFromEditor(editor);
+    setError("");
+    setMessage(null);
+    setCommandResult(null);
+    setInlineApproval(null);
+    setSubmittingProjectRegistry(true);
+    try {
+      const response =
+        editor.originalId === null
+          ? await createProject({
+              project,
+              duplicate_source_id: editor.duplicateSourceId,
+            })
+          : await updateProject(editor.originalId, { project });
+      setMessage(toStructuredResult(response));
+      const pendingApproval = await fetchInlineApproval(
+        (approval) =>
+          approval.id === response.data?.approval_id ||
+          approval.action === "create_project" ||
+          approval.action === "update_project",
+      );
+      setInlineApproval(pendingApproval);
+    } catch (currentError) {
+      setError(getErrorMessage(currentError));
+    } finally {
+      setSubmittingProjectRegistry(false);
+    }
+  }
+
+  function handleCancelProjectRegistry() {
+    const selected =
+      projects.find((project) => project.id === editor.originalId) ??
+      currentProject ??
+      projects[0];
+    setEditor(selected ? projectEditorFromProject(selected) : emptyProjectEditorState());
+    setEditorDirty(false);
+    setError("");
+  }
+
+  async function handleDeleteProjectRegistry(project: Project) {
+    const id = project.id;
+    if (!id) return;
+    const isCurrent = id === currentProject?.id;
+    if (
+      isCurrent &&
+      !window.confirm("Delete the current project and switch to another project?")
+    ) {
+      return;
+    }
+    setError("");
+    setMessage(null);
+    setCommandResult(null);
+    setInlineApproval(null);
+    setSubmittingProjectRegistry(true);
+    try {
+      const response = await deleteProject(id, { confirm_current: isCurrent });
+      setMessage(toStructuredResult(response));
+      const pendingApproval = await fetchInlineApproval(
+        (approval) =>
+          approval.id === response.data?.approval_id ||
+          approval.action === "delete_project",
+      );
+      setInlineApproval(pendingApproval);
+    } catch (currentError) {
+      setError(getErrorMessage(currentError));
+    } finally {
+      setSubmittingProjectRegistry(false);
+    }
+  }
+
+  async function handleSelectCurrentFromRegistry(project: Project) {
+    if (!project.id) return;
+    setProjectInput(project.id);
+    setError("");
+    setMessage(null);
+    setInlineApproval(null);
+    setSetting(true);
+    try {
+      const response = await setCurrentProject({ project: project.id });
       setMessage(toStructuredResult(response));
       const pendingApproval = await fetchInlineApproval(
         (approval) =>
@@ -1736,6 +1999,14 @@ function ProjectTab() {
         setMessage(toStructuredResult(response));
       }
       setInlineApproval(null);
+      if (
+        action === "approve" &&
+        (approvedAction === "create_project" ||
+          approvedAction === "update_project" ||
+          approvedAction === "delete_project")
+      ) {
+        setEditorDirty(false);
+      }
       if (action === "approve" || approvedAction !== "update_workspace_preferences") {
         await loadProjectContext();
       }
@@ -1774,7 +2045,10 @@ function ProjectTab() {
             approval.action === "run_project_command_visible" ||
             approval.action === "open_project_workspace" ||
             approval.action === "open_project_repo_in_browser" ||
-            approval.action === "update_workspace_preferences",
+            approval.action === "update_workspace_preferences" ||
+            approval.action === "create_project" ||
+            approval.action === "update_project" ||
+            approval.action === "delete_project",
         );
         setInlineApproval(pendingApproval);
       } else {
@@ -2128,37 +2402,345 @@ function ProjectTab() {
       </section>
 
       <section className="contentSection">
-        <h2>Known Projects</h2>
-        <div className="cardGrid">
-          {projects.length === 0 ? (
-            <EmptyState>No projects configured.</EmptyState>
-          ) : (
-            projects.map((project) => (
-              <article className="card" key={project.id ?? project.name}>
-                <div className="cardTopline">
-                  <span>{project.id}</span>
-                  <span>{project.root_path}</span>
+        <div className="sectionHeader">
+          <div>
+            <h2>Project Registry</h2>
+            <p>{editorDirty ? "Unsaved changes" : "No unsaved changes"}</p>
+          </div>
+          <button type="button" onClick={handleCreateEditor}>
+            Create
+          </button>
+        </div>
+        <div className="registryLayout">
+          <div className="registryList">
+            {projects.length === 0 ? (
+              <EmptyState>No projects configured.</EmptyState>
+            ) : (
+              projects.map((project) => {
+                const isCurrent = project.id === currentProject?.id;
+                const isSelected = project.id === editor.originalId;
+                return (
+                  <article
+                    className={`registryItem${isSelected ? " selected" : ""}`}
+                    key={project.id ?? project.name}
+                  >
+                    <button type="button" onClick={() => selectEditorProject(project)}>
+                      <span>{project.name}</span>
+                      <small>{project.id}</small>
+                    </button>
+                    {isCurrent ? <strong>Current</strong> : null}
+                    <div className="registryActions">
+                      <button
+                        className="secondaryButton"
+                        type="button"
+                        disabled={setting}
+                        onClick={() => void handleSelectCurrentFromRegistry(project)}
+                      >
+                        Select
+                      </button>
+                      <button
+                        className="secondaryButton"
+                        type="button"
+                        onClick={() => void handleDuplicateEditor(project)}
+                      >
+                        Duplicate
+                      </button>
+                      <button
+                        className="dangerButton"
+                        type="button"
+                        disabled={projects.length <= 1 || submittingProjectRegistry}
+                        onClick={() => void handleDeleteProjectRegistry(project)}
+                      >
+                        Delete
+                      </button>
+                    </div>
+                  </article>
+                );
+              })
+            )}
+          </div>
+          <div className="registryEditor">
+            <div className="formGrid">
+              <label>
+                <span>ID</span>
+                <input
+                  value={editor.id}
+                  onChange={(event) => updateEditor({ id: event.target.value })}
+                />
+              </label>
+              <label>
+                <span>Name</span>
+                <input
+                  value={editor.name}
+                  onChange={(event) => updateEditor({ name: event.target.value })}
+                />
+              </label>
+              <label>
+                <span>Root path</span>
+                <input
+                  value={editor.rootPath}
+                  onChange={(event) => updateEditor({ rootPath: event.target.value })}
+                />
+              </label>
+              <label>
+                <span>Repository URL</span>
+                <input
+                  value={editor.repoUrl}
+                  onChange={(event) => updateEditor({ repoUrl: event.target.value })}
+                />
+              </label>
+            </div>
+
+            <div className="editorSubsection">
+              <div className="sectionHeader compact">
+                <h3>Aliases</h3>
+                <button
+                  className="secondaryButton"
+                  type="button"
+                  onClick={() => updateEditor({ aliases: [...editor.aliases, ""] })}
+                >
+                  Add
+                </button>
+              </div>
+              {editor.aliases.length === 0 ? <EmptyState>No aliases.</EmptyState> : null}
+              {editor.aliases.map((alias, index) => (
+                <div className="editableRow" key={`alias-${index}`}>
+                  <input
+                    value={alias}
+                    onChange={(event) => {
+                      const aliases = [...editor.aliases];
+                      aliases[index] = event.target.value;
+                      updateEditor({ aliases });
+                    }}
+                  />
+                  <button
+                    className="secondaryButton"
+                    type="button"
+                    disabled={index === 0}
+                    onClick={() => {
+                      const aliases = [...editor.aliases];
+                      [aliases[index - 1], aliases[index]] = [aliases[index], aliases[index - 1]];
+                      updateEditor({ aliases });
+                    }}
+                  >
+                    Up
+                  </button>
+                  <button
+                    className="secondaryButton"
+                    type="button"
+                    disabled={index === editor.aliases.length - 1}
+                    onClick={() => {
+                      const aliases = [...editor.aliases];
+                      [aliases[index], aliases[index + 1]] = [aliases[index + 1], aliases[index]];
+                      updateEditor({ aliases });
+                    }}
+                  >
+                    Down
+                  </button>
+                  <button
+                    className="dangerButton"
+                    type="button"
+                    onClick={() =>
+                      updateEditor({
+                        aliases: editor.aliases.filter((_, aliasIndex) => aliasIndex !== index),
+                      })
+                    }
+                  >
+                    Remove
+                  </button>
                 </div>
-                <h2>{project.name}</h2>
-                <div className="field">
-                  <span>Repo URL</span>
-                  <p>{project.repo_url || "none"}</p>
+              ))}
+            </div>
+
+            <div className="editorSubsection">
+              <div className="sectionHeader compact">
+                <h3>Commands</h3>
+                <button
+                  className="secondaryButton"
+                  type="button"
+                  onClick={() =>
+                    updateEditor({
+                      commands: [
+                        ...editor.commands,
+                        { id: `new-${Date.now()}`, key: "", command: "" },
+                      ],
+                    })
+                  }
+                >
+                  Add
+                </button>
+              </div>
+              {editor.commands.length === 0 ? <EmptyState>No commands.</EmptyState> : null}
+              {editor.commands.map((row, index) => (
+                <div className="editableRow commandEditorRow" key={row.id}>
+                  <input
+                    value={row.key}
+                    placeholder="key"
+                    onChange={(event) => {
+                      const commands = [...editor.commands];
+                      commands[index] = { ...row, key: event.target.value };
+                      updateEditor({ commands });
+                    }}
+                  />
+                  <input
+                    value={row.command}
+                    placeholder="command"
+                    onChange={(event) => {
+                      const commands = [...editor.commands];
+                      commands[index] = { ...row, command: event.target.value };
+                      updateEditor({ commands });
+                    }}
+                  />
+                  <button
+                    className="secondaryButton"
+                    type="button"
+                    disabled={index === 0}
+                    onClick={() => {
+                      const commands = [...editor.commands];
+                      [commands[index - 1], commands[index]] = [commands[index], commands[index - 1]];
+                      updateEditor({ commands });
+                    }}
+                  >
+                    Up
+                  </button>
+                  <button
+                    className="secondaryButton"
+                    type="button"
+                    disabled={index === editor.commands.length - 1}
+                    onClick={() => {
+                      const commands = [...editor.commands];
+                      [commands[index], commands[index + 1]] = [commands[index + 1], commands[index]];
+                      updateEditor({ commands });
+                    }}
+                  >
+                    Down
+                  </button>
+                  <button
+                    className="dangerButton"
+                    type="button"
+                    onClick={() =>
+                      updateEditor({
+                        commands: editor.commands.filter((_, commandIndex) => commandIndex !== index),
+                      })
+                    }
+                  >
+                    Remove
+                  </button>
                 </div>
-                <div className="field">
-                  <span>Aliases</span>
-                  <p>{project.aliases?.join(", ") || "none"}</p>
-                </div>
-                <div className="field">
-                  <span>Command keys</span>
-                  <p>
-                    {project.commands
-                      ? Object.keys(project.commands).sort().join(", ") || "none"
-                      : "none"}
-                  </p>
-                </div>
-              </article>
-            ))
-          )}
+              ))}
+            </div>
+
+            <div className="editorSubsection">
+              <h3>Workspace</h3>
+              <div className="formGrid">
+                <label>
+                  <span>Terminal app</span>
+                  <select
+                    value={editor.workspace.terminalApp}
+                    onChange={(event) =>
+                      updateEditorWorkspace("terminalApp", event.target.value)
+                    }
+                  >
+                    <option value="">unset</option>
+                    <option value="terminal">terminal</option>
+                    <option value="iterm">iterm</option>
+                    <option value="iterm2">iterm2</option>
+                  </select>
+                </label>
+                <label>
+                  <span>Command</span>
+                  <input
+                    value={editor.workspace.terminalCommand}
+                    onChange={(event) =>
+                      updateEditorWorkspace("terminalCommand", event.target.value)
+                    }
+                    placeholder="cd {root} && nvim ."
+                  />
+                </label>
+                <label>
+                  <span>Reuse existing</span>
+                  <select
+                    value={editor.workspace.terminalReuseExisting}
+                    onChange={(event) =>
+                      updateEditorWorkspace("terminalReuseExisting", event.target.value)
+                    }
+                  >
+                    <option value="">unset</option>
+                    <option value="true">true</option>
+                    <option value="false">false</option>
+                  </select>
+                </label>
+                <label>
+                  <span>Open mode</span>
+                  <select
+                    value={editor.workspace.terminalOpenMode}
+                    onChange={(event) =>
+                      updateEditorWorkspace("terminalOpenMode", event.target.value)
+                    }
+                  >
+                    <option value="">unset</option>
+                    <option value="tab">tab</option>
+                    <option value="window">window</option>
+                  </select>
+                </label>
+                <label>
+                  <span>Profile</span>
+                  <input
+                    value={editor.workspace.terminalProfile}
+                    onChange={(event) =>
+                      updateEditorWorkspace("terminalProfile", event.target.value)
+                    }
+                  />
+                </label>
+                <label>
+                  <span>Window bounds</span>
+                  <input
+                    value={editor.workspace.terminalWindowBounds}
+                    onChange={(event) =>
+                      updateEditorWorkspace("terminalWindowBounds", event.target.value)
+                    }
+                    placeholder="100,80,1500,950"
+                  />
+                </label>
+                <label>
+                  <span>Browser</span>
+                  <input
+                    value={editor.workspace.browserApp}
+                    onChange={(event) =>
+                      updateEditorWorkspace("browserApp", event.target.value)
+                    }
+                  />
+                </label>
+                <label>
+                  <span>File manager</span>
+                  <input
+                    value={editor.workspace.fileManagerApp}
+                    onChange={(event) =>
+                      updateEditorWorkspace("fileManagerApp", event.target.value)
+                    }
+                  />
+                </label>
+              </div>
+            </div>
+
+            <div className="buttonRow">
+              <button
+                type="button"
+                disabled={submittingProjectRegistry || !editorDirty}
+                onClick={() => void handleSaveProjectRegistry()}
+              >
+                {submittingProjectRegistry ? "Submitting..." : "Save"}
+              </button>
+              <button
+                className="secondaryButton"
+                type="button"
+                disabled={submittingProjectRegistry}
+                onClick={handleCancelProjectRegistry}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
         </div>
       </section>
     </section>

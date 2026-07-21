@@ -149,6 +149,51 @@ def action_from_resolved_clarification(
         )
 
     if (
+        clarification_type in {"project_selection", "project_registry"}
+        and original_action == "delete_project"
+    ):
+        return AgentAction(
+            "delete_project",
+            {"project_id": answer},
+            f"Delete project:\n\nProject: {answer}",
+        )
+
+    if (
+        clarification_type in {"project_selection", "project_registry"}
+        and original_action == "duplicate_project"
+    ):
+        return AgentAction(
+            "duplicate_project",
+            {"project_id": answer},
+            "User answered a project-duplicate clarification.",
+        )
+
+    if clarification_type == "project_registry" and original_action == "create_project":
+        project_id = "".join(
+            character.lower() if character.isalnum() else "-"
+            for character in answer
+        ).strip("-_")
+        while "--" in project_id:
+            project_id = project_id.replace("--", "-")
+        if not project_id:
+            return None
+        return AgentAction(
+            "create_project",
+            {
+                "project": {
+                    "id": project_id,
+                    "name": answer,
+                    "root_path": ".",
+                    "repo_url": "",
+                    "aliases": [],
+                    "commands": {},
+                    "workspace": {},
+                }
+            },
+            f"Create project:\n\nProject: {answer}\nRoot path: .",
+        )
+
+    if (
         clarification_type == "command_selection"
         and original_action == "run_project_command"
     ):

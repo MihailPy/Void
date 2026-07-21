@@ -65,6 +65,12 @@ class LastActivityResponse(BaseModel):
 class ProjectsResponse(BaseModel):
     ok: bool
     projects: list[dict[str, Any]]
+    current_project: str | None = None
+
+
+class ProjectResponse(BaseModel):
+    ok: bool
+    project: dict[str, Any]
 
 
 class CurrentProjectResponse(BaseModel):
@@ -87,6 +93,15 @@ class ProjectCommandsResponse(BaseModel):
 
 class SetCurrentProjectRequest(BaseModel):
     project: str
+
+
+class ProjectRegistryRequest(BaseModel):
+    project: dict[str, Any]
+    duplicate_source_id: str | None = None
+
+
+class DeleteProjectRequest(BaseModel):
+    confirm_current: bool = False
 
 
 class OpenProjectRepoRequest(BaseModel):

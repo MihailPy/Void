@@ -804,6 +804,100 @@ textarea:focus {
   margin-bottom: 1rem;
 }
 
+.registryLayout {
+  display: grid;
+  grid-template-columns: 330px minmax(0, 1fr);
+  gap: 1rem;
+}
+
+.registryList {
+  display: grid;
+  align-content: start;
+  gap: 0.75rem;
+}
+
+.registryItem {
+  border: 1px solid rgba(142, 166, 194, 0.16);
+  border-radius: 8px;
+  background: rgba(12, 18, 26, 0.72);
+  padding: 0.75rem;
+}
+
+.registryItem.selected {
+  border-color: rgba(96, 186, 196, 0.55);
+}
+
+.registryItem > button {
+  width: 100%;
+  display: grid;
+  gap: 0.25rem;
+  text-align: left;
+  background: transparent;
+  border-color: transparent;
+  padding: 0;
+}
+
+.registryItem > button:hover:not(:disabled) {
+  background: transparent;
+  border-color: transparent;
+}
+
+.registryItem strong {
+  display: inline-block;
+  color: #8ee4ae;
+  font-size: 0.78rem;
+  margin-top: 0.45rem;
+}
+
+.registryItem small {
+  color: #9fb4ca;
+  overflow-wrap: anywhere;
+}
+
+.registryActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  margin-top: 0.7rem;
+}
+
+.registryActions button {
+  padding: 0.45rem 0.6rem;
+}
+
+.registryEditor {
+  min-width: 0;
+  display: grid;
+  gap: 1rem;
+}
+
+.editorSubsection {
+  display: grid;
+  gap: 0.65rem;
+  border-top: 1px solid rgba(142, 166, 194, 0.14);
+  padding-top: 1rem;
+}
+
+.editorSubsection h3 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.sectionHeader.compact {
+  margin: 0;
+}
+
+.editableRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto auto;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.commandEditorRow {
+  grid-template-columns: minmax(110px, 0.45fr) minmax(180px, 1fr) auto auto auto;
+}
+
 .commandItem {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
@@ -982,6 +1076,17 @@ textarea:focus {
   }
 
   .projectSwitcher {
+    grid-template-columns: 1fr;
+  }
+
+  .registryLayout,
+  .editableRow,
+  .commandEditorRow {
+    grid-template-columns: 1fr;
+  }
+
+  .registryActions {
+    display: grid;
     grid-template-columns: 1fr;
   }
 

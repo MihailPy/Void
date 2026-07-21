@@ -89,6 +89,7 @@ def project_stats(path: str = ".") -> ToolResult:
 def list_projects() -> ToolResult:
     try:
         projects = project_context.list_projects()
+        current_project = project_context.load_project_context().get("current_project", "")
     except ValueError as error:
         return ToolResult(ok=False, content=str(error))
 
@@ -100,7 +101,88 @@ def list_projects() -> ToolResult:
             f"root={project.get('root_path', '.')} aliases={aliases}"
         )
 
-    return ToolResult(ok=True, content="\n".join(lines), data={"projects": projects})
+    return ToolResult(
+        ok=True,
+        content="\n".join(lines),
+        data={"projects": projects, "current_project": current_project},
+    )
+
+
+def get_project(project: str) -> ToolResult:
+    try:
+        selected = project_context.get_project(project)
+    except ValueError as error:
+        return ToolResult(ok=False, content=str(error))
+    return ToolResult(
+        ok=True,
+        content=f"Project: {selected['name']} ({selected['id']})",
+        data={"project": selected},
+    )
+
+
+def create_project(project: dict[str, Any], duplicate_source_id: str | None = None) -> ToolResult:
+    try:
+        result = project_context.create_project(project, duplicate_source_id)
+    except ValueError as error:
+        return ToolResult(ok=False, content=str(error))
+    selected = result["project"]
+    verb = "Duplicated" if duplicate_source_id else "Created"
+    return ToolResult(
+        ok=True,
+        content=f"{verb} project {selected['name']} ({selected['id']}).",
+        data=result,
+    )
+
+
+def update_project(project_id: str, project: dict[str, Any]) -> ToolResult:
+    try:
+        result = project_context.update_project(project_id, project)
+    except ValueError as error:
+        return ToolResult(ok=False, content=str(error))
+    selected = result["project"]
+    return ToolResult(
+        ok=True,
+        content=f"Updated project {selected['name']} ({selected['id']}).",
+        data=result,
+    )
+
+
+def delete_project(project_id: str, confirm_current: bool = False) -> ToolResult:
+    try:
+        result = project_context.delete_project(project_id, confirm_current)
+    except ValueError as error:
+        return ToolResult(ok=False, content=str(error))
+    selected = result["project"]
+    return ToolResult(
+        ok=True,
+        content=f"Deleted project {selected['name']} ({selected['id']}).",
+        data=result,
+    )
+
+
+def duplicate_project(project_id: str) -> ToolResult:
+    try:
+        result = project_context.duplicate_project(project_id)
+    except ValueError as error:
+        return ToolResult(ok=False, content=str(error))
+    selected = result["project"]
+    return ToolResult(
+        ok=True,
+        content=f"Prepared duplicate {selected['name']} ({selected['id']}).",
+        data=result,
+    )
+
+
+def validate_create_project(project: dict[str, Any], duplicate_source_id: str | None = None) -> None:
+    project_context.create_project_validation(project, duplicate_source_id)
+
+
+def validate_update_project(project_id: str, project: dict[str, Any]) -> None:
+    project_context.update_project_validation(project_id, project)
+
+
+def validate_delete_project(project_id: str, confirm_current: bool = False) -> None:
+    project_context.delete_project_validation(project_id, confirm_current)
 
 
 def get_current_project() -> ToolResult:
@@ -1029,6 +1111,47 @@ def definitions() -> list[ToolDefinition]:
             "list_projects",
             "List known project contexts.",
             list_projects,
+            category="project",
+            risk_level="read",
+        ),
+        ToolDefinition(
+            "get_project",
+            "Show one project registry entry by id, name, or alias.",
+            get_project,
+            category="project",
+            risk_level="read",
+        ),
+        ToolDefinition(
+            "create_project",
+            "Create a project registry entry after approval.",
+            create_project,
+            requires_confirmation=True,
+            category="project",
+            risk_level="write",
+            confirmation_validator=validate_create_project,
+        ),
+        ToolDefinition(
+            "update_project",
+            "Update a project registry entry as one approved batch.",
+            update_project,
+            requires_confirmation=True,
+            category="project",
+            risk_level="write",
+            confirmation_validator=validate_update_project,
+        ),
+        ToolDefinition(
+            "delete_project",
+            "Delete a project registry entry after approval.",
+            delete_project,
+            requires_confirmation=True,
+            category="project",
+            risk_level="write",
+            confirmation_validator=validate_delete_project,
+        ),
+        ToolDefinition(
+            "duplicate_project",
+            "Prepare a duplicate project draft without writing JSON.",
+            duplicate_project,
             category="project",
             risk_level="read",
         ),
