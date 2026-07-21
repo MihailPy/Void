@@ -136,7 +136,162 @@ def _project_repo_browser_clarification() -> RouteResult:
     )
 
 
+def _project_registry_clarification(action: str, question: str, missing_field: str) -> RouteResult:
+    return _clarification_route(
+        question,
+        "project_registry",
+        {
+            "original_action": action,
+            "missing_field": missing_field,
+            "available_projects": _project_options(),
+        },
+    )
+
+
 def match(text: str, lowered: str) -> RouteResult | None:
+    create_named_match = re.match(
+        r"^(?:create|add|new)\s+project\s+named\s+(.+)$",
+        text,
+        re.IGNORECASE | re.DOTALL,
+    )
+    if create_named_match is None:
+        create_named_match = re.match(
+            r"^(?:создай|добавь)\s+проект\s+(.+)$",
+            text,
+            re.IGNORECASE | re.DOTALL,
+        )
+    if create_named_match:
+        name = clean(create_named_match.group(1))
+        project_id = re.sub(r"[^A-Za-z0-9_-]+", "-", name.strip().lower()).strip("-_")
+        if not project_id:
+            return _project_registry_clarification(
+                "create_project",
+                "What project id should I use?",
+                "project.id",
+            )
+        return RouteResult(
+            matched=True,
+            confidence=0.9,
+            action=AgentAction(
+                "create_project",
+                {
+                    "project": {
+                        "id": project_id,
+                        "name": name,
+                        "root_path": ".",
+                        "repo_url": "",
+                        "aliases": [],
+                        "commands": {},
+                        "workspace": {},
+                    }
+                },
+                f"Create project:\n\nProject: {name}\nRoot path: .",
+            ),
+        )
+
+    if lowered in {
+        "create project",
+        "add project",
+        "new project",
+        "создай проект",
+        "добавь проект",
+    }:
+        return _project_registry_clarification(
+            "create_project",
+            "What should the new project be named?",
+            "project.name",
+        )
+
+    delete_match = re.match(
+        r"^delete\s+project\s+(.+)$",
+        text,
+        re.IGNORECASE | re.DOTALL,
+    )
+    if delete_match is None:
+        delete_match = re.match(
+            r"^удали\s+проект\s+(.+)$",
+            text,
+            re.IGNORECASE | re.DOTALL,
+        )
+    if delete_match:
+        project = clean(delete_match.group(1))
+        return RouteResult(
+            matched=True,
+            confidence=0.95,
+            action=AgentAction(
+                "delete_project",
+                {"project_id": project},
+                f"Delete project:\n\nProject: {project}",
+            ),
+        )
+
+    if lowered in {"delete project", "удали проект"}:
+        return _project_registry_clarification(
+            "delete_project",
+            "Which project do you want to delete?",
+            "project_id",
+        )
+
+    duplicate_match = re.match(
+        r"^duplicate\s+project\s+(.+)$",
+        text,
+        re.IGNORECASE | re.DOTALL,
+    )
+    if duplicate_match is None:
+        duplicate_match = re.match(
+            r"^дублируй\s+проект\s+(.+)$",
+            text,
+            re.IGNORECASE | re.DOTALL,
+        )
+    if duplicate_match:
+        return RouteResult(
+            matched=True,
+            confidence=0.95,
+            action=AgentAction(
+                "duplicate_project",
+                {"project_id": clean(duplicate_match.group(1))},
+                "User asks to prepare a duplicate project draft.",
+            ),
+        )
+
+    if lowered in {"duplicate project", "дублируй проект"}:
+        return _project_registry_clarification(
+            "duplicate_project",
+            "Which project do you want to duplicate?",
+            "project_id",
+        )
+
+    rename_match = re.match(
+        r"^rename\s+project\s+(.+?)\s+to\s+(.+)$",
+        text,
+        re.IGNORECASE | re.DOTALL,
+    )
+    if rename_match is None:
+        rename_match = re.match(
+            r"^переименуй\s+проект\s+(.+?)\s+в\s+(.+)$",
+            text,
+            re.IGNORECASE | re.DOTALL,
+        )
+    if rename_match:
+        project = clean(rename_match.group(1))
+        name = clean(rename_match.group(2))
+        return RouteResult(
+            matched=True,
+            confidence=0.95,
+            action=AgentAction(
+                "update_project",
+                {"project_id": project, "project": {"name": name}},
+                f"Update project:\n\nProject: {name}\nRoot path: ",
+            ),
+        )
+
+    if lowered in {"rename project", "переименуй проект"}:
+        return _project_registry_clarification(
+            "update_project",
+            "Which project do you want to rename?",
+            "project_id",
+        )
+
     if lowered in {
         "show workspace settings",
         "workspace settings",

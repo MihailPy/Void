@@ -1,0 +1,9 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "outDir": "dist-test",
+    "rootDir": "."
+  },
+  "include": ["src/vite-env.d.ts", "src/api.ts", "src/projectRegistry.ts", "tests/**/*.ts"]
+}

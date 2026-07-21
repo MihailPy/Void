@@ -31,6 +31,7 @@ check:
 	uv run pytest
 
 verify: check
+	cd web && npm test
 
 clean:
 	find . -type d -name "__pycache__" -prune -exec rm -rf {} +

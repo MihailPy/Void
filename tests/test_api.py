@@ -235,6 +235,81 @@ def test_projects_endpoint():
     payload = response.json()
     assert payload["ok"] is True
     assert payload["projects"][0]["id"] == "void"
+    assert payload["current_project"] == "void"
+
+
+def test_project_registry_api_crud_approval_and_validation():
+    _save_projects(
+        [
+            _void_project(commands={"verify": "make verify"}),
+            {
+                "id": "docs",
+                "name": "Docs",
+                "aliases": [],
+                "root_path": "docs",
+            },
+        ]
+    )
+
+    invalid_response = request(
+        "POST",
+        "/projects",
+        json={"project": {"id": "bad id", "name": "Bad", "root_path": "."}},
+    )
+    assert invalid_response.status_code == 200
+    assert invalid_response.json()["ok"] is False
+    assert request("GET", "/approvals").json()["pending"] == []
+
+    create_response = request(
+        "POST",
+        "/projects",
+        json={"project": {"id": "api", "name": "API", "root_path": "api"}},
+    )
+    assert create_response.status_code == 200
+    assert create_response.json()["result_type"] == "approval"
+    assert create_response.json()["data"]["action"] == "create_project"
+    approval = _approval_for("create_project")
+    assert approval["reason"].startswith("Create project:")
+    approved = request("POST", f"/approvals/{approval['id']}/approve")
+    assert approved.json()["ok"] is True
+    assert request("GET", "/projects/api").json()["project"]["name"] == "API"
+
+    update_response = request(
+        "PUT",
+        "/projects/api",
+        json={
+            "project": {
+                "id": "api",
+                "name": "API Service",
+                "root_path": "services/api",
+                "commands": {"test": "pytest"},
+            }
+        },
+    )
+    assert update_response.status_code == 200
+    assert update_response.json()["result_type"] == "approval"
+    approval = _approval_for("update_project")
+    assert approval["reason"].startswith("Update project:")
+    approved = request("POST", f"/approvals/{approval['id']}/approve")
+    assert approved.json()["ok"] is True
+    assert request("GET", "/projects/api").json()["project"]["root_path"] == "services/api"
+
+    duplicate_response = request("POST", "/projects/api/duplicate")
+    assert duplicate_response.status_code == 200
+    assert duplicate_response.json()["project"]["id"] == "api-copy"
+    assert project_context.find_project("api-copy") is None
+
+    delete_response = request(
+        "DELETE",
+        "/projects/api",
+        json={"confirm_current": False},
+    )
+    assert delete_response.status_code == 200
+    assert delete_response.json()["result_type"] == "approval"
+    approval = _approval_for("delete_project")
+    approved = request("POST", f"/approvals/{approval['id']}/approve")
+    assert approved.json()["ok"] is True
+    assert project_context.find_project("api") is None
 
 
 def test_current_project_endpoint():

@@ -28,6 +28,21 @@ class ToolRegistry:
             return ToolResult(ok=False, content=f"Unknown tool: {action.action}")
 
         if tool.requires_confirmation and not bypass_confirmation:
+            if tool.confirmation_validator is not None:
+                try:
+                    tool.confirmation_validator(**action.arguments)
+                except TypeError as error:
+                    return ToolResult(
+                        ok=False,
+                        content=f"Invalid arguments for tool {action.action}: {error}",
+                        terminal=tool.terminal,
+                    )
+                except Exception as error:
+                    return ToolResult(
+                        ok=False,
+                        content=str(error),
+                        terminal=tool.terminal,
+                    )
             approval_id = create_approval(action, tool)
             return ToolResult(
                 ok=True,

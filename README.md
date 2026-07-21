@@ -238,6 +238,65 @@ Preference saves are atomic batches: one Save request creates one approval, all
 values are validated before persistence, and a rejected approval leaves
 `memory/projects.json` unchanged.
 
+## Managing Projects
+
+The Projects tab in the Web UI is the Project Registry editor for
+`memory/projects.json`. Users can create, edit, duplicate, delete, and select
+the current project without manually editing JSON.
+
+Each project entry keeps the existing JSON shape:
+
+- `id`
+- `name`
+- `aliases`
+- `root_path`
+- `repo_url`
+- `commands`
+- `workspace`
+
+The editor supports:
+
+- General fields: ID, name, root path, and repository URL.
+- Aliases: add, remove, and reorder aliases.
+- Commands: add, edit, remove, and reorder command keys and command strings.
+- Workspace: the same editable workspace preference fields documented above.
+
+Create, save, and delete are state-changing operations. They validate first,
+then create one approval. Approving performs one JSON persistence write and one
+Activity History entry. Rejecting leaves the registry unchanged.
+
+Activity types:
+
+- `project_create`
+- `project_update`
+- `project_delete`
+- `project_duplicate`
+
+Duplicating a project creates an editable draft named `Original Copy` with a
+generated unique ID. The draft is not written until Save is approved.
+
+Deleting the last project is rejected. Deleting the current project requires
+explicit confirmation; after approval, Void switches to another remaining
+project automatically.
+
+The registry also exposes API and Tool Registry operations:
+
+- `GET /projects`
+- `GET /projects/{project_id}`
+- `POST /projects`
+- `PUT /projects/{project_id}`
+- `DELETE /projects/{project_id}`
+- `POST /projects/{project_id}/duplicate`
+- `list_projects`
+- `get_project`
+- `create_project`
+- `update_project`
+- `delete_project`
+- `duplicate_project`
+
+Selecting the current project continues to use the existing
+`set_current_project` implementation and approval flow.
+
 ### Smart iTerm2 Workspaces
 
 On macOS, `workspace.terminal.app` may be set to `iterm2`, `iterm`, or `iTerm2`
