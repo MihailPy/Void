@@ -8,6 +8,7 @@ import {
   HealthResponse,
   MemoryResponse,
   Project,
+  ProjectImportPreview,
   SchedulerStatusResponse,
   ScheduledTask,
   Skill,
@@ -27,6 +28,9 @@ import {
   disableTask,
   duplicateProject,
   enableTask,
+  exportAllProjects,
+  exportCurrentProject,
+  exportProject,
   extractBrowserText,
   fillBrowserSession,
   fillBrowserSelector,
@@ -54,6 +58,7 @@ import {
   getStoredToken,
   getWorkspacePreferences,
   health,
+  importProjects,
   listBrowserSessions,
   openBrowserSession,
   openProjectRepo,
@@ -74,12 +79,16 @@ import {
   updateProject,
   suggestGitCommitMessage,
   updateWorkspacePreferences,
+  validateProjectImport,
   waitForBrowserSession,
   waitForBrowserSelector,
 } from "./api";
 import {
   emptyProjectEditorState,
   emptyWorkspacePreferenceForm,
+  formatProjectExport,
+  importPreviewStatus,
+  parseProjectImportJson,
   projectEditorForRefresh,
   projectEditorFromProject,
   projectPayloadFromEditor,
@@ -1421,6 +1430,15 @@ function ProjectTab() {
   const [projectInput, setProjectInput] = useState("Void");
   const [timeoutSeconds, setTimeoutSeconds] = useState(120);
   const [repoOpenMode, setRepoOpenMode] = useState<"visible" | "headless">("visible");
+  const [importJson, setImportJson] = useState("");
+  const [importResolution, setImportResolution] = useState<"replace" | "rename" | "skip">(
+    "skip",
+  );
+  const [importPreview, setImportPreview] = useState<ProjectImportPreview | null>(null);
+  const [importStatus, setImportStatus] = useState<
+    "preview" | "pending" | "completed" | "rejected"
+  >("preview");
+  const [exportOutput, setExportOutput] = useState("");
   const [inlineApproval, setInlineApproval] = useState<Approval | null>(null);
   const [inlineClarification, setInlineClarification] =
     useState<ClarificationRequest | null>(null);
@@ -1430,6 +1448,7 @@ function ProjectTab() {
   const [setting, setSetting] = useState(false);
   const [submittingProjectRegistry, setSubmittingProjectRegistry] = useState(false);
   const [savingWorkspacePreferences, setSavingWorkspacePreferences] = useState(false);
+  const [importExportAction, setImportExportAction] = useState("");
   const [runningCommand, setRunningCommand] = useState("");
   const [commandResult, setCommandResult] = useState<StructuredResult | null>(null);
   const [message, setMessage] = useState<StructuredResult | null>(null);
@@ -1480,7 +1499,8 @@ function ProjectTab() {
           approval.action === "update_workspace_preferences" ||
           approval.action === "create_project" ||
           approval.action === "update_project" ||
-          approval.action === "delete_project",
+          approval.action === "delete_project" ||
+          approval.action === "import_projects",
       );
       setInlineApproval(pendingApproval);
     } catch (currentError) {
@@ -1675,6 +1695,98 @@ function ProjectTab() {
     } finally {
       setSetting(false);
     }
+  }
+
+  async function handleExportProject(scope: "current" | "selected" | "all") {
+    const selectedId = editor.originalId || editor.id || currentProject?.id || "";
+    if (scope === "selected" && !selectedId) {
+      setError("Select a project to export.");
+      return;
+    }
+
+    setError("");
+    setMessage(null);
+    setImportExportAction(`export:${scope}`);
+    try {
+      const response =
+        scope === "current"
+          ? await exportCurrentProject()
+          : scope === "all"
+            ? await exportAllProjects()
+            : await exportProject(selectedId);
+      setExportOutput(formatProjectExport(response.export));
+      setMessage({
+        message: `Exported ${response.export.projects.length} project(s).`,
+      });
+    } catch (currentError) {
+      setError(getErrorMessage(currentError));
+    } finally {
+      setImportExportAction("");
+    }
+  }
+
+  function parsedImportSource() {
+    return parseProjectImportJson(importJson);
+  }
+
+  async function handleValidateImport() {
+    setError("");
+    setMessage(null);
+    setImportPreview(null);
+    setImportStatus("preview");
+    setImportExportAction("validate-import");
+    try {
+      const response = await validateProjectImport({
+        source: parsedImportSource(),
+        resolution: importResolution,
+      });
+      setImportPreview(response.preview);
+      setMessage({ message: response.preview.summary || "Project import preview." });
+    } catch (currentError) {
+      setError(getErrorMessage(currentError));
+    } finally {
+      setImportExportAction("");
+    }
+  }
+
+  async function handleImportProjects() {
+    setError("");
+    setMessage(null);
+    setInlineApproval(null);
+    setImportStatus("preview");
+    setImportExportAction("import-projects");
+    try {
+      const source = parsedImportSource();
+      const previewResponse = await validateProjectImport({
+        source,
+        resolution: importResolution,
+      });
+      setImportPreview(previewResponse.preview);
+      if (previewResponse.preview.errors.length > 0) {
+        setMessage({ message: previewResponse.preview.summary || "Validation failed." });
+        return;
+      }
+      const response = await importProjects({ source, resolution: importResolution });
+      setMessage(toStructuredResult(response));
+      const pendingApproval = await fetchInlineApproval(
+        (approval) =>
+          approval.id === response.data?.approval_id ||
+          approval.action === "import_projects",
+      );
+      setInlineApproval(pendingApproval);
+      setImportStatus("pending");
+    } catch (currentError) {
+      setError(getErrorMessage(currentError));
+    } finally {
+      setImportExportAction("");
+    }
+  }
+
+  function handleCancelImport() {
+    setImportJson("");
+    setImportPreview(null);
+    setImportStatus("preview");
+    setError("");
   }
 
   async function handleRunCommand(commandKey: string) {
@@ -1877,7 +1989,8 @@ function ProjectTab() {
     const isProjectRegistryApproval =
       approvedAction === "create_project" ||
       approvedAction === "update_project" ||
-      approvedAction === "delete_project";
+      approvedAction === "delete_project" ||
+      approvedAction === "import_projects";
     try {
       const response = await resolveInlineApproval(id, action);
       if (
@@ -1891,16 +2004,24 @@ function ProjectTab() {
       } else {
         setMessage(toStructuredResult(response));
       }
+      if (approvedAction === "import_projects" && action === "reject") {
+        setImportStatus("rejected");
+      }
       setInlineApproval(null);
       if (action === "approve" && isProjectRegistryApproval) {
         setEditorDirty(false);
         const resultProject = asRecord(response.data?.project);
         const preferredProjectId =
-          approvedAction === "delete_project" ? null : asText(resultProject?.id, "");
+          approvedAction === "delete_project" || approvedAction === "import_projects"
+            ? null
+            : asText(resultProject?.id, "");
         await loadProjectContext({
           forceEditorRefresh: true,
           preferredProjectId: preferredProjectId || null,
         });
+        if (approvedAction === "import_projects") {
+          setImportStatus(action === "approve" ? "completed" : "rejected");
+        }
         return;
       }
       if (
@@ -1947,7 +2068,8 @@ function ProjectTab() {
             approval.action === "update_workspace_preferences" ||
             approval.action === "create_project" ||
             approval.action === "update_project" ||
-            approval.action === "delete_project",
+            approval.action === "delete_project" ||
+            approval.action === "import_projects",
         );
         setInlineApproval(pendingApproval);
       } else {
@@ -2309,6 +2431,182 @@ function ProjectTab() {
           <button type="button" onClick={handleCreateEditor}>
             Create
           </button>
+        </div>
+        <div className="importExportPanel">
+          <section>
+            <div className="sectionHeader compact">
+              <h3>Export</h3>
+            </div>
+            <div className="buttonRow">
+              <button
+                className="secondaryButton"
+                type="button"
+                disabled={Boolean(importExportAction)}
+                onClick={() => void handleExportProject("current")}
+              >
+                {importExportAction === "export:current" ? "Exporting..." : "Export current"}
+              </button>
+              <button
+                className="secondaryButton"
+                type="button"
+                disabled={Boolean(importExportAction)}
+                onClick={() => void handleExportProject("selected")}
+              >
+                {importExportAction === "export:selected"
+                  ? "Exporting..."
+                  : "Export selected"}
+              </button>
+              <button
+                className="secondaryButton"
+                type="button"
+                disabled={Boolean(importExportAction)}
+                onClick={() => void handleExportProject("all")}
+              >
+                {importExportAction === "export:all" ? "Exporting..." : "Export all"}
+              </button>
+            </div>
+            {exportOutput ? (
+              <pre className="gitOutput">
+                <code>{exportOutput}</code>
+              </pre>
+            ) : null}
+          </section>
+
+          <section>
+            <div className="sectionHeader compact">
+              <div>
+                <h3>Import</h3>
+                <p>{importPreviewStatus(importPreview)}</p>
+              </div>
+              <span className={`importStatus ${importStatus}`}>{importStatus}</span>
+            </div>
+            <div className="formGrid">
+              <label>
+                <span>Conflict resolution</span>
+                <select
+                  value={importResolution}
+                  onChange={(event) =>
+                    setImportResolution(
+                      event.target.value === "replace"
+                        ? "replace"
+                        : event.target.value === "rename"
+                          ? "rename"
+                          : "skip",
+                    )
+                  }
+                >
+                  <option value="skip">skip imported conflicts</option>
+                  <option value="replace">replace existing projects</option>
+                  <option value="rename">rename imported projects</option>
+                </select>
+              </label>
+            </div>
+            <label className="importJsonField">
+              <span>Project import JSON</span>
+              <textarea
+                value={importJson}
+                onChange={(event) => setImportJson(event.target.value)}
+                rows={8}
+                placeholder={'{"version":1,"projects":[{"id":"demo","name":"Demo","root_path":"."}]}'}
+              />
+            </label>
+            <div className="buttonRow">
+              <button
+                className="secondaryButton"
+                type="button"
+                disabled={Boolean(importExportAction)}
+                onClick={() => void handleValidateImport()}
+              >
+                {importExportAction === "validate-import" ? "Validating..." : "Validate"}
+              </button>
+              <button
+                type="button"
+                disabled={
+                  Boolean(importExportAction) ||
+                  inlineApproval?.action === "import_projects"
+                }
+                onClick={() => void handleImportProjects()}
+              >
+                {inlineApproval?.action === "import_projects"
+                  ? "Pending approval"
+                  : importExportAction === "import-projects"
+                    ? "Requesting..."
+                    : "Approve import"}
+              </button>
+              <button
+                className="secondaryButton"
+                type="button"
+                disabled={Boolean(importExportAction)}
+                onClick={handleCancelImport}
+              >
+                Cancel
+              </button>
+            </div>
+            {importPreview ? (
+              <div className="importPreviewGrid">
+                <article className="importPreviewBlock">
+                  <div className="sectionLabel">Projects to create</div>
+                  {importPreview.creates.length === 0 ? (
+                    <p>none</p>
+                  ) : (
+                    <ul>
+                      {importPreview.creates.map((project) => (
+                        <li key={project.id}>{project.name ?? project.id}</li>
+                      ))}
+                    </ul>
+                  )}
+                </article>
+                <article className="importPreviewBlock">
+                  <div className="sectionLabel">Projects to replace</div>
+                  {importPreview.replaces.length === 0 ? (
+                    <p>none</p>
+                  ) : (
+                    <ul>
+                      {importPreview.replaces.map((project) => (
+                        <li key={project.id}>{project.name ?? project.id}</li>
+                      ))}
+                    </ul>
+                  )}
+                </article>
+                <article className="importPreviewBlock">
+                  <div className="sectionLabel">Projects to skip</div>
+                  {importPreview.skips.length === 0 ? (
+                    <p>none</p>
+                  ) : (
+                    <ul>
+                      {importPreview.skips.map((project) => (
+                        <li key={project.id}>{project.name ?? project.id}</li>
+                      ))}
+                    </ul>
+                  )}
+                </article>
+                <article className="importPreviewBlock">
+                  <div className="sectionLabel">Warnings</div>
+                  {importPreview.warnings.length === 0 ? (
+                    <p>none</p>
+                  ) : (
+                    <ul>
+                      {importPreview.warnings.map((warning) => (
+                        <li key={warning}>{warning}</li>
+                      ))}
+                    </ul>
+                  )}
+                </article>
+                <article className="importPreviewBlock importPreviewWide">
+                  <div className="sectionLabel">Validation errors</div>
+                  {importPreview.errors.length === 0 ? (
+                    <p>none</p>
+                  ) : (
+                    <ul>
+                      {importPreview.errors.map((validationError) => (
+                        <li key={validationError}>{validationError}</li>
+                      ))}
+                    </ul>
+                  )}
+                </article>
+              </div>
+            ) : null}
+          </section>
         </div>
         <div className="registryLayout">
           <div className="registryList">

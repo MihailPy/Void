@@ -168,6 +168,27 @@ def action_from_resolved_clarification(
             "User answered a project-duplicate clarification.",
         )
 
+    if clarification_type == "project_registry" and original_action == "export_project":
+        return AgentAction(
+            "export_project",
+            {"project": answer},
+            "User answered a project-export clarification.",
+        )
+
+    if clarification_type == "project_registry" and original_action == "validate_project_import":
+        return AgentAction(
+            "validate_project_import",
+            {"source": answer, "resolution": "skip"},
+            "User answered a project-import validation clarification.",
+        )
+
+    if clarification_type == "project_registry" and original_action == "import_projects":
+        return AgentAction(
+            "import_projects",
+            {"source": answer, "resolution": "skip"},
+            "User answered a project-import clarification.",
+        )
+
     if clarification_type == "project_registry" and original_action == "create_project":
         project_id = "".join(
             character.lower() if character.isalnum() else "-"

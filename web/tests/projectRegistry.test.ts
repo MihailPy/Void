@@ -1,6 +1,9 @@
 import type { Project } from "../src/api";
 import type { ProjectEditorState } from "../src/projectRegistry.js";
 import {
+  formatProjectExport,
+  importPreviewStatus,
+  parseProjectImportJson,
   projectEditorForRefresh,
   projectEditorFromProject,
 } from "../src/projectRegistry.js";
@@ -104,10 +107,53 @@ function testDeleteRefreshDoesNotKeepDeletedProject() {
   assert(editor.originalId !== deletedProjectId, "delete refresh should not keep deleted project");
 }
 
+function testImportJsonParsingAndExportFormatting() {
+  const parsed = parseProjectImportJson('{"version":1,"projects":[{"id":"demo"}]}');
+  assert(typeof parsed === "object" && parsed !== null, "import JSON should parse");
+
+  const formatted = formatProjectExport({ version: 1, projects: [project("demo")] });
+  assert(formatted.endsWith("\n"), "formatted export should end with newline");
+  assert(formatted.includes('"version": 1'), "formatted export should include version");
+}
+
+function testImportPreviewStatus() {
+  assert(importPreviewStatus(null) === "Preview", "missing preview should be preview");
+  assert(
+    importPreviewStatus({
+      ok: false,
+      version: 1,
+      resolution: "skip",
+      counts: { projects: 1, creates: 0, updates: 0, skips: 0 },
+      creates: [],
+      replaces: [],
+      skips: [],
+      warnings: [],
+      errors: ["bad"],
+    }) === "Preview has validation errors",
+    "errors should be surfaced",
+  );
+  assert(
+    importPreviewStatus({
+      ok: true,
+      version: 1,
+      resolution: "skip",
+      counts: { projects: 1, creates: 1, updates: 0, skips: 0 },
+      creates: [project("demo")],
+      replaces: [],
+      skips: [],
+      warnings: [],
+      errors: [],
+    }) === "Preview ready for approval",
+    "valid preview should be ready",
+  );
+}
+
 testDirtyNormalRefreshPreservesDraft();
 testDirtyForcedRefreshReplacesDraft();
 testForcedRefreshWithPreferredProjectSelectsIt();
 testMissingPreferredProjectFallsBackToCurrentProject();
 testDeleteRefreshDoesNotKeepDeletedProject();
+testImportJsonParsingAndExportFormatting();
+testImportPreviewStatus();
 
 console.log("Project Registry state selection tests passed.");

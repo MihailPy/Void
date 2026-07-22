@@ -44,6 +44,9 @@ from void.api.schemas import (
     MemoryResponse,
     OpenProjectRepoRequest,
     OpenProjectWorkspaceRequest,
+    ProjectExportResponse,
+    ProjectImportRequest,
+    ProjectImportValidationResponse,
     ProjectRegistryRequest,
     ProjectResponse,
     UpdateWorkspacePreferencesRequest,
@@ -454,6 +457,104 @@ def set_current_project(
     registry: ToolRegistry = Depends(get_tool_registry),
 ) -> ApprovalResponse | ErrorResponse:
     return _execute_api_tool(registry, "set_current_project", {"project": request.project})
+
+
+@app.get("/projects/current/export", response_model=ProjectExportResponse | ErrorResponse)
+def export_current_project(
+    _: None = Depends(require_api_token),
+    registry: ToolRegistry = Depends(get_tool_registry),
+) -> ProjectExportResponse | ErrorResponse:
+    try:
+        result = _execute_read_api_tool(registry, "export_project", {"current": True})
+        return ProjectExportResponse(ok=True, export=(result.data or {}).get("export", {}))
+    except Exception as error:
+        return _error(error)
+
+
+@app.get("/projects/export/all", response_model=ProjectExportResponse | ErrorResponse)
+def export_all_projects(
+    _: None = Depends(require_api_token),
+    registry: ToolRegistry = Depends(get_tool_registry),
+) -> ProjectExportResponse | ErrorResponse:
+    try:
+        result = _execute_read_api_tool(registry, "export_projects")
+        return ProjectExportResponse(ok=True, export=(result.data or {}).get("export", {}))
+    except Exception as error:
+        return _error(error)
+
+
+@app.post(
+    "/projects/import/validate",
+    response_model=ProjectImportValidationResponse | ErrorResponse,
+)
+def validate_project_import(
+    request: ProjectImportRequest,
+    _: None = Depends(require_api_token),
+    registry: ToolRegistry = Depends(get_tool_registry),
+) -> ProjectImportValidationResponse | ErrorResponse:
+    try:
+        arguments = {
+            "source": request.source,
+            "path": request.path,
+            "resolution": request.resolution,
+        }
+        result = registry.execute(
+            AgentAction("validate_project_import", arguments, "API request.")
+        )
+        return ProjectImportValidationResponse(
+            ok=result.ok,
+            preview=(result.data or {}).get("preview", {}),
+        )
+    except Exception as error:
+        return _error(error)
+
+
+@app.post("/projects/import", response_model=ApprovalResponse | ErrorResponse)
+def import_project_entries(
+    request: ProjectImportRequest,
+    _: None = Depends(require_api_token),
+    registry: ToolRegistry = Depends(get_tool_registry),
+) -> ApprovalResponse | ErrorResponse:
+    arguments = {
+        "source": request.source,
+        "path": request.path,
+        "resolution": request.resolution,
+    }
+    preview_result = registry.execute(
+        AgentAction("validate_project_import", arguments, "API request.")
+    )
+    preview = (preview_result.data or {}).get("preview", {})
+    if not preview_result.ok:
+        return ApprovalResponse(
+            ok=False,
+            message=preview_result.content,
+            result_type="message",
+            data={"preview": preview},
+        )
+
+    counts = preview.get("counts", {})
+    reason = (
+        "Import projects:\n\n"
+        f"Projects: {counts.get('projects', 0)}\n"
+        f"Creates: {counts.get('creates', 0)}\n"
+        f"Updates: {counts.get('updates', 0)}\n"
+        f"Skips: {counts.get('skips', 0)}\n"
+        f"Resolution: {preview.get('resolution', request.resolution)}"
+    )
+    return _execute_api_tool(registry, "import_projects", arguments, reason)
+
+
+@app.get("/projects/{project_id}/export", response_model=ProjectExportResponse | ErrorResponse)
+def export_project_entry(
+    project_id: str,
+    _: None = Depends(require_api_token),
+    registry: ToolRegistry = Depends(get_tool_registry),
+) -> ProjectExportResponse | ErrorResponse:
+    try:
+        result = _execute_read_api_tool(registry, "export_project", {"project": project_id})
+        return ProjectExportResponse(ok=True, export=(result.data or {}).get("export", {}))
+    except Exception as error:
+        return _error(error)
 
 
 @app.get("/projects/{project_id}", response_model=ProjectResponse | ErrorResponse)

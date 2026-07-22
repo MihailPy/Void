@@ -263,6 +263,180 @@ def test_project_registry_duplicate_alias_validation_rejected():
     assert list_approvals() == []
 
 
+def test_project_export_current_all_and_unknown_fields():
+    _save_registry()
+    registry = build_registry()
+
+    current = registry.execute(AgentAction("export_project", {"current": True}, "test"))
+    all_projects = registry.execute(AgentAction("export_projects", {}, "test"))
+
+    assert current.ok is True
+    assert current.data["export"]["version"] == 1
+    assert current.data["export"]["projects"][0]["unknown_project"] == {"keep": True}
+    assert all_projects.ok is True
+    assert [project["id"] for project in all_projects.data["export"]["projects"]] == [
+        "void",
+        "docs",
+    ]
+    activities = activity_history.list_recent()
+    assert activities[0]["activity_type"] == "project_export"
+
+
+def test_project_import_validate_replace_rename_skip_and_unknown_preservation(monkeypatch):
+    _save_registry()
+    registry = build_registry()
+    source = {
+        "version": 1,
+        "projects": [
+            {
+                "id": "api",
+                "name": "API",
+                "aliases": ["backend"],
+                "root_path": "api",
+                "repo_url": "",
+                "commands": {"test": "pytest"},
+                "workspace": {"terminal": {"app": "terminal", "command": "cd {root}"}},
+                "unknown": {"survives": True},
+            },
+            {
+                "id": "docs",
+                "name": "Docs Imported",
+                "aliases": ["manuals"],
+                "root_path": "imported-docs",
+            },
+        ],
+    }
+
+    skip_preview = registry.execute(
+        AgentAction(
+            "validate_project_import",
+            {"source": source, "resolution": "skip"},
+            "test",
+        )
+    )
+    assert skip_preview.ok is True
+    assert skip_preview.data["preview"]["counts"] == {
+        "projects": 2,
+        "creates": 1,
+        "updates": 0,
+        "skips": 1,
+    }
+
+    rename_preview = registry.execute(
+        AgentAction(
+            "validate_project_import",
+            {"source": source, "resolution": "rename"},
+            "test",
+        )
+    )
+    assert rename_preview.ok is True
+    assert rename_preview.data["preview"]["creates"][1]["id"] == "docs-import"
+
+    replace_response = registry.execute(
+        AgentAction(
+            "import_projects",
+            {"source": source, "resolution": "replace"},
+            "Import projects.",
+        )
+    )
+    assert replace_response.ok is True
+    assert len(list_approvals()) == 1
+
+    original_save = project_context.save_project_context
+    save_calls: list[dict[str, Any]] = []
+
+    def tracking_save(payload):
+        save_calls.append(payload)
+        return original_save(payload)
+
+    monkeypatch.setattr(project_context, "save_project_context", tracking_save)
+    approved = _approve_latest(registry)
+
+    assert approved.ok is True
+    assert len(save_calls) == 1
+    assert project_context.get_project("api")["unknown"] == {"survives": True}
+    assert project_context.get_project("docs")["name"] == "Docs Imported"
+    activities = activity_history.list_recent()
+    import_activities = [
+        activity for activity in activities if activity["activity_type"] == "project_import"
+    ]
+    assert len(import_activities) == 1
+    assert import_activities[0]["metadata"]["creates"] == 1
+    assert import_activities[0]["metadata"]["updates"] == 1
+
+
+def test_project_import_validation_collects_errors_and_rejection_writes_nothing(monkeypatch):
+    _save_registry()
+    registry = build_registry()
+
+    invalid = registry.execute(
+        AgentAction(
+            "validate_project_import",
+            {
+                "source": {
+                    "projects": [
+                        {"id": "bad id", "name": "Bad", "root_path": "."},
+                        {
+                            "id": "api",
+                            "name": "API",
+                            "root_path": ".",
+                            "aliases": ["x", "X"],
+                        },
+                        {
+                            "id": "web",
+                            "name": "Web",
+                            "root_path": ".",
+                            "workspace": {
+                                "terminal": {
+                                    "app": "unknown",
+                                    "command": "cd .",
+                                }
+                            },
+                        },
+                    ]
+                }
+            },
+            "test",
+        )
+    )
+
+    assert invalid.ok is False
+    assert "bad id" in invalid.content
+    assert "Duplicate alias" in invalid.content
+    assert "terminal app" in invalid.content
+    assert "must contain {root}" in invalid.content
+    assert list_approvals() == []
+
+    valid = registry.execute(
+        AgentAction(
+            "import_projects",
+            {
+                "source": {"projects": [{"id": "api", "name": "API", "root_path": "."}]},
+                "resolution": "skip",
+            },
+            "Import projects.",
+        )
+    )
+    assert valid.ok is True
+    approval_id = list_approvals()[0]["id"]
+    save_calls: list[dict[str, Any]] = []
+
+    def tracking_save(payload):
+        save_calls.append(payload)
+        return payload
+
+    monkeypatch.setattr(project_context, "save_project_context", tracking_save)
+    clear_approval(approval_id)
+
+    assert save_calls == []
+    assert project_context.find_project("api") is None
+    assert not [
+        activity
+        for activity in activity_history.list_recent()
+        if activity["activity_type"] == "project_import"
+    ]
+
+
 def test_project_registry_router_phrases_and_clarification():
     router = Router()
 
@@ -274,6 +448,14 @@ def test_project_registry_router_phrases_and_clarification():
     assert router.route("Дублируй проект docs").action.action == "duplicate_project"
     assert router.route("Rename project docs to Docs 2").action.action == "update_project"
     assert router.route("Переименуй проект docs в Docs 2").action.action == "update_project"
+    assert router.route("Export current project").action.action == "export_project"
+    assert router.route("Export all projects").action.action == "export_projects"
+    assert router.route("Export project docs").action.action == "export_project"
+    assert router.route("Экспортируй проект").action.action == "export_project"
+    assert router.route("Экспортируй все проекты").action.action == "export_projects"
+    assert router.route("Импортируй проект").clarification.context["original_action"] == "import_projects"
+    assert router.route("Импортируй проекты").clarification.context["original_action"] == "import_projects"
+    assert router.route("Проверь импорт проектов").clarification.context["original_action"] == "validate_project_import"
 
     clarification = router.route("Delete project")
     assert clarification.clarification is not None

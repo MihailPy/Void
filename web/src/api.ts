@@ -90,6 +90,7 @@ export type Project = {
   repo_url?: string;
   commands?: Record<string, string>;
   workspace?: Record<string, Record<string, unknown>>;
+  [key: string]: unknown;
 };
 
 export type ProjectsResponse = {
@@ -126,6 +127,45 @@ export type SetCurrentProjectRequest = {
 export type ProjectRegistryRequest = {
   project: Project;
   duplicate_source_id?: string | null;
+};
+
+export type ProjectExportPayload = {
+  version: number;
+  projects: Project[];
+};
+
+export type ProjectExportResponse = {
+  ok: boolean;
+  export: ProjectExportPayload;
+};
+
+export type ProjectImportPreview = {
+  ok: boolean;
+  version: number;
+  resolution: "replace" | "rename" | "skip" | string;
+  counts: {
+    projects: number;
+    creates: number;
+    updates: number;
+    skips: number;
+  };
+  creates: Project[];
+  replaces: Project[];
+  skips: Project[];
+  warnings: string[];
+  errors: string[];
+  summary?: string;
+};
+
+export type ProjectImportRequest = {
+  source?: unknown;
+  path?: string | null;
+  resolution: "replace" | "rename" | "skip";
+};
+
+export type ProjectImportValidationResponse = {
+  ok: boolean;
+  preview: ProjectImportPreview;
 };
 
 export type DeleteProjectRequest = {
@@ -441,6 +481,34 @@ export function duplicateProject(projectId: string) {
       method: "POST",
     },
   );
+}
+
+export function exportCurrentProject() {
+  return request<ProjectExportResponse>("/projects/current/export");
+}
+
+export function exportProject(projectId: string) {
+  return request<ProjectExportResponse>(
+    `/projects/${encodeURIComponent(projectId)}/export`,
+  );
+}
+
+export function exportAllProjects() {
+  return request<ProjectExportResponse>("/projects/export/all");
+}
+
+export function validateProjectImport(payload: ProjectImportRequest) {
+  return request<ProjectImportValidationResponse>("/projects/import/validate", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function importProjects(payload: ProjectImportRequest) {
+  return request<ApprovalActionResponse>("/projects/import", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
 }
 
 export function describeCurrentProject() {

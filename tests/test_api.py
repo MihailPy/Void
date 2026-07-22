@@ -312,6 +312,118 @@ def test_project_registry_api_crud_approval_and_validation():
     assert project_context.find_project("api") is None
 
 
+def test_project_import_export_api_endpoints_and_rejection():
+    _save_projects(
+        [
+            _void_project(commands={"verify": "make verify"}),
+            {
+                "id": "docs",
+                "name": "Docs",
+                "aliases": ["manual"],
+                "root_path": "docs",
+                "unknown": {"keep": True},
+            },
+        ]
+    )
+
+    current_export = request("GET", "/projects/current/export")
+    assert current_export.status_code == 200
+    assert current_export.json()["ok"] is True
+    assert current_export.json()["export"]["version"] == 1
+    assert current_export.json()["export"]["projects"][0]["id"] == "void"
+
+    selected_export = request("GET", "/projects/docs/export")
+    assert selected_export.status_code == 200
+    assert selected_export.json()["export"]["projects"][0]["unknown"] == {"keep": True}
+
+    all_export = request("GET", "/projects/export/all")
+    assert all_export.status_code == 200
+    assert len(all_export.json()["export"]["projects"]) == 2
+
+    source = {
+        "version": 1,
+        "projects": [
+            {
+                "id": "api",
+                "name": "API",
+                "aliases": ["backend"],
+                "root_path": "api",
+                "unknown": {"survives": True},
+            }
+        ],
+    }
+    validation = request(
+        "POST",
+        "/projects/import/validate",
+        json={"source": source, "resolution": "skip"},
+    )
+    assert validation.status_code == 200
+    assert validation.json()["ok"] is True
+    assert validation.json()["preview"]["counts"]["creates"] == 1
+
+    import_response = request(
+        "POST",
+        "/projects/import",
+        json={"source": source, "resolution": "skip"},
+    )
+    assert import_response.status_code == 200
+    assert import_response.json()["result_type"] == "approval"
+    assert import_response.json()["data"]["action"] == "import_projects"
+    approval = _approval_for("import_projects")
+    assert "Projects: 1" in approval["reason"]
+
+    rejected = request("POST", f"/approvals/{approval['id']}/reject")
+    assert rejected.status_code == 200
+    assert rejected.json()["ok"] is True
+    assert project_context.find_project("api") is None
+
+    import_response = request(
+        "POST",
+        "/projects/import",
+        json={"source": source, "resolution": "skip"},
+    )
+    approval = _approval_for("import_projects")
+    approved = request("POST", f"/approvals/{approval['id']}/approve")
+    assert approved.status_code == 200
+    assert approved.json()["ok"] is True
+    assert project_context.get_project("api")["unknown"] == {"survives": True}
+    imports = [
+        activity
+        for activity in request("GET", "/activity").json()["activities"]
+        if activity["activity_type"] == "project_import"
+    ]
+    assert len(imports) == 1
+
+
+def test_project_import_api_invalid_payload_does_not_create_approval():
+    _save_projects([_void_project(commands={"verify": "make verify"})])
+
+    response = request(
+        "POST",
+        "/projects/import",
+        json={
+            "source": {
+                "projects": [
+                    {"id": "bad id", "name": "Bad", "root_path": "."},
+                    {
+                        "id": "web",
+                        "name": "Web",
+                        "root_path": ".",
+                        "commands": [],
+                    },
+                ]
+            },
+            "resolution": "skip",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["ok"] is False
+    assert "bad id" in response.json()["message"]
+    assert "Commands must be an object" in response.json()["message"]
+    assert request("GET", "/approvals").json()["pending"] == []
+
+
 def test_current_project_endpoint():
     response = request("GET", "/projects/current")
 
