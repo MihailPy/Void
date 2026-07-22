@@ -3,6 +3,7 @@ import type { ProjectEditorState } from "../src/projectRegistry.js";
 import {
   formatProjectExport,
   importPreviewAliasOwnershipChanges,
+  importPreviewAliasRenames,
   importPreviewStatus,
   parseProjectImportJson,
   projectEditorForRefresh,
@@ -177,6 +178,33 @@ function testImportPreviewAliasOwnershipChanges() {
   );
 }
 
+function testImportPreviewAliasRenames() {
+  const changes = importPreviewAliasRenames({
+    ok: true,
+    version: 1,
+    resolution: "rename",
+    counts: { projects: 1, creates: 1, updates: 0, skips: 0 },
+    creates: [project("beta-import")],
+    replaces: [],
+    skips: [],
+    alias_renames: [
+      {
+        project_id: "beta-import",
+        from_alias: "beta",
+        to_alias: "beta-beta-import",
+      },
+    ],
+    warnings: [],
+    errors: [],
+  });
+
+  assert(changes.length === 1, "alias rename should render one row");
+  assert(
+    changes[0].text === "Alias renamed: beta -> beta-beta-import",
+    "alias rename should describe final persisted alias",
+  );
+}
+
 testDirtyNormalRefreshPreservesDraft();
 testDirtyForcedRefreshReplacesDraft();
 testForcedRefreshWithPreferredProjectSelectsIt();
@@ -185,5 +213,6 @@ testDeleteRefreshDoesNotKeepDeletedProject();
 testImportJsonParsingAndExportFormatting();
 testImportPreviewStatus();
 testImportPreviewAliasOwnershipChanges();
+testImportPreviewAliasRenames();
 
 console.log("Project Registry state selection tests passed.");

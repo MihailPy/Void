@@ -494,6 +494,289 @@ def _next_import_id(base_id: str, reserved_ids: set[str]) -> str:
     return candidate
 
 
+def _next_import_alias(
+    alias: str,
+    resolved_project_id: str,
+    reserved_aliases: set[str],
+) -> str:
+    base = f"{alias}-{resolved_project_id}"
+    candidate = base
+    counter = 2
+    while _normalize(candidate) in reserved_aliases:
+        candidate = f"{base}-{counter}"
+        counter += 1
+    return candidate
+
+
+def _remove_project_by_id(projects: list[dict[str, Any]], project_id: str) -> None:
+    normalized_id = _normalize(project_id)
+    projects[:] = [
+        project
+        for project in projects
+        if _normalize(str(project.get("id", ""))) != normalized_id
+    ]
+
+
+def _alias_owner(projects: list[dict[str, Any]], alias: str) -> str | None:
+    normalized_alias = _normalize(alias)
+    for project in projects:
+        project_id = str(project.get("id", ""))
+        for candidate in project.get("aliases", []):
+            if _normalize(str(candidate)) == normalized_alias:
+                return project_id
+    return None
+
+
+def _alias_values_for_owner(
+    projects: list[dict[str, Any]],
+    *,
+    project_id: str,
+    alias: str,
+) -> list[str]:
+    normalized_project_id = _normalize(project_id)
+    normalized_alias = _normalize(alias)
+    values: list[str] = []
+    for project in projects:
+        if _normalize(str(project.get("id", ""))) != normalized_project_id:
+            continue
+        for candidate in project.get("aliases", []):
+            if _normalize(str(candidate)) == normalized_alias:
+                values.append(str(candidate))
+    return values or [alias]
+
+
+def _reserved_aliases(projects: list[dict[str, Any]]) -> set[str]:
+    return {
+        _normalize(str(alias))
+        for project in projects
+        for alias in project.get("aliases", [])
+        if _normalize(str(alias))
+    }
+
+
+def _final_payload_errors(payload: dict[str, Any]) -> list[str]:
+    errors: list[str] = []
+    seen_ids: dict[str, str] = {}
+    for project in payload.get("projects", []):
+        if not isinstance(project, dict):
+            continue
+        project_id = str(project.get("id", ""))
+        normalized_id = _normalize(project_id)
+        if not normalized_id:
+            continue
+        if normalized_id in seen_ids:
+            errors.append(
+                f"Duplicate project id after import: {project_id} is used more than once."
+            )
+        else:
+            seen_ids[normalized_id] = project_id
+    errors.extend(_duplicate_alias_errors(payload))
+    try:
+        _validate_payload(payload)
+    except ValueError as error:
+        message = str(error)
+        if message not in errors:
+            errors.append(message)
+    return errors
+
+
+def plan_project_import(
+    source: Any | None = None,
+    *,
+    path: str | None = None,
+    resolution: str = "skip",
+) -> dict[str, Any]:
+    clean_resolution = str(resolution or "skip").strip().casefold()
+    if clean_resolution not in {"replace", "rename", "skip"}:
+        clean_resolution = "skip"
+
+    parsed, errors = _parse_import_source(source, path=path)
+    imported_projects, project_errors = _import_projects_from_source(parsed) if parsed is not None else ([], [])
+    errors.extend(project_errors)
+
+    payload = load_project_context()
+    existing_ids = {_normalize(str(project.get("id", ""))) for project in payload["projects"]}
+    reserved_ids = set(existing_ids)
+    import_ids: dict[str, str] = {}
+    warnings: list[str] = []
+    creates: list[dict[str, Any]] = []
+    replaces: list[dict[str, Any]] = []
+    skips: list[dict[str, Any]] = []
+    resolved_projects: list[dict[str, Any]] = []
+    alias_updates: list[dict[str, Any]] = []
+    alias_renames: list[dict[str, Any]] = []
+    planned_payload = deepcopy(payload)
+    planned_projects = planned_payload["projects"]
+
+    for index, raw_project in enumerate(imported_projects, start=1):
+        label = str(raw_project.get("id") or f"project {index}").strip()
+        try:
+            payload_for_known_fields = deepcopy(raw_project)
+            payload_for_known_fields["workspace"] = {}
+            clean_known = _project_payload(payload_for_known_fields)
+        except ValueError as error:
+            errors.append(f"{label}: {error}")
+            continue
+
+        project_id = clean_known["id"]
+        workspace_errors = _workspace_validation_errors(raw_project.get("workspace", {}), project_id)
+        errors.extend(workspace_errors)
+        if not workspace_errors:
+            try:
+                clean_known["workspace"] = _validate_workspace(raw_project.get("workspace", {}))
+            except ValueError as error:
+                errors.append(f"{project_id}: {error}")
+
+        normalized_id = _normalize(project_id)
+        if clean_resolution != "rename" and normalized_id in import_ids:
+            errors.append(
+                f"{project_id}: Duplicate project id in import; already used by {import_ids[normalized_id]}."
+            )
+            continue
+        import_ids[normalized_id] = project_id
+
+        project_record = deepcopy(raw_project)
+        project_record.update(clean_known)
+        action = "create"
+
+        if normalized_id in existing_ids:
+            if clean_resolution == "replace":
+                action = "replace"
+                replaces.append(project_record)
+                _remove_project_by_id(planned_projects, project_id)
+            elif clean_resolution == "rename":
+                renamed_id = _next_import_id(project_id, reserved_ids)
+                warnings.append(f"Renamed imported project {project_id} to {renamed_id}.")
+                project_record["id"] = renamed_id
+                action = "create"
+                creates.append(project_record)
+                reserved_ids.add(_normalize(renamed_id))
+            else:
+                warnings.append(f"Skipped imported project {project_id}: project id already exists.")
+                action = "skip"
+                skips.append(project_record)
+        elif normalized_id in reserved_ids:
+            if clean_resolution == "rename":
+                renamed_id = _next_import_id(project_id, reserved_ids)
+                warnings.append(f"Renamed imported project {project_id} to {renamed_id}.")
+                project_record["id"] = renamed_id
+                action = "create"
+                creates.append(project_record)
+                reserved_ids.add(_normalize(renamed_id))
+            else:
+                errors.append(f"{project_id}: Duplicate project id after import.")
+                continue
+        else:
+            creates.append(project_record)
+            reserved_ids.add(normalized_id)
+
+        if action == "skip":
+            continue
+
+        resolved_project_id = str(project_record["id"])
+        resolved_aliases: list[str] = []
+        project_alias_reserved: set[str] = set()
+        conflicting_aliases: list[str] = []
+        renamed_aliases: list[str] = []
+
+        for alias in project_record.get("aliases", []):
+            normalized_alias = _normalize(str(alias))
+            owner_id = _alias_owner(planned_projects, str(alias))
+            has_conflict = (
+                owner_id is not None
+                and _normalize(owner_id) != _normalize(resolved_project_id)
+            ) or normalized_alias in project_alias_reserved
+
+            if not has_conflict:
+                resolved_aliases.append(alias)
+                project_alias_reserved.add(normalized_alias)
+                continue
+
+            conflicting_aliases.append(str(alias))
+            if clean_resolution == "skip":
+                continue
+            if clean_resolution == "replace" and owner_id is not None:
+                existing_values = _alias_values_for_owner(
+                    planned_projects,
+                    project_id=owner_id,
+                    alias=str(alias),
+                )
+                for existing_value in existing_values:
+                    _record_alias_update(
+                        alias_updates,
+                        project_id=owner_id,
+                        remove_alias=existing_value,
+                        import_project_id=resolved_project_id,
+                        assign_alias=str(alias).strip(),
+                    )
+                _apply_alias_updates(planned_projects, alias_updates)
+                resolved_aliases.append(alias)
+                project_alias_reserved.add(normalized_alias)
+                continue
+
+            reserved_aliases = _reserved_aliases(planned_projects) | project_alias_reserved
+            renamed_alias = _next_import_alias(str(alias).strip(), resolved_project_id, reserved_aliases)
+            alias_renames.append(
+                {
+                    "project_id": resolved_project_id,
+                    "from_alias": str(alias),
+                    "to_alias": renamed_alias,
+                }
+            )
+            renamed_aliases.append(f"{alias} -> {renamed_alias}")
+            resolved_aliases.append(renamed_alias)
+            project_alias_reserved.add(_normalize(renamed_alias))
+
+        if conflicting_aliases and clean_resolution == "skip":
+            warnings.append(
+                f"Skipped imported project {resolved_project_id}: alias conflict(s): {', '.join(conflicting_aliases)}."
+            )
+            if project_record not in skips:
+                skips.append(project_record)
+            creates = [project for project in creates if project is not project_record]
+            replaces = [project for project in replaces if project is not project_record]
+            continue
+        if conflicting_aliases and clean_resolution == "replace":
+            warnings.append(
+                f"Transferring alias ownership for {resolved_project_id}: {', '.join(conflicting_aliases)}."
+            )
+        if renamed_aliases:
+            warnings.append(
+                f"Renamed conflicting alias(es) for {resolved_project_id}: {', '.join(renamed_aliases)}."
+            )
+
+        project_record["aliases"] = resolved_aliases
+        planned_projects.append(deepcopy(project_record))
+        resolved_projects.append(project_record)
+
+    planned_payload["projects"] = planned_projects
+    errors.extend(error for error in _final_payload_errors(planned_payload) if error not in errors)
+
+    counts = {
+        "projects": len(imported_projects),
+        "creates": len(creates),
+        "updates": len(replaces),
+        "skips": len(skips),
+    }
+    preview = {
+        "ok": not errors,
+        "version": 1,
+        "resolution": clean_resolution,
+        "counts": counts,
+        "creates": deepcopy(creates),
+        "replaces": deepcopy(replaces),
+        "skips": deepcopy(skips),
+        "alias_updates": deepcopy(alias_updates),
+        "alias_renames": deepcopy(alias_renames),
+        "warnings": warnings,
+        "errors": errors,
+        "projects": deepcopy(resolved_projects),
+        "final_payload": deepcopy(planned_payload),
+    }
+    preview["summary"] = _format_import_preview(preview)
+    return preview
+
+
 def _format_import_preview(preview: dict[str, Any]) -> str:
     counts = preview["counts"]
     lines = [
@@ -520,6 +803,12 @@ def _format_import_preview(preview: dict[str, Any]) -> str:
                 lines.append(f"- Remove alias \"{alias}\" from {update['project_id']}")
             for alias in update["assign_aliases"]:
                 lines.append(f"- Assign alias \"{alias}\" to {update['import_project_id']}")
+    if preview.get("alias_renames"):
+        lines.extend(["", "Alias renames:"])
+        for rename in preview["alias_renames"]:
+            lines.append(
+                f"- {rename['project_id']}: {rename['from_alias']} -> {rename['to_alias']}"
+            )
     if preview["warnings"]:
         lines.extend(["", "Warnings:"])
         lines.extend(f"- {warning}" for warning in preview["warnings"])
@@ -571,159 +860,7 @@ def validate_project_import(
     path: str | None = None,
     resolution: str = "skip",
 ) -> dict[str, Any]:
-    clean_resolution = str(resolution or "skip").strip().casefold()
-    if clean_resolution not in {"replace", "rename", "skip"}:
-        clean_resolution = "skip"
-
-    parsed, errors = _parse_import_source(source, path=path)
-    imported_projects, project_errors = _import_projects_from_source(parsed) if parsed is not None else ([], [])
-    errors.extend(project_errors)
-
-    payload = load_project_context()
-    existing_ids = {_normalize(str(project.get("id", ""))) for project in payload["projects"]}
-    existing_aliases = _existing_alias_index(payload)
-    existing_alias_values = _existing_alias_values(payload)
-    reserved_ids = set(existing_ids)
-    import_ids: dict[str, str] = {}
-    import_aliases: dict[str, str] = {}
-    warnings: list[str] = []
-    creates: list[dict[str, Any]] = []
-    replaces: list[dict[str, Any]] = []
-    skips: list[dict[str, Any]] = []
-    resolved_projects: list[dict[str, Any]] = []
-    alias_updates: list[dict[str, Any]] = []
-
-    for index, raw_project in enumerate(imported_projects, start=1):
-        label = str(raw_project.get("id") or f"project {index}").strip()
-        try:
-            payload_for_known_fields = deepcopy(raw_project)
-            payload_for_known_fields["workspace"] = {}
-            clean_known = _project_payload(payload_for_known_fields)
-        except ValueError as error:
-            errors.append(f"{label}: {error}")
-            continue
-
-        project_id = clean_known["id"]
-        workspace_errors = _workspace_validation_errors(raw_project.get("workspace", {}), project_id)
-        errors.extend(workspace_errors)
-        if not workspace_errors:
-            try:
-                clean_known["workspace"] = _validate_workspace(raw_project.get("workspace", {}))
-            except ValueError as error:
-                errors.append(f"{project_id}: {error}")
-        normalized_id = _normalize(project_id)
-        if normalized_id in import_ids:
-            errors.append(
-                f"{project_id}: Duplicate project id in import; already used by {import_ids[normalized_id]}."
-            )
-            continue
-        import_ids[normalized_id] = project_id
-
-        for alias in clean_known.get("aliases", []):
-            normalized_alias = _normalize(alias)
-            if normalized_alias in import_aliases:
-                errors.append(
-                    f"{project_id}: Duplicate alias in import: {alias} already used by {import_aliases[normalized_alias]}."
-                )
-            import_aliases[normalized_alias] = project_id
-
-        project_record = deepcopy(raw_project)
-        project_record.update(clean_known)
-        action = "create"
-
-        if normalized_id in existing_ids:
-            if clean_resolution == "replace":
-                action = "replace"
-                replaces.append(project_record)
-            elif clean_resolution == "rename":
-                renamed_id = _next_import_id(project_id, reserved_ids)
-                warnings.append(f"Renamed imported project {project_id} to {renamed_id}.")
-                project_record["id"] = renamed_id
-                action = "create"
-                creates.append(project_record)
-                reserved_ids.add(_normalize(renamed_id))
-            else:
-                warnings.append(f"Skipped imported project {project_id}: project id already exists.")
-                action = "skip"
-                skips.append(project_record)
-        else:
-            creates.append(project_record)
-            reserved_ids.add(normalized_id)
-
-        if action != "skip":
-            conflicting_aliases = [
-                alias
-                for alias in project_record.get("aliases", [])
-                if _normalize(alias) in existing_aliases
-                and _normalize(str(existing_aliases[_normalize(alias)])) != _normalize(project_id)
-            ]
-            if conflicting_aliases:
-                if clean_resolution == "skip":
-                    warnings.append(
-                        f"Skipped imported project {project_record['id']}: alias conflict(s): {', '.join(conflicting_aliases)}."
-                    )
-                    if project_record not in skips:
-                        skips.append(project_record)
-                    creates = [project for project in creates if project is not project_record]
-                    replaces = [project for project in replaces if project is not project_record]
-                    action = "skip"
-                elif clean_resolution == "replace":
-                    for alias in conflicting_aliases:
-                        owner_id = existing_aliases[_normalize(alias)]
-                        existing_values = existing_alias_values.get(_normalize(alias), {}).get(
-                            owner_id,
-                            [alias],
-                        )
-                        for existing_value in existing_values:
-                            _record_alias_update(
-                                alias_updates,
-                                project_id=owner_id,
-                                remove_alias=existing_value,
-                                import_project_id=str(project_record["id"]),
-                                assign_alias=alias,
-                            )
-                    warnings.append(
-                        f"Transferring alias ownership for {project_record['id']}: {', '.join(conflicting_aliases)}."
-                    )
-                else:
-                    renamed_aliases = []
-                    aliases = []
-                    for alias in project_record.get("aliases", []):
-                        if alias in conflicting_aliases:
-                            renamed = f"{alias}-{project_record['id']}"
-                            renamed_aliases.append(f"{alias} -> {renamed}")
-                            aliases.append(renamed)
-                        else:
-                            aliases.append(alias)
-                    project_record["aliases"] = aliases
-                    warnings.append(
-                        f"Renamed conflicting alias(es) for {project_record['id']}: {', '.join(renamed_aliases)}."
-                    )
-
-        if action != "skip":
-            resolved_projects.append(project_record)
-
-    counts = {
-        "projects": len(imported_projects),
-        "creates": len(creates),
-        "updates": len(replaces),
-        "skips": len(skips),
-    }
-    preview = {
-        "ok": not errors,
-        "version": 1,
-        "resolution": clean_resolution,
-        "counts": counts,
-        "creates": creates,
-        "replaces": replaces,
-        "skips": skips,
-        "alias_updates": alias_updates,
-        "warnings": warnings,
-        "errors": errors,
-        "projects": resolved_projects,
-    }
-    preview["summary"] = _format_import_preview(preview)
-    return preview
+    return plan_project_import(source, path=path, resolution=resolution)
 
 
 def import_projects(
@@ -732,29 +869,14 @@ def import_projects(
     path: str | None = None,
     resolution: str = "skip",
 ) -> dict[str, Any]:
-    preview = validate_project_import(source, path=path, resolution=resolution)
+    preview = plan_project_import(source, path=path, resolution=resolution)
     if preview["errors"]:
         raise ValueError("\n".join(preview["errors"]))
 
-    payload = load_project_context()
-    updated_payload = deepcopy(payload)
-    projects = updated_payload["projects"]
-
-    replace_ids = {_normalize(str(project.get("id", ""))) for project in preview["replaces"]}
-    if replace_ids:
-        projects = [
-            project
-            for project in projects
-            if _normalize(str(project.get("id", ""))) not in replace_ids
-        ]
-
-    _apply_alias_updates(projects, preview["alias_updates"])
-    projects.extend(deepcopy(preview["projects"]))
-    updated_payload["projects"] = projects
-    final_errors = _duplicate_alias_errors(updated_payload)
+    updated_payload = deepcopy(preview["final_payload"])
+    final_errors = _final_payload_errors(updated_payload)
     if final_errors:
         raise ValueError("\n".join(final_errors))
-    _validate_payload(updated_payload)
     saved = save_project_context(updated_payload)
 
     counts = preview["counts"]

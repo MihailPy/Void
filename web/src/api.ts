@@ -158,8 +158,15 @@ export type ProjectImportPreview = {
     import_project_id: string;
     assign_aliases: string[];
   }[];
+  alias_renames?: {
+    project_id: string;
+    from_alias: string;
+    to_alias: string;
+  }[];
   warnings: string[];
   errors: string[];
+  projects?: Project[];
+  final_payload?: ProjectExportPayload;
   summary?: string;
 };
 

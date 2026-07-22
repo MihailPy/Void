@@ -186,3 +186,10 @@ export function importPreviewAliasOwnershipChanges(preview: ProjectImportPreview
     })),
   );
 }
+
+export function importPreviewAliasRenames(preview: ProjectImportPreview | null) {
+  return (preview?.alias_renames ?? []).map((rename) => ({
+    key: `${rename.project_id}-${rename.from_alias}-${rename.to_alias}`,
+    text: `Alias renamed: ${rename.from_alias} -> ${rename.to_alias}`,
+  }));
+}

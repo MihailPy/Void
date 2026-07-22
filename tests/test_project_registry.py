@@ -544,6 +544,165 @@ def test_project_import_replace_alias_conflict_rejection_writes_nothing(monkeypa
     assert project_context.find_project("beta") is None
 
 
+def test_project_import_rename_uses_resolved_id_for_alias_conflicts(monkeypatch):
+    project_context.save_project_context(
+        {
+            "current_project": "beta",
+            "root_unknown": {"keep": True},
+            "projects": [
+                {
+                    "id": "beta",
+                    "name": "Existing Beta",
+                    "aliases": ["beta"],
+                    "root_path": "/existing-beta",
+                    "unknown_existing": {"keep": True},
+                }
+            ],
+        }
+    )
+    registry = build_registry()
+    source = {
+        "version": 1,
+        "projects": [
+            {
+                "id": "beta",
+                "name": "Imported Beta",
+                "aliases": ["beta"],
+                "root_path": "/imported-beta",
+                "unknown_imported": {"keep": True},
+            }
+        ],
+    }
+
+    original_save = project_context.save_project_context
+    save_calls: list[dict[str, Any]] = []
+
+    def blocked_save(payload):
+        save_calls.append(payload)
+        return payload
+
+    monkeypatch.setattr(project_context, "save_project_context", blocked_save)
+    preview_response = registry.execute(
+        AgentAction(
+            "validate_project_import",
+            {"source": source, "resolution": "rename"},
+            "test",
+        )
+    )
+
+    assert preview_response.ok is True
+    assert save_calls == []
+    preview = preview_response.data["preview"]
+    assert preview["creates"][0]["id"] == "beta-import"
+    assert preview["creates"][0]["aliases"] == ["beta-beta-import"]
+    assert preview["projects"] == preview["creates"]
+    assert preview["alias_renames"] == [
+        {
+            "project_id": "beta-import",
+            "from_alias": "beta",
+            "to_alias": "beta-beta-import",
+        }
+    ]
+    final_aliases = [
+        alias.casefold().strip()
+        for project in preview["final_payload"]["projects"]
+        for alias in project.get("aliases", [])
+    ]
+    assert len(final_aliases) == len(set(final_aliases))
+
+    monkeypatch.setattr(project_context, "save_project_context", original_save)
+    save_calls = []
+
+    def tracking_save(payload):
+        save_calls.append(deepcopy(payload))
+        return original_save(payload)
+
+    monkeypatch.setattr(project_context, "save_project_context", tracking_save)
+    import_response = registry.execute(
+        AgentAction(
+            "import_projects",
+            {"source": source, "resolution": "rename"},
+            "Import projects.",
+        )
+    )
+    assert import_response.ok is True
+    approved = _approve_latest(registry)
+
+    assert approved.ok is True
+    assert len(save_calls) == 1
+    existing = project_context.get_project("beta")
+    imported = project_context.get_project("beta-import")
+    assert existing["aliases"] == ["beta"]
+    assert existing["unknown_existing"] == {"keep": True}
+    assert imported["aliases"] == ["beta-beta-import"]
+    assert imported["unknown_imported"] == {"keep": True}
+    assert project_context.load_project_context()["root_unknown"] == {"keep": True}
+    assert project_context.load_project_context()["current_project"] == "beta"
+    assert approved.data["preview"]["creates"] == preview["creates"]
+    import_activities = [
+        activity
+        for activity in activity_history.list_recent()
+        if activity["activity_type"] == "project_import"
+    ]
+    assert len(import_activities) == 1
+
+
+def test_project_import_rename_allocates_ids_aliases_and_suffixes_deterministically():
+    project_context.save_project_context(
+        {
+            "current_project": "beta",
+            "projects": [
+                {
+                    "id": "beta",
+                    "name": "Existing Beta",
+                    "aliases": ["beta", "beta-beta-import"],
+                    "root_path": "/existing-beta",
+                }
+            ],
+        }
+    )
+    registry = build_registry()
+    source = {
+        "projects": [
+            {"id": "beta", "name": "Beta 1", "aliases": [" Beta "], "root_path": "/one"},
+            {
+                "id": "beta-import",
+                "name": "Beta 2",
+                "aliases": ["beta-beta-import"],
+                "root_path": "/two",
+            },
+        ]
+    }
+
+    preview_response = registry.execute(
+        AgentAction(
+            "validate_project_import",
+            {"source": source, "resolution": "rename"},
+            "test",
+        )
+    )
+
+    assert preview_response.ok is True
+    preview = preview_response.data["preview"]
+    assert [project["id"] for project in preview["creates"]] == [
+        "beta-import",
+        "beta-import-import",
+    ]
+    assert preview["creates"][0]["aliases"] == ["Beta-beta-import-2"]
+    assert preview["creates"][1]["aliases"] == ["beta-beta-import-beta-import-import"]
+    final_ids = [
+        project["id"].casefold().strip()
+        for project in preview["final_payload"]["projects"]
+    ]
+    final_aliases = [
+        alias.casefold().strip()
+        for project in preview["final_payload"]["projects"]
+        for alias in project.get("aliases", [])
+    ]
+    assert len(final_ids) == len(set(final_ids))
+    assert len(final_aliases) == len(set(final_aliases))
+
+
 def test_project_import_validation_collects_errors_and_rejection_writes_nothing(monkeypatch):
     _save_registry()
     registry = build_registry()

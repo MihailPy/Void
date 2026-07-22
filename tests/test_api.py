@@ -446,6 +446,51 @@ def test_project_import_api_exposes_alias_updates_in_validation_and_approval():
     assert 'Remove alias "shared" from alpha; assign to beta' in approval["reason"]
 
 
+def test_project_import_api_validation_returns_rename_resolved_projects():
+    _save_projects(
+        [
+            {
+                "id": "beta",
+                "name": "Existing Beta",
+                "aliases": ["beta"],
+                "root_path": "/beta",
+            }
+        ],
+        current_project="beta",
+    )
+    source = {
+        "projects": [
+            {
+                "id": "beta",
+                "name": "Imported Beta",
+                "aliases": [" beta "],
+                "root_path": "/imported-beta",
+            }
+        ]
+    }
+
+    validation = request(
+        "POST",
+        "/projects/import/validate",
+        json={"source": source, "resolution": "rename"},
+    )
+
+    assert validation.status_code == 200
+    assert validation.json()["ok"] is True
+    preview = validation.json()["preview"]
+    assert preview["creates"][0]["id"] == "beta-import"
+    assert preview["creates"][0]["aliases"] == ["beta-beta-import"]
+    assert preview["projects"][0]["id"] == "beta-import"
+    assert preview["projects"][0]["aliases"] == ["beta-beta-import"]
+    assert preview["alias_renames"] == [
+        {
+            "project_id": "beta-import",
+            "from_alias": "beta",
+            "to_alias": "beta-beta-import",
+        }
+    ]
+
+
 def test_project_import_api_invalid_payload_does_not_create_approval():
     _save_projects([_void_project(commands={"verify": "make verify"})])
 
