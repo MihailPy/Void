@@ -149,6 +149,71 @@ def _project_registry_clarification(action: str, question: str, missing_field: s
 
 
 def match(text: str, lowered: str) -> RouteResult | None:
+    if lowered in {"export current project", "экспортируй проект"}:
+        return RouteResult(
+            matched=True,
+            confidence=0.95,
+            action=AgentAction(
+                "export_project",
+                {"current": True},
+                "User asks to export the current project.",
+            ),
+        )
+
+    if lowered in {"export all projects", "экспортируй все проекты"}:
+        return RouteResult(
+            matched=True,
+            confidence=0.95,
+            action=AgentAction(
+                "export_projects",
+                {},
+                "User asks to export all projects.",
+            ),
+        )
+
+    export_project_match = re.match(
+        r"^export\s+project\s+(.+)$",
+        text,
+        re.IGNORECASE | re.DOTALL,
+    )
+    if export_project_match:
+        project = clean(export_project_match.group(1))
+        return RouteResult(
+            matched=True,
+            confidence=0.95,
+            action=AgentAction(
+                "export_project",
+                {"project": project},
+                "User asks to export a selected project.",
+            ),
+        )
+
+    if lowered in {"export project"}:
+        return _project_registry_clarification(
+            "export_project",
+            "Which project do you want to export?",
+            "project",
+        )
+
+    if lowered in {
+        "import project",
+        "import projects",
+        "импортируй проект",
+        "импортируй проекты",
+    }:
+        return _project_registry_clarification(
+            "import_projects",
+            "What project import JSON should I use?",
+            "source",
+        )
+
+    if lowered in {"validate project import", "проверь импорт проектов"}:
+        return _project_registry_clarification(
+            "validate_project_import",
+            "What project import JSON should I validate?",
+            "source",
+        )
+
     create_named_match = re.match(
         r"^(?:create|add|new)\s+project\s+named\s+(.+)$",
         text,

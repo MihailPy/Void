@@ -1,4 +1,4 @@
-import type { Project } from "./api";
+import type { Project, ProjectExportPayload, ProjectImportPreview } from "./api";
 
 export type WorkspacePreferenceForm = {
   terminalApp: string;
@@ -154,4 +154,42 @@ export function projectEditorForRefresh({
     : null;
 
   return projectEditorFromProject(selectedProject ?? currentProject);
+}
+
+export function parseProjectImportJson(input: string): unknown {
+  const cleanInput = input.trim();
+  if (!cleanInput) {
+    throw new Error("Import JSON is required.");
+  }
+  return JSON.parse(cleanInput) as unknown;
+}
+
+export function formatProjectExport(exportPayload: ProjectExportPayload): string {
+  return `${JSON.stringify(exportPayload, null, 2)}\n`;
+}
+
+export function importPreviewStatus(preview: ProjectImportPreview | null) {
+  if (!preview) {
+    return "Preview";
+  }
+  if (preview.errors.length > 0) {
+    return "Preview has validation errors";
+  }
+  return "Preview ready for approval";
+}
+
+export function importPreviewAliasOwnershipChanges(preview: ProjectImportPreview | null) {
+  return (preview?.alias_updates ?? []).flatMap((update) =>
+    update.remove_aliases.map((alias) => ({
+      key: `${update.project_id}-${update.import_project_id}-${alias}`,
+      text: `Remove alias "${alias}" from ${update.project_id}; assign to ${update.import_project_id}`,
+    })),
+  );
+}
+
+export function importPreviewAliasRenames(preview: ProjectImportPreview | null) {
+  return (preview?.alias_renames ?? []).map((rename) => ({
+    key: `${rename.project_id}-${rename.from_alias}-${rename.to_alias}`,
+    text: `Alias renamed: ${rename.from_alias} -> ${rename.to_alias}`,
+  }));
 }

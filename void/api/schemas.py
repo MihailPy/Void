@@ -100,6 +100,22 @@ class ProjectRegistryRequest(BaseModel):
     duplicate_source_id: str | None = None
 
 
+class ProjectExportResponse(BaseModel):
+    ok: bool
+    export: dict[str, Any]
+
+
+class ProjectImportRequest(BaseModel):
+    source: Any | None = None
+    path: str | None = None
+    resolution: Literal["replace", "rename", "skip"] = "skip"
+
+
+class ProjectImportValidationResponse(BaseModel):
+    ok: bool
+    preview: dict[str, Any]
+
+
 class DeleteProjectRequest(BaseModel):
     confirm_current: bool = False
 

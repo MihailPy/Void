@@ -279,16 +279,86 @@ Deleting the last project is rejected. Deleting the current project requires
 explicit confirmation; after approval, Void switches to another remaining
 project automatically.
 
+### Exporting Projects
+
+Project exports are portable JSON and do not require approval. Export supports
+the current project, a selected project, or all projects. The output shape is:
+
+```json
+{
+  "version": 1,
+  "projects": [
+    {
+      "id": "void",
+      "name": "Void",
+      "aliases": ["void"],
+      "root_path": ".",
+      "repo_url": "https://github.com/MihailPy/Void",
+      "commands": {},
+      "workspace": {}
+    }
+  ]
+}
+```
+
+Export preserves the project records as stored by the registry, including
+unknown fields. Export logs a read-only `project_export` Activity History event.
+
+### Importing Projects
+
+Project import accepts a single project object, a list of projects, or an object
+with a `projects` array. Users can paste JSON in the Web UI or send JSON through
+the API/tool layer.
+
+Validation happens before approval and does not write `memory/projects.json`.
+The preview shows:
+
+- Projects to create.
+- Projects to replace.
+- Projects to skip.
+- Warnings.
+- Validation errors.
+
+Validation collects all detected errors before returning. It checks malformed
+JSON, duplicate imported IDs, duplicate imported aliases, invalid project IDs,
+invalid command blocks, and invalid editable workspace configuration. Unknown
+project and workspace fields are preserved.
+
+Conflict resolution is selected for the entire import operation:
+
+- `skip`: skip imported projects that conflict with existing project IDs or
+  aliases.
+- `replace`: replace existing projects whose IDs conflict with imported
+  projects.
+- `rename`: generate deterministic imported project IDs such as
+  `docs-import`, and rename conflicting aliases with the imported project ID.
+
+Import requires one approval. The approval summary includes project count,
+creates, updates, skips, and the selected resolution. Approval performs one
+registry persistence write and one `project_import` Activity History entry.
+Rejecting the approval leaves the registry unchanged. Imported commands and
+workspace settings are stored only as configuration; Void does not execute
+imported commands or automatically trust workspace settings.
+
 The registry also exposes API and Tool Registry operations:
 
 - `GET /projects`
 - `GET /projects/{project_id}`
+- `GET /projects/current/export`
+- `GET /projects/{project_id}/export`
+- `GET /projects/export/all`
+- `POST /projects/import/validate`
+- `POST /projects/import`
 - `POST /projects`
 - `PUT /projects/{project_id}`
 - `DELETE /projects/{project_id}`
 - `POST /projects/{project_id}/duplicate`
 - `list_projects`
 - `get_project`
+- `export_project`
+- `export_projects`
+- `validate_project_import`
+- `import_projects`
 - `create_project`
 - `update_project`
 - `delete_project`

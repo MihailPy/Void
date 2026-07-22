@@ -185,6 +185,92 @@ def validate_delete_project(project_id: str, confirm_current: bool = False) -> N
     project_context.delete_project_validation(project_id, confirm_current)
 
 
+def export_project(project: str | None = None, current: bool = False) -> ToolResult:
+    try:
+        result = project_context.export_projects(project, current=current)
+    except ValueError as error:
+        return ToolResult(ok=False, content=str(error))
+    count = len(result["projects"])
+    return ToolResult(
+        ok=True,
+        content=f"Exported {count} project(s).",
+        data={"export": result},
+    )
+
+
+def export_projects(all_projects: bool = True) -> ToolResult:
+    try:
+        result = project_context.export_projects(all_projects=all_projects)
+    except ValueError as error:
+        return ToolResult(ok=False, content=str(error))
+    count = len(result["projects"])
+    return ToolResult(
+        ok=True,
+        content=f"Exported {count} project(s).",
+        data={"export": result},
+    )
+
+
+def validate_project_import(
+    source: Any | None = None,
+    path: str | None = None,
+    resolution: str = "skip",
+) -> ToolResult:
+    try:
+        preview = project_context.validate_project_import(
+            source,
+            path=path,
+            resolution=resolution,
+        )
+    except ValueError as error:
+        return ToolResult(ok=False, content=str(error))
+    return ToolResult(
+        ok=not preview["errors"],
+        content=preview["summary"],
+        data={"preview": preview},
+    )
+
+
+def import_projects(
+    source: Any | None = None,
+    path: str | None = None,
+    resolution: str = "skip",
+) -> ToolResult:
+    try:
+        result = project_context.import_projects(
+            source,
+            path=path,
+            resolution=resolution,
+        )
+    except ValueError as error:
+        return ToolResult(ok=False, content=str(error))
+
+    counts = result["preview"]["counts"]
+    return ToolResult(
+        ok=True,
+        content=(
+            "Imported projects. "
+            f"Projects: {counts['projects']}; creates: {counts['creates']}; "
+            f"updates: {counts['updates']}; skips: {counts['skips']}."
+        ),
+        data=result,
+    )
+
+
+def validate_import_projects(
+    source: Any | None = None,
+    path: str | None = None,
+    resolution: str = "skip",
+) -> None:
+    preview = project_context.validate_project_import(
+        source,
+        path=path,
+        resolution=resolution,
+    )
+    if preview["errors"]:
+        raise ValueError("\n".join(preview["errors"]))
+
+
 def get_current_project() -> ToolResult:
     try:
         project = project_context.get_current_project()
@@ -1154,6 +1240,36 @@ def definitions() -> list[ToolDefinition]:
             duplicate_project,
             category="project",
             risk_level="read",
+        ),
+        ToolDefinition(
+            "export_project",
+            "Export the current or selected project as portable JSON.",
+            export_project,
+            category="project",
+            risk_level="read",
+        ),
+        ToolDefinition(
+            "export_projects",
+            "Export all projects as portable JSON.",
+            export_projects,
+            category="project",
+            risk_level="read",
+        ),
+        ToolDefinition(
+            "validate_project_import",
+            "Validate project import JSON without writing.",
+            validate_project_import,
+            category="project",
+            risk_level="read",
+        ),
+        ToolDefinition(
+            "import_projects",
+            "Import project registry entries after one approval.",
+            import_projects,
+            requires_confirmation=True,
+            category="project",
+            risk_level="write",
+            confirmation_validator=validate_import_projects,
         ),
         ToolDefinition(
             "get_current_project",
