@@ -395,6 +395,57 @@ def test_project_import_export_api_endpoints_and_rejection():
     assert len(imports) == 1
 
 
+def test_project_import_api_exposes_alias_updates_in_validation_and_approval():
+    _save_projects(
+        [
+            {
+                "id": "alpha",
+                "name": "Alpha",
+                "aliases": ["shared"],
+                "root_path": "/alpha",
+            }
+        ],
+        current_project="alpha",
+    )
+    source = {
+        "projects": [
+            {
+                "id": "beta",
+                "name": "Beta",
+                "aliases": ["shared"],
+                "root_path": "/beta",
+            }
+        ]
+    }
+
+    validation = request(
+        "POST",
+        "/projects/import/validate",
+        json={"source": source, "resolution": "replace"},
+    )
+    assert validation.status_code == 200
+    assert validation.json()["ok"] is True
+    assert validation.json()["preview"]["alias_updates"] == [
+        {
+            "project_id": "alpha",
+            "remove_aliases": ["shared"],
+            "import_project_id": "beta",
+            "assign_aliases": ["shared"],
+        }
+    ]
+
+    import_response = request(
+        "POST",
+        "/projects/import",
+        json={"source": source, "resolution": "replace"},
+    )
+    assert import_response.status_code == 200
+    assert import_response.json()["result_type"] == "approval"
+    approval = _approval_for("import_projects")
+    assert "Alias ownership changes:" in approval["reason"]
+    assert 'Remove alias "shared" from alpha; assign to beta' in approval["reason"]
+
+
 def test_project_import_api_invalid_payload_does_not_create_approval():
     _save_projects([_void_project(commands={"verify": "make verify"})])
 

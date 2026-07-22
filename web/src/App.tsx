@@ -87,6 +87,7 @@ import {
   emptyProjectEditorState,
   emptyWorkspacePreferenceForm,
   formatProjectExport,
+  importPreviewAliasOwnershipChanges,
   importPreviewStatus,
   parseProjectImportJson,
   projectEditorForRefresh,
@@ -2576,6 +2577,18 @@ function ProjectTab() {
                     <ul>
                       {importPreview.skips.map((project) => (
                         <li key={project.id}>{project.name ?? project.id}</li>
+                      ))}
+                    </ul>
+                  )}
+                </article>
+                <article className="importPreviewBlock importPreviewWide">
+                  <div className="sectionLabel">Alias ownership changes</div>
+                  {importPreviewAliasOwnershipChanges(importPreview).length === 0 ? (
+                    <p>none</p>
+                  ) : (
+                    <ul>
+                      {importPreviewAliasOwnershipChanges(importPreview).map((change) => (
+                        <li key={change.key}>{change.text}</li>
                       ))}
                     </ul>
                   )}

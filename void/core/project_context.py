@@ -383,6 +383,106 @@ def _existing_alias_index(payload: dict[str, Any]) -> dict[str, str]:
     return aliases
 
 
+def _existing_alias_values(payload: dict[str, Any]) -> dict[str, dict[str, list[str]]]:
+    aliases: dict[str, dict[str, list[str]]] = {}
+    for project in payload["projects"]:
+        project_id = str(project.get("id", ""))
+        for alias in project.get("aliases", []):
+            normalized = _normalize(str(alias))
+            if normalized:
+                aliases.setdefault(normalized, {}).setdefault(project_id, []).append(str(alias))
+    return aliases
+
+
+def _alias_update(
+    updates: list[dict[str, Any]],
+    *,
+    project_id: str,
+    import_project_id: str,
+) -> dict[str, Any]:
+    for update in updates:
+        if (
+            _normalize(str(update.get("project_id", ""))) == _normalize(project_id)
+            and _normalize(str(update.get("import_project_id", "")))
+            == _normalize(import_project_id)
+        ):
+            return update
+    update = {
+        "project_id": project_id,
+        "remove_aliases": [],
+        "import_project_id": import_project_id,
+        "assign_aliases": [],
+    }
+    updates.append(update)
+    return update
+
+
+def _record_alias_update(
+    updates: list[dict[str, Any]],
+    *,
+    project_id: str,
+    remove_alias: str,
+    import_project_id: str,
+    assign_alias: str,
+) -> None:
+    update = _alias_update(
+        updates,
+        project_id=project_id,
+        import_project_id=import_project_id,
+    )
+    normalized_remove = _normalize(remove_alias)
+    if normalized_remove not in {_normalize(alias) for alias in update["remove_aliases"]}:
+        update["remove_aliases"].append(remove_alias)
+    normalized_assign = _normalize(assign_alias)
+    if normalized_assign not in {_normalize(alias) for alias in update["assign_aliases"]}:
+        update["assign_aliases"].append(assign_alias)
+
+
+def _apply_alias_updates(projects: list[dict[str, Any]], updates: list[dict[str, Any]]) -> None:
+    removals_by_project: dict[str, set[str]] = {}
+    for update in updates:
+        project_id = _normalize(str(update.get("project_id", "")))
+        if not project_id:
+            continue
+        removals_by_project.setdefault(project_id, set()).update(
+            _normalize(str(alias)) for alias in update.get("remove_aliases", []) if _normalize(str(alias))
+        )
+
+    for project in projects:
+        normalized_project_id = _normalize(str(project.get("id", "")))
+        removals = removals_by_project.get(normalized_project_id)
+        if not removals:
+            continue
+        aliases = project.get("aliases", [])
+        if not isinstance(aliases, list):
+            aliases = []
+        project["aliases"] = [
+            alias
+            for alias in aliases
+            if _normalize(str(alias)) not in removals
+        ]
+
+
+def _duplicate_alias_errors(payload: dict[str, Any]) -> list[str]:
+    seen: dict[str, str] = {}
+    errors: list[str] = []
+    for project in payload.get("projects", []):
+        if not isinstance(project, dict):
+            continue
+        project_id = str(project.get("id", ""))
+        for alias in project.get("aliases", []):
+            normalized = _normalize(str(alias))
+            if not normalized:
+                continue
+            if normalized in seen and _normalize(seen[normalized]) != _normalize(project_id):
+                errors.append(
+                    f"Duplicate alias after import: {alias} is used by {seen[normalized]} and {project_id}."
+                )
+            else:
+                seen[normalized] = project_id
+    return errors
+
+
 def _next_import_id(base_id: str, reserved_ids: set[str]) -> str:
     stem = base_id
     suffix = "-import"
@@ -413,6 +513,13 @@ def _format_import_preview(preview: dict[str, Any]) -> str:
     if preview["skips"]:
         lines.extend(["", "Projects to skip:"])
         lines.extend(f"- {project['name']} ({project['id']})" for project in preview["skips"])
+    if preview["alias_updates"]:
+        lines.extend(["", "Alias ownership changes:"])
+        for update in preview["alias_updates"]:
+            for alias in update["remove_aliases"]:
+                lines.append(f"- Remove alias \"{alias}\" from {update['project_id']}")
+            for alias in update["assign_aliases"]:
+                lines.append(f"- Assign alias \"{alias}\" to {update['import_project_id']}")
     if preview["warnings"]:
         lines.extend(["", "Warnings:"])
         lines.extend(f"- {warning}" for warning in preview["warnings"])
@@ -475,6 +582,7 @@ def validate_project_import(
     payload = load_project_context()
     existing_ids = {_normalize(str(project.get("id", ""))) for project in payload["projects"]}
     existing_aliases = _existing_alias_index(payload)
+    existing_alias_values = _existing_alias_values(payload)
     reserved_ids = set(existing_ids)
     import_ids: dict[str, str] = {}
     import_aliases: dict[str, str] = {}
@@ -483,6 +591,7 @@ def validate_project_import(
     replaces: list[dict[str, Any]] = []
     skips: list[dict[str, Any]] = []
     resolved_projects: list[dict[str, Any]] = []
+    alias_updates: list[dict[str, Any]] = []
 
     for index, raw_project in enumerate(imported_projects, start=1):
         label = str(raw_project.get("id") or f"project {index}").strip()
@@ -559,8 +668,22 @@ def validate_project_import(
                     replaces = [project for project in replaces if project is not project_record]
                     action = "skip"
                 elif clean_resolution == "replace":
+                    for alias in conflicting_aliases:
+                        owner_id = existing_aliases[_normalize(alias)]
+                        existing_values = existing_alias_values.get(_normalize(alias), {}).get(
+                            owner_id,
+                            [alias],
+                        )
+                        for existing_value in existing_values:
+                            _record_alias_update(
+                                alias_updates,
+                                project_id=owner_id,
+                                remove_alias=existing_value,
+                                import_project_id=str(project_record["id"]),
+                                assign_alias=alias,
+                            )
                     warnings.append(
-                        f"Replacing existing project conflict for alias(es): {', '.join(conflicting_aliases)}."
+                        f"Transferring alias ownership for {project_record['id']}: {', '.join(conflicting_aliases)}."
                     )
                 else:
                     renamed_aliases = []
@@ -594,6 +717,7 @@ def validate_project_import(
         "creates": creates,
         "replaces": replaces,
         "skips": skips,
+        "alias_updates": alias_updates,
         "warnings": warnings,
         "errors": errors,
         "projects": resolved_projects,
@@ -624,8 +748,13 @@ def import_projects(
             if _normalize(str(project.get("id", ""))) not in replace_ids
         ]
 
+    _apply_alias_updates(projects, preview["alias_updates"])
     projects.extend(deepcopy(preview["projects"]))
     updated_payload["projects"] = projects
+    final_errors = _duplicate_alias_errors(updated_payload)
+    if final_errors:
+        raise ValueError("\n".join(final_errors))
+    _validate_payload(updated_payload)
     saved = save_project_context(updated_payload)
 
     counts = preview["counts"]
@@ -642,6 +771,15 @@ def import_projects(
             "updates": counts["updates"],
             "skips": counts["skips"],
             "resolution": preview["resolution"],
+            "alias_updates": [
+                {
+                    "project_id": update["project_id"],
+                    "removed_aliases": update["remove_aliases"],
+                    "import_project_id": update["import_project_id"],
+                    "assigned_aliases": update["assign_aliases"],
+                }
+                for update in preview["alias_updates"]
+            ],
         },
     )
     return {

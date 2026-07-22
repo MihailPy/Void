@@ -2,6 +2,7 @@ import type { Project } from "../src/api";
 import type { ProjectEditorState } from "../src/projectRegistry.js";
 import {
   formatProjectExport,
+  importPreviewAliasOwnershipChanges,
   importPreviewStatus,
   parseProjectImportJson,
   projectEditorForRefresh,
@@ -148,6 +149,34 @@ function testImportPreviewStatus() {
   );
 }
 
+function testImportPreviewAliasOwnershipChanges() {
+  const changes = importPreviewAliasOwnershipChanges({
+    ok: true,
+    version: 1,
+    resolution: "replace",
+    counts: { projects: 1, creates: 1, updates: 0, skips: 0 },
+    creates: [project("beta")],
+    replaces: [],
+    skips: [],
+    alias_updates: [
+      {
+        project_id: "alpha",
+        remove_aliases: ["shared"],
+        import_project_id: "beta",
+        assign_aliases: ["shared"],
+      },
+    ],
+    warnings: [],
+    errors: [],
+  });
+
+  assert(changes.length === 1, "alias ownership change should render one row");
+  assert(
+    changes[0].text === 'Remove alias "shared" from alpha; assign to beta',
+    "alias ownership change should describe source and recipient",
+  );
+}
+
 testDirtyNormalRefreshPreservesDraft();
 testDirtyForcedRefreshReplacesDraft();
 testForcedRefreshWithPreferredProjectSelectsIt();
@@ -155,5 +184,6 @@ testMissingPreferredProjectFallsBackToCurrentProject();
 testDeleteRefreshDoesNotKeepDeletedProject();
 testImportJsonParsingAndExportFormatting();
 testImportPreviewStatus();
+testImportPreviewAliasOwnershipChanges();
 
 console.log("Project Registry state selection tests passed.");

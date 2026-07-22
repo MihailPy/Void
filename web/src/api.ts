@@ -152,6 +152,12 @@ export type ProjectImportPreview = {
   creates: Project[];
   replaces: Project[];
   skips: Project[];
+  alias_updates?: {
+    project_id: string;
+    remove_aliases: string[];
+    import_project_id: string;
+    assign_aliases: string[];
+  }[];
   warnings: string[];
   errors: string[];
   summary?: string;

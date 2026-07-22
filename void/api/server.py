@@ -533,6 +533,13 @@ def import_project_entries(
         )
 
     counts = preview.get("counts", {})
+    alias_lines = []
+    for update in preview.get("alias_updates", []):
+        for alias in update.get("remove_aliases", []):
+            alias_lines.append(
+                f"- Remove alias \"{alias}\" from {update.get('project_id', '')}; "
+                f"assign to {update.get('import_project_id', '')}"
+            )
     reason = (
         "Import projects:\n\n"
         f"Projects: {counts.get('projects', 0)}\n"
@@ -541,6 +548,8 @@ def import_project_entries(
         f"Skips: {counts.get('skips', 0)}\n"
         f"Resolution: {preview.get('resolution', request.resolution)}"
     )
+    if alias_lines:
+        reason = f"{reason}\n\nAlias ownership changes:\n" + "\n".join(alias_lines)
     return _execute_api_tool(registry, "import_projects", arguments, reason)
 
 

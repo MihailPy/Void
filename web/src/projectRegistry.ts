@@ -177,3 +177,12 @@ export function importPreviewStatus(preview: ProjectImportPreview | null) {
   }
   return "Preview ready for approval";
 }
+
+export function importPreviewAliasOwnershipChanges(preview: ProjectImportPreview | null) {
+  return (preview?.alias_updates ?? []).flatMap((update) =>
+    update.remove_aliases.map((alias) => ({
+      key: `${update.project_id}-${update.import_project_id}-${alias}`,
+      text: `Remove alias "${alias}" from ${update.project_id}; assign to ${update.import_project_id}`,
+    })),
+  );
+}
