@@ -1,5 +1,21 @@
 # Changelog
 
+## 1.10.0
+
+### Added
+
+- Project Registry backup, validation, restore, listing, and deletion tools.
+- Backup and restore controls in the Projects Web UI.
+- Project backup files use a `backup` metadata envelope plus an exact
+  `registry` payload so unknown registry fields are preserved.
+
+### Safety
+
+- Restore and delete require approval and revalidate before state changes.
+- Backup restore uses one registry save and one Activity History entry.
+- Same-second backup filename collisions receive deterministic numeric suffixes,
+  and existing backup files are never overwritten.
+
 ## 1.9.0
 
 ### Added

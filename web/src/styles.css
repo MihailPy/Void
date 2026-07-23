@@ -915,11 +915,13 @@ textarea:focus {
   padding: 0.75rem;
 }
 
-.registryItem.selected {
+.registryItem.selected,
+.backupItem.selected {
   border-color: rgba(96, 186, 196, 0.55);
 }
 
-.registryItem > button {
+.registryItem > button,
+.backupItem > button {
   width: 100%;
   display: grid;
   gap: 0.25rem;
@@ -929,7 +931,8 @@ textarea:focus {
   padding: 0;
 }
 
-.registryItem > button:hover:not(:disabled) {
+.registryItem > button:hover:not(:disabled),
+.backupItem > button:hover:not(:disabled) {
   background: transparent;
   border-color: transparent;
 }
@@ -944,6 +947,28 @@ textarea:focus {
 .registryItem small {
   color: #9fb4ca;
   overflow-wrap: anywhere;
+}
+
+.backupList {
+  display: grid;
+  gap: 0.65rem;
+  margin-top: 1rem;
+}
+
+.backupItem {
+  border: 1px solid rgba(142, 166, 194, 0.16);
+  border-radius: 8px;
+  background: rgba(12, 18, 26, 0.72);
+  padding: 0.75rem;
+}
+
+.backupItem span,
+.backupItem small {
+  overflow-wrap: anywhere;
+}
+
+.backupItem small {
+  color: #9fb4ca;
 }
 
 .registryActions {

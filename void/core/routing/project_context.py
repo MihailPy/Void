@@ -214,6 +214,71 @@ def match(text: str, lowered: str) -> RouteResult | None:
             "source",
         )
 
+    if lowered in {
+        "create project backup",
+        "backup projects",
+        "backup project registry",
+        "create project registry backup",
+    }:
+        return RouteResult(
+            matched=True,
+            confidence=0.95,
+            action=AgentAction(
+                "create_project_backup",
+                {},
+                "User asks to create a project registry backup.",
+            ),
+        )
+
+    if lowered in {"list project backups", "show project backups", "project backups"}:
+        return RouteResult(
+            matched=True,
+            confidence=0.95,
+            action=AgentAction(
+                "list_project_backups",
+                {},
+                "User asks to list project registry backups.",
+            ),
+        )
+
+    backup_action_patterns = [
+        (
+            r"^validate\s+project\s+backup\s+(.+)$",
+            "validate_project_backup",
+            "User asks to validate a project registry backup.",
+        ),
+        (
+            r"^restore\s+project\s+backup\s+(.+)$",
+            "restore_project_backup",
+            "User asks to restore a project registry backup.",
+        ),
+        (
+            r"^delete\s+project\s+backup\s+(.+)$",
+            "delete_project_backup",
+            "User asks to delete a project registry backup.",
+        ),
+    ]
+    for pattern, action, reason in backup_action_patterns:
+        backup_match = re.match(pattern, text, re.IGNORECASE | re.DOTALL)
+        if backup_match:
+            return RouteResult(
+                matched=True,
+                confidence=0.95,
+                action=AgentAction(
+                    action,
+                    {"filename": clean(backup_match.group(1))},
+                    reason,
+                ),
+            )
+
+    if lowered in {"validate project backup", "restore project backup", "delete project backup"}:
+        action = lowered.split(" ", 1)[0]
+        return _project_registry_clarification(
+            f"{action}_project_backup",
+            "Which backup filename should I use?",
+            "filename",
+        )
+
     create_named_match = re.match(
         r"^(?:create|add|new)\s+project\s+named\s+(.+)$",
         text,

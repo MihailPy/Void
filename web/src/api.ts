@@ -181,6 +181,40 @@ export type ProjectImportValidationResponse = {
   preview: ProjectImportPreview;
 };
 
+export type ProjectBackup = {
+  filename: string;
+  created_at?: string;
+  size: number;
+  project_count?: number | null;
+};
+
+export type ProjectBackupPreview = {
+  ok: boolean;
+  filename: string;
+  created_at: string;
+  project_count: number;
+  current_project: string;
+  projects: Array<{ id?: string; name?: string }>;
+  warnings: string[];
+  errors: string[];
+  summary?: string;
+};
+
+export type ProjectBackupsResponse = {
+  ok: boolean;
+  backups: ProjectBackup[];
+};
+
+export type ProjectBackupRequest = {
+  filename?: string | null;
+  path?: string | null;
+};
+
+export type ProjectBackupValidationResponse = {
+  ok: boolean;
+  preview: ProjectBackupPreview;
+};
+
 export type DeleteProjectRequest = {
   confirm_current?: boolean;
 };
@@ -520,6 +554,37 @@ export function validateProjectImport(payload: ProjectImportRequest) {
 export function importProjects(payload: ProjectImportRequest) {
   return request<ApprovalActionResponse>("/projects/import", {
     method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function listProjectBackups() {
+  return request<ProjectBackupsResponse>("/projects/backups");
+}
+
+export function createProjectBackup() {
+  return request<ApprovalActionResponse>("/projects/backups", {
+    method: "POST",
+  });
+}
+
+export function validateProjectBackup(payload: ProjectBackupRequest) {
+  return request<ProjectBackupValidationResponse>("/projects/backups/validate", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function restoreProjectBackup(payload: ProjectBackupRequest) {
+  return request<ApprovalActionResponse>("/projects/backups/restore", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function deleteProjectBackup(payload: ProjectBackupRequest) {
+  return request<ApprovalActionResponse>("/projects/backups", {
+    method: "DELETE",
     body: JSON.stringify(payload),
   });
 }

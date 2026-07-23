@@ -340,6 +340,81 @@ Rejecting the approval leaves the registry unchanged. Imported commands and
 workspace settings are stored only as configuration; Void does not execute
 imported commands or automatically trust workspace settings.
 
+### Backing Up and Restoring Projects
+
+Project registry backups are human-readable JSON files stored under:
+
+```text
+void/backups/projects/
+```
+
+Backup filenames use the deterministic timestamp format:
+
+```text
+YYYY-MM-DD_HH-MM-SS_registry.json
+YYYY-MM-DD_HH-MM-SS_registry-2.json
+YYYY-MM-DD_HH-MM-SS_registry-3.json
+```
+
+If multiple backups are created in the same second, Void allocates the next
+numeric suffix deterministically. Existing backup files are never overwritten.
+
+Each backup uses an explicit JSON envelope. Backup metadata is stored under
+`backup`; the exact registry payload is stored under `registry`:
+
+```json
+{
+  "backup": {
+    "version": 1,
+    "created_at": "2026-07-23T12:00:00",
+    "void_version": "1.10.0",
+    "metadata": {
+      "project_count": 1
+    }
+  },
+  "registry": {
+    "current_project": "void",
+    "projects": [
+      {
+        "id": "void",
+        "name": "Void",
+        "root_path": "."
+      }
+    ],
+    "metadata": {
+      "custom_registry_setting": true
+    }
+  }
+}
+```
+
+Creating a backup validates the current registry, preserves unknown registry
+fields inside `registry`, writes one JSON file without replacing existing
+backups, and logs one `project_backup_created` Activity History entry. Backup
+creation follows the approval model for writes.
+
+Restore is always preview-first. Validation checks JSON syntax, backup schema,
+backup version, duplicate IDs, duplicate aliases, current project validity, and
+registry payload validity. Invalid backups can be inspected, but restore does
+not create an approval until validation succeeds.
+
+Restoring a backup requires approval. Approval revalidates the same backup
+immediately before the write, performs exactly one registry persistence write,
+and logs one `project_backup_restored` Activity History entry. Rejecting the
+approval leaves `memory/projects.json` unchanged. Deleting a backup also
+requires approval, deletes exactly one backup file, and logs one
+`project_backup_deleted` Activity History entry.
+
+Example tool commands:
+
+```text
+create_project_backup
+list_project_backups
+validate_project_backup filename=2026-07-23_12-00-00_registry.json
+restore_project_backup filename=2026-07-23_12-00-00_registry.json
+delete_project_backup filename=2026-07-23_12-00-00_registry.json
+```
+
 The registry also exposes API and Tool Registry operations:
 
 - `GET /projects`
@@ -349,6 +424,11 @@ The registry also exposes API and Tool Registry operations:
 - `GET /projects/export/all`
 - `POST /projects/import/validate`
 - `POST /projects/import`
+- `GET /projects/backups`
+- `POST /projects/backups`
+- `POST /projects/backups/validate`
+- `POST /projects/backups/restore`
+- `DELETE /projects/backups`
 - `POST /projects`
 - `PUT /projects/{project_id}`
 - `DELETE /projects/{project_id}`
@@ -359,6 +439,11 @@ The registry also exposes API and Tool Registry operations:
 - `export_projects`
 - `validate_project_import`
 - `import_projects`
+- `create_project_backup`
+- `list_project_backups`
+- `validate_project_backup`
+- `restore_project_backup`
+- `delete_project_backup`
 - `create_project`
 - `update_project`
 - `delete_project`

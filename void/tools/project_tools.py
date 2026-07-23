@@ -271,6 +271,98 @@ def validate_import_projects(
         raise ValueError("\n".join(preview["errors"]))
 
 
+def create_project_backup() -> ToolResult:
+    try:
+        result = project_context.create_project_backup()
+    except ValueError as error:
+        return ToolResult(ok=False, content=str(error))
+    return ToolResult(
+        ok=True,
+        content=(
+            "Created project registry backup. "
+            f"Projects: {result['project_count']}; path: {result['path']}"
+        ),
+        data=result,
+    )
+
+
+def validate_create_project_backup() -> None:
+    project_context._read_project_context_raw()
+
+
+def list_project_backups() -> ToolResult:
+    backups = project_context.list_project_backups()
+    lines = ["Project registry backups", ""]
+    if backups:
+        lines.extend(
+            f"- {backup['filename']} projects={backup.get('project_count')} size={backup['size']}"
+            for backup in backups
+        )
+    else:
+        lines.append("- none")
+    return ToolResult(ok=True, content="\n".join(lines), data={"backups": backups})
+
+
+def validate_project_backup(
+    filename: str | None = None,
+    path: str | None = None,
+) -> ToolResult:
+    preview = project_context.validate_project_backup(filename, path)
+    return ToolResult(
+        ok=not preview["errors"],
+        content=preview["summary"],
+        data={"preview": preview},
+    )
+
+
+def restore_project_backup(
+    filename: str | None = None,
+    path: str | None = None,
+) -> ToolResult:
+    try:
+        result = project_context.restore_project_backup(filename, path)
+    except ValueError as error:
+        return ToolResult(ok=False, content=str(error))
+    preview = result["preview"]
+    return ToolResult(
+        ok=True,
+        content=(
+            "Restored project registry backup. "
+            f"Projects: {preview['project_count']}; current project: {result['current_project']}."
+        ),
+        data=result,
+    )
+
+
+def validate_restore_project_backup(
+    filename: str | None = None,
+    path: str | None = None,
+) -> None:
+    project_context.restore_project_backup_validation(filename, path)
+
+
+def delete_project_backup(
+    filename: str | None = None,
+    path: str | None = None,
+) -> ToolResult:
+    try:
+        result = project_context.delete_project_backup(filename, path)
+    except ValueError as error:
+        return ToolResult(ok=False, content=str(error))
+    return ToolResult(
+        ok=True,
+        content=f"Deleted project registry backup {result['filename']}.",
+        data=result,
+    )
+
+
+def validate_delete_project_backup(
+    filename: str | None = None,
+    path: str | None = None,
+) -> None:
+    project_context.delete_project_backup_validation(filename, path)
+
+
 def get_current_project() -> ToolResult:
     try:
         project = project_context.get_current_project()
@@ -1270,6 +1362,47 @@ def definitions() -> list[ToolDefinition]:
             category="project",
             risk_level="write",
             confirmation_validator=validate_import_projects,
+        ),
+        ToolDefinition(
+            "create_project_backup",
+            "Create a JSON backup of the project registry after approval.",
+            create_project_backup,
+            requires_confirmation=True,
+            category="project",
+            risk_level="write",
+            confirmation_validator=validate_create_project_backup,
+        ),
+        ToolDefinition(
+            "list_project_backups",
+            "List project registry backup JSON files.",
+            list_project_backups,
+            category="project",
+            risk_level="read",
+        ),
+        ToolDefinition(
+            "validate_project_backup",
+            "Validate a project registry backup without writing.",
+            validate_project_backup,
+            category="project",
+            risk_level="read",
+        ),
+        ToolDefinition(
+            "restore_project_backup",
+            "Restore a project registry backup after approval.",
+            restore_project_backup,
+            requires_confirmation=True,
+            category="project",
+            risk_level="write",
+            confirmation_validator=validate_restore_project_backup,
+        ),
+        ToolDefinition(
+            "delete_project_backup",
+            "Delete one project registry backup after approval.",
+            delete_project_backup,
+            requires_confirmation=True,
+            category="project",
+            risk_level="write",
+            confirmation_validator=validate_delete_project_backup,
         ),
         ToolDefinition(
             "get_current_project",

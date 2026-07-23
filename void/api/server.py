@@ -44,6 +44,9 @@ from void.api.schemas import (
     MemoryResponse,
     OpenProjectRepoRequest,
     OpenProjectWorkspaceRequest,
+    ProjectBackupRequest,
+    ProjectBackupsResponse,
+    ProjectBackupValidationResponse,
     ProjectExportResponse,
     ProjectImportRequest,
     ProjectImportValidationResponse,
@@ -551,6 +554,105 @@ def import_project_entries(
     if alias_lines:
         reason = f"{reason}\n\nAlias ownership changes:\n" + "\n".join(alias_lines)
     return _execute_api_tool(registry, "import_projects", arguments, reason)
+
+
+@app.get("/projects/backups", response_model=ProjectBackupsResponse | ErrorResponse)
+def project_backups(
+    _: None = Depends(require_api_token),
+    registry: ToolRegistry = Depends(get_tool_registry),
+) -> ProjectBackupsResponse | ErrorResponse:
+    try:
+        result = _execute_read_api_tool(registry, "list_project_backups")
+        return ProjectBackupsResponse(ok=True, backups=(result.data or {}).get("backups", []))
+    except Exception as error:
+        return _error(error)
+
+
+@app.post("/projects/backups", response_model=ApprovalResponse | ErrorResponse)
+def create_project_backup(
+    _: None = Depends(require_api_token),
+    registry: ToolRegistry = Depends(get_tool_registry),
+) -> ApprovalResponse | ErrorResponse:
+    return _execute_api_tool(
+        registry,
+        "create_project_backup",
+        {},
+        "Create a project registry backup.",
+    )
+
+
+@app.post(
+    "/projects/backups/validate",
+    response_model=ProjectBackupValidationResponse | ErrorResponse,
+)
+def validate_project_backup(
+    request: ProjectBackupRequest,
+    _: None = Depends(require_api_token),
+    registry: ToolRegistry = Depends(get_tool_registry),
+) -> ProjectBackupValidationResponse | ErrorResponse:
+    try:
+        arguments = {"filename": request.filename, "path": request.path}
+        result = registry.execute(
+            AgentAction("validate_project_backup", arguments, "API request.")
+        )
+        return ProjectBackupValidationResponse(
+            ok=result.ok,
+            preview=(result.data or {}).get("preview", {}),
+        )
+    except Exception as error:
+        return _error(error)
+
+
+@app.post("/projects/backups/restore", response_model=ApprovalResponse | ErrorResponse)
+def restore_project_backup(
+    request: ProjectBackupRequest,
+    _: None = Depends(require_api_token),
+    registry: ToolRegistry = Depends(get_tool_registry),
+) -> ApprovalResponse | ErrorResponse:
+    arguments = {"filename": request.filename, "path": request.path}
+    preview_result = registry.execute(
+        AgentAction("validate_project_backup", arguments, "API request.")
+    )
+    preview = (preview_result.data or {}).get("preview", {})
+    if not preview_result.ok:
+        return ApprovalResponse(
+            ok=False,
+            message=preview_result.content,
+            result_type="message",
+            data={"preview": preview},
+        )
+    response = _execute_api_tool(
+        registry,
+        "restore_project_backup",
+        arguments,
+        (
+            "Restore project registry backup:\n\n"
+            f"Backup: {preview.get('filename') or request.filename or request.path or ''}\n"
+            f"Created: {preview.get('created_at') or 'unknown'}\n"
+            f"Projects: {preview.get('project_count', 0)}\n"
+            f"Current project: {preview.get('current_project') or 'unknown'}"
+        ),
+    )
+    if isinstance(response, ApprovalResponse):
+        data = dict(response.data or {})
+        data["preview"] = preview
+        response.data = data
+    return response
+
+
+@app.delete("/projects/backups", response_model=ApprovalResponse | ErrorResponse)
+def delete_project_backup(
+    request: ProjectBackupRequest,
+    _: None = Depends(require_api_token),
+    registry: ToolRegistry = Depends(get_tool_registry),
+) -> ApprovalResponse | ErrorResponse:
+    target = request.filename or request.path or ""
+    return _execute_api_tool(
+        registry,
+        "delete_project_backup",
+        {"filename": request.filename, "path": request.path},
+        f"Delete project registry backup:\n\nBackup: {target}",
+    )
 
 
 @app.get("/projects/{project_id}/export", response_model=ProjectExportResponse | ErrorResponse)

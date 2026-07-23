@@ -116,6 +116,21 @@ class ProjectImportValidationResponse(BaseModel):
     preview: dict[str, Any]
 
 
+class ProjectBackupsResponse(BaseModel):
+    ok: bool
+    backups: list[dict[str, Any]]
+
+
+class ProjectBackupRequest(BaseModel):
+    filename: str | None = None
+    path: str | None = None
+
+
+class ProjectBackupValidationResponse(BaseModel):
+    ok: bool
+    preview: dict[str, Any]
+
+
 class DeleteProjectRequest(BaseModel):
     confirm_current: bool = False
 

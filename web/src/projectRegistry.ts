@@ -1,4 +1,9 @@
-import type { Project, ProjectExportPayload, ProjectImportPreview } from "./api";
+import type {
+  Project,
+  ProjectBackupPreview,
+  ProjectExportPayload,
+  ProjectImportPreview,
+} from "./api";
 
 export type WorkspacePreferenceForm = {
   terminalApp: string;
@@ -192,4 +197,25 @@ export function importPreviewAliasRenames(preview: ProjectImportPreview | null) 
     key: `${rename.project_id}-${rename.from_alias}-${rename.to_alias}`,
     text: `Alias renamed: ${rename.from_alias} -> ${rename.to_alias}`,
   }));
+}
+
+export function backupPreviewStatus(preview: ProjectBackupPreview | null) {
+  if (!preview) {
+    return "Preview";
+  }
+  if (preview.errors.length > 0) {
+    return "Preview has validation errors";
+  }
+  return "Preview ready for approval";
+}
+
+export function formatBackupSize(size: number | null | undefined) {
+  if (!Number.isFinite(size ?? Number.NaN)) {
+    return "unknown";
+  }
+  const bytes = Number(size);
+  if (bytes < 1024) {
+    return `${bytes} B`;
+  }
+  return `${(bytes / 1024).toFixed(1)} KB`;
 }

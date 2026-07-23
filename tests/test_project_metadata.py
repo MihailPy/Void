@@ -12,7 +12,7 @@ def test_version_is_centralized_in_package_module():
         "attr": "void.__version__.__version__"
     }
     assert pyproject["tool"]["setuptools"]["packages"]["find"]["include"] == ["void*"]
-    assert __version__ == "1.9.0"
+    assert __version__ == "1.10.0"
     assert pyproject["project"]["requires-python"] == ">=3.11"
     assert "Python 3.11+" in readme
     assert "void/__version__.py" in readme
