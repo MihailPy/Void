@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import json
+import os
 import re
+import tempfile
 from copy import deepcopy
 from datetime import datetime
 from pathlib import Path
@@ -66,6 +68,66 @@ def _atomic_write_json(path: Path, payload: dict[str, Any]) -> None:
         encoding="utf-8",
     )
     temporary.replace(path)
+
+
+def _backup_path_for_index(created: datetime, index: int) -> Path:
+    base = created.strftime("%Y-%m-%d_%H-%M-%S")
+    suffix = "" if index == 1 else f"-{index}"
+    return PROJECT_BACKUP_DIR / f"{base}_registry{suffix}.json"
+
+
+def _next_backup_path(created: datetime) -> Path:
+    PROJECT_BACKUP_DIR.mkdir(parents=True, exist_ok=True)
+    index = 1
+    while True:
+        candidate = _backup_path_for_index(created, index)
+        try:
+            candidate.resolve().relative_to(PROJECT_BACKUP_DIR.resolve())
+        except ValueError as error:
+            raise ValueError("Backup path must stay inside the project backup directory.") from error
+        if not candidate.exists():
+            return candidate
+        index += 1
+
+
+def _write_new_backup_json(created: datetime, payload: dict[str, Any]) -> Path:
+    PROJECT_BACKUP_DIR.mkdir(parents=True, exist_ok=True)
+    content = json.dumps(payload, ensure_ascii=False, indent=2) + "\n"
+    temp_name = ""
+    temp_file = tempfile.NamedTemporaryFile(
+        "w",
+        encoding="utf-8",
+        dir=PROJECT_BACKUP_DIR,
+        prefix=".backup-",
+        suffix=".tmp",
+        delete=False,
+    )
+    try:
+        with temp_file:
+            temp_name = temp_file.name
+            temp_file.write(content)
+            temp_file.flush()
+            os.fsync(temp_file.fileno())
+
+        candidate = _next_backup_path(created)
+        while True:
+            try:
+                os.link(temp_name, candidate)
+                return candidate
+            except FileExistsError:
+                candidate_name = candidate.name
+                match = re.fullmatch(
+                    r"\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}_registry(?:-(\d+))?\.json",
+                    candidate_name,
+                )
+                current_index = int(match.group(1) or "1") if match else 1
+                candidate = _backup_path_for_index(created, current_index + 1)
+    finally:
+        if temp_name:
+            try:
+                Path(temp_name).unlink()
+            except FileNotFoundError:
+                pass
 
 
 def _validate_project_id(project_id: str) -> None:
@@ -706,12 +768,15 @@ def _load_backup_payload(filename: str | None = None, path: str | None = None) -
     return backup_path, payload, []
 
 
-def _backup_registry_payload(backup: dict[str, Any]) -> dict[str, Any]:
-    return {
-        key: deepcopy(value)
-        for key, value in backup.items()
-        if key not in {"version", "created_at", "void_version", "metadata"}
-    }
+def _backup_sections(payload: Any) -> tuple[dict[str, Any], dict[str, Any]]:
+    if not isinstance(payload, dict):
+        return {}, {}
+    backup = payload.get("backup")
+    registry = payload.get("registry")
+    return (
+        backup if isinstance(backup, dict) else {},
+        registry if isinstance(registry, dict) else {},
+    )
 
 
 def _validate_backup_payload(payload: Any) -> dict[str, Any]:
@@ -721,17 +786,25 @@ def _validate_backup_payload(payload: Any) -> dict[str, Any]:
         errors.append("Backup root must be an object.")
         return _backup_preview(None, payload, warnings, errors)
 
-    version = payload.get("version")
+    backup = payload.get("backup")
+    registry_payload = payload.get("registry")
+    if not isinstance(backup, dict):
+        errors.append("Backup metadata must be an object.")
+        backup = {}
+    if not isinstance(registry_payload, dict):
+        errors.append("Backup registry must be an object.")
+        registry_payload = {}
+
+    version = backup.get("version")
     if version != PROJECT_BACKUP_VERSION:
         errors.append(f"Unsupported backup version: {version}")
-    created_at = str(payload.get("created_at", "")).strip()
+    created_at = str(backup.get("created_at", "")).strip()
     if not created_at:
         errors.append("Backup created_at is required.")
-    metadata = payload.get("metadata", {})
+    metadata = backup.get("metadata", {})
     if not isinstance(metadata, dict):
         errors.append("Backup metadata must be an object.")
 
-    registry_payload = _backup_registry_payload(payload)
     errors.extend(_strict_registry_errors(registry_payload))
 
     metadata_count = metadata.get("project_count") if isinstance(metadata, dict) else None
@@ -749,8 +822,7 @@ def _backup_preview(
     warnings: list[str],
     errors: list[str],
 ) -> dict[str, Any]:
-    backup = payload if isinstance(payload, dict) else {}
-    registry_payload = _backup_registry_payload(backup) if isinstance(backup, dict) else {}
+    backup, registry_payload = _backup_sections(payload)
     projects = registry_payload.get("projects", [])
     if not isinstance(projects, list):
         projects = []
@@ -765,11 +837,13 @@ def _backup_preview(
     filename = backup_path.name if backup_path is not None else ""
     created_at = str(backup.get("created_at", "")).strip()
     current_project = str(registry_payload.get("current_project", "")).strip()
+    metadata = backup.get("metadata", {})
+    metadata_count = metadata.get("project_count") if isinstance(metadata, dict) else None
     preview = {
         "ok": not errors,
         "filename": filename,
         "created_at": created_at,
-        "project_count": len(project_summaries),
+        "project_count": metadata_count if isinstance(metadata_count, int) else len(project_summaries),
         "current_project": current_project,
         "projects": project_summaries,
         "warnings": warnings,
@@ -810,18 +884,19 @@ def create_project_backup() -> dict[str, Any]:
     registry_payload = _read_project_context_raw()
     created = _now()
     created_at = created.isoformat(timespec="seconds")
-    filename = f"{created.strftime('%Y-%m-%d_%H-%M-%S')}_registry.json"
-    backup_path = PROJECT_BACKUP_DIR / filename
     backup_payload = {
-        "version": PROJECT_BACKUP_VERSION,
-        "created_at": created_at,
-        "void_version": __version__,
-        **deepcopy(registry_payload),
-        "metadata": {
-            "project_count": len(registry_payload["projects"]),
+        "backup": {
+            "version": PROJECT_BACKUP_VERSION,
+            "created_at": created_at,
+            "void_version": __version__,
+            "metadata": {
+                "project_count": len(registry_payload["projects"]),
+            },
         },
+        "registry": deepcopy(registry_payload),
     }
-    _atomic_write_json(backup_path, backup_payload)
+    backup_path = _write_new_backup_json(created, backup_payload)
+    filename = backup_path.name
     size = backup_path.stat().st_size
     activity_history.log_activity(
         "project_backup_created",
@@ -852,12 +927,13 @@ def list_project_backups() -> list[dict[str, Any]]:
         except (OSError, json.JSONDecodeError):
             payload = None
         if isinstance(payload, dict):
-            created_at = str(payload.get("created_at", "")).strip()
-            metadata = payload.get("metadata", {})
+            backup, registry_payload = _backup_sections(payload)
+            created_at = str(backup.get("created_at", "")).strip()
+            metadata = backup.get("metadata", {})
             if isinstance(metadata, dict) and isinstance(metadata.get("project_count"), int):
                 project_count = metadata["project_count"]
-            elif isinstance(payload.get("projects"), list):
-                project_count = len(payload["projects"])
+            elif isinstance(registry_payload.get("projects"), list):
+                project_count = len(registry_payload["projects"])
         backups.append(
             {
                 "filename": backup_path.name,
@@ -866,12 +942,23 @@ def list_project_backups() -> list[dict[str, Any]]:
                 "project_count": project_count,
             }
         )
+
+    def sort_key(item: dict[str, Any]) -> tuple[str, int, str]:
+        filename = str(item.get("filename") or "")
+        match = re.fullmatch(
+            r"\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}_registry(?:-(\d+))?\.json",
+            filename,
+        )
+        suffix_index = int(match.group(1) or "1") if match else 1
+        return (
+            str(item.get("created_at") or ""),
+            suffix_index,
+            filename,
+        )
+
     return sorted(
         backups,
-        key=lambda item: (
-            str(item.get("created_at") or ""),
-            str(item.get("filename") or ""),
-        ),
+        key=sort_key,
         reverse=True,
     )
 
@@ -902,7 +989,7 @@ def restore_project_backup(
         raise ValueError("\n".join(load_errors))
     if not isinstance(payload, dict):
         raise ValueError("Backup root must be an object.")
-    restored_payload = _backup_registry_payload(payload)
+    restored_payload = deepcopy(payload["registry"])
     final_errors = _strict_registry_errors(restored_payload)
     if final_errors:
         raise ValueError("\n".join(final_errors))

@@ -352,11 +352,46 @@ Backup filenames use the deterministic timestamp format:
 
 ```text
 YYYY-MM-DD_HH-MM-SS_registry.json
+YYYY-MM-DD_HH-MM-SS_registry-2.json
+YYYY-MM-DD_HH-MM-SS_registry-3.json
+```
+
+If multiple backups are created in the same second, Void allocates the next
+numeric suffix deterministically. Existing backup files are never overwritten.
+
+Each backup uses an explicit JSON envelope. Backup metadata is stored under
+`backup`; the exact registry payload is stored under `registry`:
+
+```json
+{
+  "backup": {
+    "version": 1,
+    "created_at": "2026-07-23T12:00:00",
+    "void_version": "1.10.0",
+    "metadata": {
+      "project_count": 1
+    }
+  },
+  "registry": {
+    "current_project": "void",
+    "projects": [
+      {
+        "id": "void",
+        "name": "Void",
+        "root_path": "."
+      }
+    ],
+    "metadata": {
+      "custom_registry_setting": true
+    }
+  }
+}
 ```
 
 Creating a backup validates the current registry, preserves unknown registry
-fields, writes one JSON file, and logs one `project_backup_created` Activity
-History entry. Backup creation follows the approval model for writes.
+fields inside `registry`, writes one JSON file without replacing existing
+backups, and logs one `project_backup_created` Activity History entry. Backup
+creation follows the approval model for writes.
 
 Restore is always preview-first. Validation checks JSON syntax, backup schema,
 backup version, duplicate IDs, duplicate aliases, current project validity, and
