@@ -421,6 +421,151 @@ def test_project_backup_restore_one_save_activity_and_preserves_unknown(monkeypa
     assert backup_result.data["project_count"] == 2
 
 
+def test_project_backup_restore_reads_backup_once_during_approved_execution(monkeypatch):
+    _save_registry()
+    registry = build_registry()
+    backup_dir = project_context.PROJECT_BACKUP_DIR
+    backup_dir.mkdir(parents=True)
+    filename = "restore-once.json"
+    (backup_dir / filename).write_text(
+        project_context.json.dumps(
+            _backup_payload(
+                {
+                    "current_project": "void",
+                    "projects": [{"id": "void", "name": "Void", "root_path": "."}],
+                }
+            )
+        ),
+        encoding="utf-8",
+    )
+    original_load = project_context._load_backup_payload
+    load_calls: list[str | None] = []
+
+    def tracking_load(filename=None, path=None):
+        load_calls.append(filename)
+        return original_load(filename, path)
+
+    monkeypatch.setattr(project_context, "_load_backup_payload", tracking_load)
+    restore_request = registry.execute(
+        AgentAction("restore_project_backup", {"filename": filename}, "Restore backup.")
+    )
+    assert restore_request.ok is True
+
+    load_calls.clear()
+    restored = _approve_latest(registry)
+
+    assert restored.ok is True
+    assert load_calls == [filename]
+
+
+def test_project_backup_restore_preview_matches_saved_payload_when_loader_changes(monkeypatch):
+    _save_registry()
+    backup_path = project_context.PROJECT_BACKUP_DIR / "changing.json"
+    backup_path.parent.mkdir(parents=True)
+    backup_a = _backup_payload(
+        {
+            "current_project": "alpha",
+            "projects": [{"id": "alpha", "name": "Alpha", "root_path": "."}],
+        },
+        created_at="2026-07-23T12:00:00",
+    )
+    backup_b = _backup_payload(
+        {
+            "current_project": "beta",
+            "projects": [
+                {"id": "beta", "name": "Beta", "root_path": "."},
+                {"id": "docs", "name": "Docs", "root_path": "docs"},
+            ],
+        },
+        created_at="2026-07-23T12:00:01",
+    )
+    payloads = [backup_a, backup_b]
+    load_calls: list[str | None] = []
+    saved_payloads: list[dict[str, Any]] = []
+    original_save = project_context.save_project_context
+
+    def changing_load(filename=None, path=None):
+        load_calls.append(filename)
+        return backup_path, deepcopy(payloads[min(len(load_calls) - 1, 1)]), []
+
+    def tracking_save(payload):
+        saved_payloads.append(deepcopy(payload))
+        return original_save(payload)
+
+    monkeypatch.setattr(project_context, "_load_backup_payload", changing_load)
+    monkeypatch.setattr(project_context, "save_project_context", tracking_save)
+
+    result = project_context.restore_project_backup(filename=backup_path.name)
+
+    assert load_calls == [backup_path.name]
+    assert len(saved_payloads) == 1
+    saved = saved_payloads[0]
+    assert result["preview"]["current_project"] == saved["current_project"]
+    assert result["preview"]["project_count"] == len(saved["projects"])
+    assert [item["id"] for item in result["preview"]["projects"]] == [
+        item["id"] for item in saved["projects"]
+    ]
+    assert [item["name"] for item in result["preview"]["projects"]] == [
+        item["name"] for item in saved["projects"]
+    ]
+
+
+def test_project_backup_restore_invalid_execution_payload_writes_nothing(monkeypatch):
+    _save_registry()
+    registry = build_registry()
+    backup_dir = project_context.PROJECT_BACKUP_DIR
+    backup_dir.mkdir(parents=True)
+    filename = "mutated-before-execution.json"
+    backup_path = backup_dir / filename
+    backup_path.write_text(
+        project_context.json.dumps(
+            _backup_payload(
+                {
+                    "current_project": "void",
+                    "projects": [{"id": "void", "name": "Void", "root_path": "."}],
+                }
+            )
+        ),
+        encoding="utf-8",
+    )
+
+    restore_request = registry.execute(
+        AgentAction("restore_project_backup", {"filename": filename}, "Restore backup.")
+    )
+    assert restore_request.ok is True
+    backup_path.write_text(
+        project_context.json.dumps(
+            _backup_payload(
+                {
+                    "current_project": "missing",
+                    "projects": [{"id": "void", "name": "Void", "root_path": "."}],
+                }
+            )
+        ),
+        encoding="utf-8",
+    )
+    save_calls: list[dict[str, Any]] = []
+
+    def tracking_save(payload):
+        save_calls.append(payload)
+        return payload
+
+    monkeypatch.setattr(project_context, "save_project_context", tracking_save)
+    approval_id = list_approvals()[0]["id"]
+    action = approve(approval_id)
+    assert action is not None
+    result = registry.execute(action, bypass_confirmation=True)
+    clear_approval(approval_id)
+
+    assert result.ok is False
+    assert save_calls == []
+    assert [
+        activity
+        for activity in activity_history.list_recent()
+        if activity["activity_type"] == "project_backup_restored"
+    ] == []
+
+
 def test_project_backup_restore_preserves_unknown_root_fields_with_metadata_collisions(monkeypatch):
     original_registry = {
         "current_project": "void",

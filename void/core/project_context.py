@@ -880,6 +880,25 @@ def _format_backup_preview(preview: dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
+def _preview_for_saved_restore(preview: dict[str, Any], saved: dict[str, Any]) -> dict[str, Any]:
+    restore_preview = deepcopy(preview)
+    projects = saved.get("projects", [])
+    if not isinstance(projects, list):
+        projects = []
+    restore_preview["project_count"] = len(projects)
+    restore_preview["current_project"] = saved.get("current_project", "")
+    restore_preview["projects"] = [
+        {
+            "id": str(project.get("id", "")),
+            "name": str(project.get("name", "") or project.get("id", "")),
+        }
+        for project in projects
+        if isinstance(project, dict)
+    ]
+    restore_preview["summary"] = _format_backup_preview(restore_preview)
+    return restore_preview
+
+
 def create_project_backup() -> dict[str, Any]:
     registry_payload = _read_project_context_raw()
     created = _now()
@@ -967,34 +986,49 @@ def validate_project_backup(
     filename: str | None = None,
     path: str | None = None,
 ) -> dict[str, Any]:
+    plan = plan_project_backup_restore(filename, path)
+    return plan["preview"]
+
+
+def plan_project_backup_restore(
+    filename: str | None = None,
+    path: str | None = None,
+) -> dict[str, Any]:
     backup_path, payload, load_errors = _load_backup_payload(filename, path)
     if load_errors:
-        return _backup_preview(backup_path, {}, [], load_errors)
+        return {
+            "backup_path": backup_path,
+            "preview": _backup_preview(backup_path, {}, [], load_errors),
+            "restored_payload": {},
+        }
     preview = _validate_backup_payload(payload)
     preview["filename"] = backup_path.name
     preview["summary"] = _format_backup_preview(preview)
-    return preview
+    restored_payload = deepcopy(payload["registry"]) if not preview["errors"] else {}
+    return {
+        "backup_path": backup_path,
+        "preview": preview,
+        "restored_payload": restored_payload,
+    }
 
 
 def restore_project_backup(
     filename: str | None = None,
     path: str | None = None,
 ) -> dict[str, Any]:
-    preview = validate_project_backup(filename, path)
+    plan = plan_project_backup_restore(filename, path)
+    preview = plan["preview"]
     if preview["errors"]:
         raise ValueError("\n".join(preview["errors"]))
 
-    backup_path, payload, load_errors = _load_backup_payload(filename, path)
-    if load_errors:
-        raise ValueError("\n".join(load_errors))
-    if not isinstance(payload, dict):
-        raise ValueError("Backup root must be an object.")
-    restored_payload = deepcopy(payload["registry"])
+    backup_path = plan["backup_path"]
+    restored_payload = deepcopy(plan["restored_payload"])
     final_errors = _strict_registry_errors(restored_payload)
     if final_errors:
         raise ValueError("\n".join(final_errors))
 
     saved = save_project_context(restored_payload)
+    preview = _preview_for_saved_restore(preview, saved)
     activity_history.log_activity(
         "project_backup_restored",
         "success",
