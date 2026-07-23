@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
+from datetime import datetime
 from typing import Any
 
 from void.core import activity_history, project_context
@@ -262,6 +263,269 @@ def test_project_registry_duplicate_alias_validation_rejected():
     assert result.ok is False
     assert "Duplicate alias" in result.content
     assert list_approvals() == []
+
+
+def test_project_backup_create_validate_list_and_delete(monkeypatch):
+    _save_registry()
+    registry = build_registry()
+    fixed = datetime(2026, 7, 23, 12, 34, 56)
+    monkeypatch.setattr(project_context, "_now", lambda: fixed)
+
+    response = registry.execute(
+        AgentAction("create_project_backup", {}, "Create backup.")
+    )
+    assert response.ok is True
+    assert len(list_approvals()) == 1
+
+    approved = _approve_latest(registry)
+    assert approved.ok is True
+    assert approved.data["created_at"] == "2026-07-23T12:34:56"
+    assert approved.data["project_count"] == 2
+    assert approved.data["size"] > 0
+    assert approved.data["path"].endswith("2026-07-23_12-34-56_registry.json")
+    assert activity_history.get_last_activity()["activity_type"] == "project_backup_created"
+
+    backup = project_context.PROJECT_BACKUP_DIR / "2026-07-23_12-34-56_registry.json"
+    payload = project_context.json.loads(backup.read_text(encoding="utf-8"))
+    assert payload["void_version"] == "1.10.0"
+    assert payload["projects"][0]["unknown_project"] == {"keep": True}
+    assert payload["projects"][0]["workspace"]["terminal"]["custom_flag"] == "keep"
+
+    validate = registry.execute(
+        AgentAction(
+            "validate_project_backup",
+            {"filename": backup.name},
+            "Validate backup.",
+        )
+    )
+    assert validate.ok is True
+    assert validate.data["preview"]["project_count"] == 2
+    assert validate.data["preview"]["current_project"] == "void"
+
+    listed = registry.execute(AgentAction("list_project_backups", {}, "List backups."))
+    assert listed.ok is True
+    assert [item["filename"] for item in listed.data["backups"]] == [backup.name]
+
+    delete_request = registry.execute(
+        AgentAction(
+            "delete_project_backup",
+            {"filename": backup.name},
+            "Delete backup.",
+        )
+    )
+    assert delete_request.ok is True
+    delete_approved = _approve_latest(registry)
+    assert delete_approved.ok is True
+    assert not backup.exists()
+    delete_activities = [
+        activity
+        for activity in activity_history.list_recent()
+        if activity["activity_type"] == "project_backup_deleted"
+    ]
+    assert len(delete_activities) == 1
+
+
+def test_project_backup_restore_one_save_activity_and_preserves_unknown(monkeypatch):
+    _save_registry()
+    registry = build_registry()
+    monkeypatch.setattr(project_context, "_now", lambda: datetime(2026, 7, 23, 12, 0, 0))
+    create_response = registry.execute(
+        AgentAction("create_project_backup", {}, "Create backup.")
+    )
+    assert create_response.ok is True
+    backup_result = _approve_latest(registry)
+    filename = project_context.PROJECT_BACKUP_DIR.joinpath(
+        "2026-07-23_12-00-00_registry.json"
+    ).name
+
+    project_context.save_project_context(
+        {
+            "current_project": "changed",
+            "projects": [
+                {
+                    "id": "changed",
+                    "name": "Changed",
+                    "aliases": ["changed"],
+                    "root_path": "changed",
+                }
+            ],
+        }
+    )
+
+    preview = registry.execute(
+        AgentAction(
+            "validate_project_backup",
+            {"filename": filename},
+            "Validate backup.",
+        )
+    )
+    assert preview.ok is True
+    assert [project["id"] for project in preview.data["preview"]["projects"]] == [
+        "void",
+        "docs",
+    ]
+
+    restore_request = registry.execute(
+        AgentAction(
+            "restore_project_backup",
+            {"filename": filename},
+            "Restore backup.",
+        )
+    )
+    assert restore_request.ok is True
+    assert len(list_approvals()) == 1
+    original_save = project_context.save_project_context
+    save_calls: list[dict[str, Any]] = []
+
+    def tracking_save(payload):
+        save_calls.append(deepcopy(payload))
+        return original_save(payload)
+
+    monkeypatch.setattr(project_context, "save_project_context", tracking_save)
+    restored = _approve_latest(registry)
+
+    assert restored.ok is True
+    assert len(save_calls) == 1
+    payload = project_context.load_project_context()
+    assert payload["current_project"] == "void"
+    assert payload["projects"][0]["unknown_project"] == {"keep": True}
+    assert payload["projects"][0]["workspace"]["terminal"]["custom_flag"] == "keep"
+    restore_activities = [
+        activity
+        for activity in activity_history.list_recent()
+        if activity["activity_type"] == "project_backup_restored"
+    ]
+    assert len(restore_activities) == 1
+    assert backup_result.data["project_count"] == 2
+
+
+def test_project_backup_rejected_restore_performs_no_writes(monkeypatch):
+    _save_registry()
+    registry = build_registry()
+    monkeypatch.setattr(project_context, "_now", lambda: datetime(2026, 7, 23, 13, 0, 0))
+    assert registry.execute(AgentAction("create_project_backup", {}, "Create backup.")).ok
+    _approve_latest(registry)
+    filename = "2026-07-23_13-00-00_registry.json"
+
+    response = registry.execute(
+        AgentAction(
+            "restore_project_backup",
+            {"filename": filename},
+            "Restore backup.",
+        )
+    )
+    assert response.ok is True
+    approval_id = list_approvals()[0]["id"]
+    save_calls: list[dict[str, Any]] = []
+
+    def tracking_save(payload):
+        save_calls.append(payload)
+        return payload
+
+    monkeypatch.setattr(project_context, "save_project_context", tracking_save)
+    clear_approval(approval_id)
+
+    assert save_calls == []
+    assert project_context.load_project_context()["current_project"] == "void"
+
+
+def test_project_backup_validation_rejects_invalid_payloads():
+    _save_registry()
+    registry = build_registry()
+    backup_dir = project_context.PROJECT_BACKUP_DIR
+    backup_dir.mkdir(parents=True)
+    cases = {
+        "malformed.json": "{",
+        "unsupported.json": {
+            "version": 2,
+            "created_at": "2026-07-23T12:00:00",
+            "current_project": "void",
+            "projects": [{"id": "void", "name": "Void", "root_path": "."}],
+            "metadata": {"project_count": 1},
+        },
+        "duplicate-id.json": {
+            "version": 1,
+            "created_at": "2026-07-23T12:00:00",
+            "current_project": "void",
+            "projects": [
+                {"id": "void", "name": "Void", "root_path": "."},
+                {"id": "VOID", "name": "Void 2", "root_path": "."},
+            ],
+            "metadata": {"project_count": 2},
+        },
+        "duplicate-alias.json": {
+            "version": 1,
+            "created_at": "2026-07-23T12:00:00",
+            "current_project": "void",
+            "projects": [
+                {"id": "void", "name": "Void", "aliases": ["shared"], "root_path": "."},
+                {"id": "docs", "name": "Docs", "aliases": ["SHARED"], "root_path": "docs"},
+            ],
+            "metadata": {"project_count": 2},
+        },
+        "invalid-current.json": {
+            "version": 1,
+            "created_at": "2026-07-23T12:00:00",
+            "current_project": "missing",
+            "projects": [{"id": "void", "name": "Void", "root_path": "."}],
+            "metadata": {"project_count": 1},
+        },
+        "malformed-project.json": {
+            "version": 1,
+            "created_at": "2026-07-23T12:00:00",
+            "current_project": "void",
+            "projects": [{"id": "void", "name": "Void", "aliases": "void", "root_path": "."}],
+            "metadata": {"project_count": 1},
+        },
+    }
+    for filename, payload in cases.items():
+        path = backup_dir / filename
+        if isinstance(payload, str):
+            path.write_text(payload, encoding="utf-8")
+        else:
+            path.write_text(project_context.json.dumps(payload), encoding="utf-8")
+        result = registry.execute(
+            AgentAction("validate_project_backup", {"filename": filename}, "Validate.")
+        )
+        assert result.ok is False, filename
+        assert result.data["preview"]["errors"], filename
+
+    restore_invalid = registry.execute(
+        AgentAction(
+            "restore_project_backup",
+            {"filename": "duplicate-alias.json"},
+            "Restore.",
+        )
+    )
+    assert restore_invalid.ok is False
+    assert list_approvals() == []
+
+
+def test_project_backup_list_sorting():
+    backup_dir = project_context.PROJECT_BACKUP_DIR
+    backup_dir.mkdir(parents=True)
+    for filename, created_at in [
+        ("2026-07-23_12-00-00_registry.json", "2026-07-23T12:00:00"),
+        ("2026-07-23_13-00-00_registry.json", "2026-07-23T13:00:00"),
+    ]:
+        (backup_dir / filename).write_text(
+            project_context.json.dumps(
+                {
+                    "version": 1,
+                    "created_at": created_at,
+                    "current_project": "void",
+                    "projects": [{"id": "void", "name": "Void", "root_path": "."}],
+                    "metadata": {"project_count": 1},
+                }
+            ),
+            encoding="utf-8",
+        )
+
+    listed = project_context.list_project_backups()
+    assert [backup["filename"] for backup in listed] == [
+        "2026-07-23_13-00-00_registry.json",
+        "2026-07-23_12-00-00_registry.json",
+    ]
 
 
 def test_project_export_current_all_and_unknown_fields():

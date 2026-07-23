@@ -5,14 +5,18 @@ from __future__ import annotations
 import json
 import re
 from copy import deepcopy
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
 from void.core import activity_history
+from void.__version__ import __version__
 from void.core.safety import PROJECT_ROOT
 
 PROJECT_CONTEXT_PATH = PROJECT_ROOT / "memory" / "projects.json"
+PROJECT_BACKUP_DIR = PROJECT_ROOT / "void" / "backups" / "projects"
 PROJECT_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$")
+PROJECT_BACKUP_VERSION = 1
 
 DEFAULT_PROJECT_CONTEXT: dict[str, Any] = {
     "current_project": "void",
@@ -48,6 +52,20 @@ DEFAULT_PROJECT_CONTEXT: dict[str, Any] = {
 
 def _normalize(value: str) -> str:
     return value.casefold().strip()
+
+
+def _now() -> datetime:
+    return datetime.now()
+
+
+def _atomic_write_json(path: Path, payload: dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_name(f".{path.name}.tmp")
+    temporary.write_text(
+        json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    temporary.replace(path)
 
 
 def _validate_project_id(project_id: str) -> None:
@@ -580,6 +598,374 @@ def _final_payload_errors(payload: dict[str, Any]) -> list[str]:
     return errors
 
 
+def _strict_registry_errors(payload: Any) -> list[str]:
+    errors: list[str] = []
+    if not isinstance(payload, dict):
+        return ["Project registry root must be an object."]
+
+    projects = payload.get("projects")
+    if not isinstance(projects, list):
+        return ["Project registry payload must contain a projects list."]
+    if not projects:
+        errors.append("Project registry must contain at least one project.")
+
+    seen_ids: dict[str, str] = {}
+    seen_aliases: dict[str, str] = {}
+    project_ids: set[str] = set()
+    for index, item in enumerate(projects, start=1):
+        label = f"Project {index}"
+        if not isinstance(item, dict):
+            errors.append(f"{label}: Each project record must be an object.")
+            continue
+        raw_id = str(item.get("id", "")).strip()
+        label = raw_id or label
+        try:
+            clean = _project_payload(item)
+        except ValueError as error:
+            errors.append(f"{label}: {error}")
+            continue
+        normalized_id = _normalize(clean["id"])
+        if normalized_id in seen_ids:
+            errors.append(f"Duplicate project id: {clean['id']} is also used by {seen_ids[normalized_id]}.")
+        else:
+            seen_ids[normalized_id] = clean["id"]
+            project_ids.add(normalized_id)
+        for alias in clean.get("aliases", []):
+            normalized_alias = _normalize(str(alias))
+            if not normalized_alias:
+                continue
+            owner = seen_aliases.get(normalized_alias)
+            if owner is not None and _normalize(owner) != normalized_id:
+                errors.append(
+                    f"Duplicate alias: {alias} is used by {owner} and {clean['id']}."
+                )
+            else:
+                seen_aliases[normalized_alias] = clean["id"]
+
+    current_project = str(payload.get("current_project", "")).strip()
+    if not current_project:
+        errors.append("Current project is required.")
+    elif _normalize(current_project) not in project_ids:
+        errors.append(f"Current project is not defined: {current_project}")
+
+    try:
+        _validate_payload(payload)
+    except ValueError as error:
+        message = str(error)
+        if message not in errors:
+            errors.append(message)
+    return errors
+
+
+def _read_project_context_raw() -> dict[str, Any]:
+    ensure_project_context()
+    try:
+        payload = json.loads(PROJECT_CONTEXT_PATH.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as error:
+        raise ValueError(f"Invalid project context JSON: {error}") from error
+    if not isinstance(payload, dict):
+        raise ValueError("Project context root must be an object.")
+    errors = _strict_registry_errors(payload)
+    if errors:
+        raise ValueError("\n".join(errors))
+    return payload
+
+
+def _backup_path(filename: str | None = None, path: str | None = None) -> Path:
+    if filename is not None and str(filename).strip():
+        clean_filename = str(filename).strip()
+        candidate = Path(clean_filename)
+        if candidate.name != clean_filename:
+            raise ValueError("Backup filename must not contain directories.")
+        resolved = (PROJECT_BACKUP_DIR / clean_filename).resolve()
+    elif path is not None and str(path).strip():
+        raw_path = Path(str(path).strip())
+        resolved = raw_path.resolve() if raw_path.is_absolute() else (PROJECT_BACKUP_DIR / raw_path).resolve()
+    else:
+        raise ValueError("Backup filename or path is required.")
+
+    try:
+        resolved.relative_to(PROJECT_BACKUP_DIR.resolve())
+    except ValueError as error:
+        raise ValueError("Backup path must stay inside the project backup directory.") from error
+    if resolved.suffix != ".json":
+        raise ValueError("Backup file must be a JSON file.")
+    return resolved
+
+
+def _load_backup_payload(filename: str | None = None, path: str | None = None) -> tuple[Path, Any, list[str]]:
+    backup_path = _backup_path(filename, path)
+    try:
+        payload = json.loads(backup_path.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        return backup_path, None, [f"Backup file not found: {backup_path.name}"]
+    except OSError as error:
+        return backup_path, None, [f"Backup file could not be read: {error}"]
+    except json.JSONDecodeError as error:
+        return backup_path, None, [f"Backup JSON is invalid: {error}"]
+    return backup_path, payload, []
+
+
+def _backup_registry_payload(backup: dict[str, Any]) -> dict[str, Any]:
+    return {
+        key: deepcopy(value)
+        for key, value in backup.items()
+        if key not in {"version", "created_at", "void_version", "metadata"}
+    }
+
+
+def _validate_backup_payload(payload: Any) -> dict[str, Any]:
+    warnings: list[str] = []
+    errors: list[str] = []
+    if not isinstance(payload, dict):
+        errors.append("Backup root must be an object.")
+        return _backup_preview(None, payload, warnings, errors)
+
+    version = payload.get("version")
+    if version != PROJECT_BACKUP_VERSION:
+        errors.append(f"Unsupported backup version: {version}")
+    created_at = str(payload.get("created_at", "")).strip()
+    if not created_at:
+        errors.append("Backup created_at is required.")
+    metadata = payload.get("metadata", {})
+    if not isinstance(metadata, dict):
+        errors.append("Backup metadata must be an object.")
+
+    registry_payload = _backup_registry_payload(payload)
+    errors.extend(_strict_registry_errors(registry_payload))
+
+    metadata_count = metadata.get("project_count") if isinstance(metadata, dict) else None
+    project_count = len(registry_payload.get("projects", [])) if isinstance(registry_payload.get("projects"), list) else 0
+    if metadata_count is not None and metadata_count != project_count:
+        warnings.append(
+            f"Backup metadata project_count is {metadata_count}, but projects contains {project_count}."
+        )
+    return _backup_preview(None, payload, warnings, errors)
+
+
+def _backup_preview(
+    backup_path: Path | None,
+    payload: Any,
+    warnings: list[str],
+    errors: list[str],
+) -> dict[str, Any]:
+    backup = payload if isinstance(payload, dict) else {}
+    registry_payload = _backup_registry_payload(backup) if isinstance(backup, dict) else {}
+    projects = registry_payload.get("projects", [])
+    if not isinstance(projects, list):
+        projects = []
+    project_summaries = [
+        {
+            "id": str(project.get("id", "")),
+            "name": str(project.get("name", "") or project.get("id", "")),
+        }
+        for project in projects
+        if isinstance(project, dict)
+    ]
+    filename = backup_path.name if backup_path is not None else ""
+    created_at = str(backup.get("created_at", "")).strip()
+    current_project = str(registry_payload.get("current_project", "")).strip()
+    preview = {
+        "ok": not errors,
+        "filename": filename,
+        "created_at": created_at,
+        "project_count": len(project_summaries),
+        "current_project": current_project,
+        "projects": project_summaries,
+        "warnings": warnings,
+        "errors": errors,
+    }
+    preview["summary"] = _format_backup_preview(preview)
+    return preview
+
+
+def _format_backup_preview(preview: dict[str, Any]) -> str:
+    filename = preview.get("filename") or "backup"
+    lines = [
+        "Project backup preview",
+        "",
+        f"Backup: {filename}",
+        f"Created: {preview.get('created_at') or 'unknown'}",
+        f"Projects: {preview.get('project_count', 0)}",
+        f"Current project: {preview.get('current_project') or 'unknown'}",
+    ]
+    projects = preview.get("projects", [])
+    if isinstance(projects, list) and projects:
+        lines.extend(["", "Projects that will exist:"])
+        lines.extend(
+            f"- {project.get('name') or project.get('id')} ({project.get('id')})"
+            for project in projects
+            if isinstance(project, dict)
+        )
+    if preview.get("warnings"):
+        lines.extend(["", "Warnings:"])
+        lines.extend(f"- {warning}" for warning in preview["warnings"])
+    if preview.get("errors"):
+        lines.extend(["", "Validation errors:"])
+        lines.extend(f"- {error}" for error in preview["errors"])
+    return "\n".join(lines)
+
+
+def create_project_backup() -> dict[str, Any]:
+    registry_payload = _read_project_context_raw()
+    created = _now()
+    created_at = created.isoformat(timespec="seconds")
+    filename = f"{created.strftime('%Y-%m-%d_%H-%M-%S')}_registry.json"
+    backup_path = PROJECT_BACKUP_DIR / filename
+    backup_payload = {
+        "version": PROJECT_BACKUP_VERSION,
+        "created_at": created_at,
+        "void_version": __version__,
+        **deepcopy(registry_payload),
+        "metadata": {
+            "project_count": len(registry_payload["projects"]),
+        },
+    }
+    _atomic_write_json(backup_path, backup_payload)
+    size = backup_path.stat().st_size
+    activity_history.log_activity(
+        "project_backup_created",
+        "success",
+        f"Created project registry backup {filename}",
+        {
+            "path": str(backup_path),
+            "filename": filename,
+            "project_count": len(registry_payload["projects"]),
+        },
+    )
+    return {
+        "path": str(backup_path),
+        "project_count": len(registry_payload["projects"]),
+        "created_at": created_at,
+        "size": size,
+    }
+
+
+def list_project_backups() -> list[dict[str, Any]]:
+    PROJECT_BACKUP_DIR.mkdir(parents=True, exist_ok=True)
+    backups: list[dict[str, Any]] = []
+    for backup_path in PROJECT_BACKUP_DIR.glob("*.json"):
+        created_at = ""
+        project_count: int | None = None
+        try:
+            payload = json.loads(backup_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            payload = None
+        if isinstance(payload, dict):
+            created_at = str(payload.get("created_at", "")).strip()
+            metadata = payload.get("metadata", {})
+            if isinstance(metadata, dict) and isinstance(metadata.get("project_count"), int):
+                project_count = metadata["project_count"]
+            elif isinstance(payload.get("projects"), list):
+                project_count = len(payload["projects"])
+        backups.append(
+            {
+                "filename": backup_path.name,
+                "created_at": created_at,
+                "size": backup_path.stat().st_size,
+                "project_count": project_count,
+            }
+        )
+    return sorted(
+        backups,
+        key=lambda item: (
+            str(item.get("created_at") or ""),
+            str(item.get("filename") or ""),
+        ),
+        reverse=True,
+    )
+
+
+def validate_project_backup(
+    filename: str | None = None,
+    path: str | None = None,
+) -> dict[str, Any]:
+    backup_path, payload, load_errors = _load_backup_payload(filename, path)
+    if load_errors:
+        return _backup_preview(backup_path, {}, [], load_errors)
+    preview = _validate_backup_payload(payload)
+    preview["filename"] = backup_path.name
+    preview["summary"] = _format_backup_preview(preview)
+    return preview
+
+
+def restore_project_backup(
+    filename: str | None = None,
+    path: str | None = None,
+) -> dict[str, Any]:
+    preview = validate_project_backup(filename, path)
+    if preview["errors"]:
+        raise ValueError("\n".join(preview["errors"]))
+
+    backup_path, payload, load_errors = _load_backup_payload(filename, path)
+    if load_errors:
+        raise ValueError("\n".join(load_errors))
+    if not isinstance(payload, dict):
+        raise ValueError("Backup root must be an object.")
+    restored_payload = _backup_registry_payload(payload)
+    final_errors = _strict_registry_errors(restored_payload)
+    if final_errors:
+        raise ValueError("\n".join(final_errors))
+
+    saved = save_project_context(restored_payload)
+    activity_history.log_activity(
+        "project_backup_restored",
+        "success",
+        f"Restored project registry backup {backup_path.name}",
+        {
+            "filename": backup_path.name,
+            "path": str(backup_path),
+            "project_count": len(saved["projects"]),
+            "current_project": saved["current_project"],
+        },
+    )
+    return {
+        "preview": preview,
+        "projects": saved["projects"],
+        "current_project": saved["current_project"],
+    }
+
+
+def restore_project_backup_validation(
+    filename: str | None = None,
+    path: str | None = None,
+) -> None:
+    preview = validate_project_backup(filename, path)
+    if preview["errors"]:
+        raise ValueError("\n".join(preview["errors"]))
+
+
+def delete_project_backup(
+    filename: str | None = None,
+    path: str | None = None,
+) -> dict[str, Any]:
+    backup_path = _backup_path(filename, path)
+    if not backup_path.exists():
+        raise ValueError(f"Backup file not found: {backup_path.name}")
+    size = backup_path.stat().st_size
+    backup_path.unlink()
+    activity_history.log_activity(
+        "project_backup_deleted",
+        "success",
+        f"Deleted project registry backup {backup_path.name}",
+        {
+            "filename": backup_path.name,
+            "path": str(backup_path),
+            "size": size,
+        },
+    )
+    return {"filename": backup_path.name, "path": str(backup_path), "size": size}
+
+
+def delete_project_backup_validation(
+    filename: str | None = None,
+    path: str | None = None,
+) -> None:
+    backup_path = _backup_path(filename, path)
+    if not backup_path.exists():
+        raise ValueError(f"Backup file not found: {backup_path.name}")
+
+
 def plan_project_import(
     source: Any | None = None,
     *,
@@ -934,11 +1320,7 @@ def load_project_context() -> dict[str, Any]:
 def save_project_context(payload: dict[str, Any]) -> dict[str, Any]:
     """Validate and save project context JSON."""
     clean_payload = _validate_payload(payload)
-    PROJECT_CONTEXT_PATH.parent.mkdir(parents=True, exist_ok=True)
-    PROJECT_CONTEXT_PATH.write_text(
-        json.dumps(clean_payload, ensure_ascii=False, indent=2) + "\n",
-        encoding="utf-8",
-    )
+    _atomic_write_json(PROJECT_CONTEXT_PATH, clean_payload)
     return clean_payload
 
 

@@ -1,6 +1,8 @@
 import type { Project } from "../src/api";
 import type { ProjectEditorState } from "../src/projectRegistry.js";
 import {
+  backupPreviewStatus,
+  formatBackupSize,
   formatProjectExport,
   importPreviewAliasOwnershipChanges,
   importPreviewAliasRenames,
@@ -205,6 +207,42 @@ function testImportPreviewAliasRenames() {
   );
 }
 
+function testBackupPreviewStatusAndErrors() {
+  assert(backupPreviewStatus(null) === "Preview", "missing backup preview should be preview");
+  assert(
+    backupPreviewStatus({
+      ok: false,
+      filename: "backup.json",
+      created_at: "2026-07-23T12:00:00",
+      project_count: 0,
+      current_project: "",
+      projects: [],
+      warnings: [],
+      errors: ["Invalid JSON"],
+    }) === "Preview has validation errors",
+    "backup validation errors should be surfaced",
+  );
+  assert(
+    backupPreviewStatus({
+      ok: true,
+      filename: "backup.json",
+      created_at: "2026-07-23T12:00:00",
+      project_count: 1,
+      current_project: "void",
+      projects: [{ id: "void", name: "Void" }],
+      warnings: [],
+      errors: [],
+    }) === "Preview ready for approval",
+    "valid backup preview should be ready",
+  );
+}
+
+function testBackupSizeFormatting() {
+  assert(formatBackupSize(42) === "42 B", "small backup size should render bytes");
+  assert(formatBackupSize(2048) === "2.0 KB", "large backup size should render KB");
+  assert(formatBackupSize(null) === "unknown", "missing backup size should be unknown");
+}
+
 testDirtyNormalRefreshPreservesDraft();
 testDirtyForcedRefreshReplacesDraft();
 testForcedRefreshWithPreferredProjectSelectsIt();
@@ -214,5 +252,7 @@ testImportJsonParsingAndExportFormatting();
 testImportPreviewStatus();
 testImportPreviewAliasOwnershipChanges();
 testImportPreviewAliasRenames();
+testBackupPreviewStatusAndErrors();
+testBackupSizeFormatting();
 
 console.log("Project Registry state selection tests passed.");

@@ -8,6 +8,8 @@ import {
   HealthResponse,
   MemoryResponse,
   Project,
+  ProjectBackup,
+  ProjectBackupPreview,
   ProjectImportPreview,
   SchedulerStatusResponse,
   ScheduledTask,
@@ -19,9 +21,11 @@ import {
   clearStoredToken,
   closeAllBrowserSessions,
   closeBrowserSession,
+  createProjectBackup,
   createProject,
   createGitCommit,
   createTask,
+  deleteProjectBackup,
   deleteProject,
   deleteTask,
   describeCurrentProject,
@@ -59,12 +63,14 @@ import {
   getWorkspacePreferences,
   health,
   importProjects,
+  listProjectBackups,
   listBrowserSessions,
   openBrowserSession,
   openProjectRepo,
   openProjectWorkspace,
   reject,
   replayActivity,
+  restoreProjectBackup,
   respondToClarification,
   runBrowserTask,
   runDueTasksNow,
@@ -80,12 +86,15 @@ import {
   suggestGitCommitMessage,
   updateWorkspacePreferences,
   validateProjectImport,
+  validateProjectBackup,
   waitForBrowserSession,
   waitForBrowserSelector,
 } from "./api";
 import {
+  backupPreviewStatus,
   emptyProjectEditorState,
   emptyWorkspacePreferenceForm,
+  formatBackupSize,
   formatProjectExport,
   importPreviewAliasOwnershipChanges,
   importPreviewAliasRenames,
@@ -1440,6 +1449,12 @@ function ProjectTab() {
   const [importStatus, setImportStatus] = useState<
     "preview" | "pending" | "completed" | "rejected"
   >("preview");
+  const [backups, setBackups] = useState<ProjectBackup[]>([]);
+  const [selectedBackup, setSelectedBackup] = useState("");
+  const [backupPreview, setBackupPreview] = useState<ProjectBackupPreview | null>(null);
+  const [backupStatus, setBackupStatus] = useState<
+    "preview" | "pending" | "completed" | "rejected"
+  >("preview");
   const [exportOutput, setExportOutput] = useState("");
   const [inlineApproval, setInlineApproval] = useState<Approval | null>(null);
   const [inlineClarification, setInlineClarification] =
@@ -1465,11 +1480,13 @@ function ProjectTab() {
         descriptionResponse,
         commandsResponse,
         workspacePreferencesResponse,
+        backupsResponse,
       ] = await Promise.all([
         getProjects(),
         describeCurrentProject(),
         getProjectCommands(),
         getWorkspacePreferences(),
+        listProjectBackups(),
       ]);
       const clarificationResponse = await getClarification();
       setProjects(projectsResponse.projects);
@@ -1479,6 +1496,12 @@ function ProjectTab() {
       setWorkspacePreferences(workspacePreferencesResponse.preferences);
       setWorkspacePreferenceForm(
         workspaceFormFromPreferences(workspacePreferencesResponse.preferences),
+      );
+      setBackups(backupsResponse.backups);
+      setSelectedBackup((current) =>
+        current && backupsResponse.backups.some((backup) => backup.filename === current)
+          ? current
+          : backupsResponse.backups[0]?.filename ?? "",
       );
       setDescription(descriptionResponse.description);
       setEditor((current) =>
@@ -1502,7 +1525,10 @@ function ProjectTab() {
           approval.action === "create_project" ||
           approval.action === "update_project" ||
           approval.action === "delete_project" ||
-          approval.action === "import_projects",
+          approval.action === "import_projects" ||
+          approval.action === "create_project_backup" ||
+          approval.action === "restore_project_backup" ||
+          approval.action === "delete_project_backup",
       );
       setInlineApproval(pendingApproval);
     } catch (currentError) {
@@ -1791,6 +1817,132 @@ function ProjectTab() {
     setError("");
   }
 
+  async function handleRefreshBackups() {
+    setError("");
+    setImportExportAction("refresh-backups");
+    try {
+      const response = await listProjectBackups();
+      setBackups(response.backups);
+      setSelectedBackup((current) =>
+        current && response.backups.some((backup) => backup.filename === current)
+          ? current
+          : response.backups[0]?.filename ?? "",
+      );
+    } catch (currentError) {
+      setError(getErrorMessage(currentError));
+    } finally {
+      setImportExportAction("");
+    }
+  }
+
+  async function handleCreateBackup() {
+    setError("");
+    setMessage(null);
+    setInlineApproval(null);
+    setBackupStatus("preview");
+    setImportExportAction("create-backup");
+    try {
+      const response = await createProjectBackup();
+      setMessage(toStructuredResult(response));
+      const pendingApproval = await fetchInlineApproval(
+        (approval) =>
+          approval.id === response.data?.approval_id ||
+          approval.action === "create_project_backup",
+      );
+      setInlineApproval(pendingApproval);
+      setBackupStatus("pending");
+    } catch (currentError) {
+      setError(getErrorMessage(currentError));
+    } finally {
+      setImportExportAction("");
+    }
+  }
+
+  async function handleValidateBackup(filename = selectedBackup) {
+    if (!filename) {
+      setError("Select a backup.");
+      return;
+    }
+    setError("");
+    setMessage(null);
+    setBackupPreview(null);
+    setBackupStatus("preview");
+    setImportExportAction("validate-backup");
+    try {
+      const response = await validateProjectBackup({ filename });
+      setSelectedBackup(filename);
+      setBackupPreview(response.preview);
+      setMessage({ message: response.preview.summary || "Project backup preview." });
+    } catch (currentError) {
+      setError(getErrorMessage(currentError));
+    } finally {
+      setImportExportAction("");
+    }
+  }
+
+  async function handleRestoreBackup(filename = selectedBackup) {
+    if (!filename) {
+      setError("Select a backup.");
+      return;
+    }
+    setError("");
+    setMessage(null);
+    setInlineApproval(null);
+    setBackupStatus("preview");
+    setImportExportAction("restore-backup");
+    try {
+      const previewResponse = await validateProjectBackup({ filename });
+      setSelectedBackup(filename);
+      setBackupPreview(previewResponse.preview);
+      if (previewResponse.preview.errors.length > 0) {
+        setMessage({ message: previewResponse.preview.summary || "Validation failed." });
+        return;
+      }
+      const response = await restoreProjectBackup({ filename });
+      setMessage(toStructuredResult(response));
+      const pendingApproval = await fetchInlineApproval(
+        (approval) =>
+          approval.id === response.data?.approval_id ||
+          approval.action === "restore_project_backup",
+      );
+      setInlineApproval(pendingApproval);
+      setBackupStatus("pending");
+    } catch (currentError) {
+      setError(getErrorMessage(currentError));
+    } finally {
+      setImportExportAction("");
+    }
+  }
+
+  async function handleDeleteBackup(filename = selectedBackup) {
+    if (!filename) {
+      setError("Select a backup.");
+      return;
+    }
+    if (!window.confirm(`Delete backup ${filename}?`)) {
+      return;
+    }
+    setError("");
+    setMessage(null);
+    setInlineApproval(null);
+    setImportExportAction("delete-backup");
+    try {
+      const response = await deleteProjectBackup({ filename });
+      setMessage(toStructuredResult(response));
+      const pendingApproval = await fetchInlineApproval(
+        (approval) =>
+          approval.id === response.data?.approval_id ||
+          approval.action === "delete_project_backup",
+      );
+      setInlineApproval(pendingApproval);
+      setBackupStatus("pending");
+    } catch (currentError) {
+      setError(getErrorMessage(currentError));
+    } finally {
+      setImportExportAction("");
+    }
+  }
+
   async function handleRunCommand(commandKey: string) {
     setError("");
     setMessage(null);
@@ -1992,7 +2144,10 @@ function ProjectTab() {
       approvedAction === "create_project" ||
       approvedAction === "update_project" ||
       approvedAction === "delete_project" ||
-      approvedAction === "import_projects";
+      approvedAction === "import_projects" ||
+      approvedAction === "create_project_backup" ||
+      approvedAction === "restore_project_backup" ||
+      approvedAction === "delete_project_backup";
     try {
       const response = await resolveInlineApproval(id, action);
       if (
@@ -2009,12 +2164,24 @@ function ProjectTab() {
       if (approvedAction === "import_projects" && action === "reject") {
         setImportStatus("rejected");
       }
+      if (
+        (approvedAction === "create_project_backup" ||
+          approvedAction === "restore_project_backup" ||
+          approvedAction === "delete_project_backup") &&
+        action === "reject"
+      ) {
+        setBackupStatus("rejected");
+      }
       setInlineApproval(null);
       if (action === "approve" && isProjectRegistryApproval) {
         setEditorDirty(false);
         const resultProject = asRecord(response.data?.project);
         const preferredProjectId =
-          approvedAction === "delete_project" || approvedAction === "import_projects"
+          approvedAction === "delete_project" ||
+          approvedAction === "import_projects" ||
+          approvedAction === "restore_project_backup" ||
+          approvedAction === "delete_project_backup" ||
+          approvedAction === "create_project_backup"
             ? null
             : asText(resultProject?.id, "");
         await loadProjectContext({
@@ -2023,6 +2190,13 @@ function ProjectTab() {
         });
         if (approvedAction === "import_projects") {
           setImportStatus(action === "approve" ? "completed" : "rejected");
+        }
+        if (
+          approvedAction === "create_project_backup" ||
+          approvedAction === "restore_project_backup" ||
+          approvedAction === "delete_project_backup"
+        ) {
+          setBackupStatus("completed");
         }
         return;
       }
@@ -2071,7 +2245,10 @@ function ProjectTab() {
             approval.action === "create_project" ||
             approval.action === "update_project" ||
             approval.action === "delete_project" ||
-            approval.action === "import_projects",
+            approval.action === "import_projects" ||
+            approval.action === "create_project_backup" ||
+            approval.action === "restore_project_backup" ||
+            approval.action === "delete_project_backup",
         );
         setInlineApproval(pendingApproval);
       } else {
@@ -2625,6 +2802,151 @@ function ProjectTab() {
                   ) : (
                     <ul>
                       {importPreview.errors.map((validationError) => (
+                        <li key={validationError}>{validationError}</li>
+                      ))}
+                    </ul>
+                  )}
+                </article>
+              </div>
+            ) : null}
+          </section>
+
+          <section>
+            <div className="sectionHeader compact">
+              <div>
+                <h3>Backup</h3>
+                <p>{backupPreviewStatus(backupPreview)}</p>
+              </div>
+              <span className={`importStatus ${backupStatus}`}>{backupStatus}</span>
+            </div>
+            <div className="buttonRow">
+              <button
+                type="button"
+                disabled={Boolean(importExportAction)}
+                onClick={() => void handleCreateBackup()}
+              >
+                {importExportAction === "create-backup" ? "Requesting..." : "Create Backup"}
+              </button>
+              <button
+                className="secondaryButton"
+                type="button"
+                disabled={Boolean(importExportAction)}
+                onClick={() => void handleRefreshBackups()}
+              >
+                {importExportAction === "refresh-backups" ? "Refreshing..." : "Refresh List"}
+              </button>
+            </div>
+            <div className="backupList">
+              {backups.length === 0 ? (
+                <EmptyState>No backups found.</EmptyState>
+              ) : (
+                backups.map((backup) => {
+                  const isSelected = backup.filename === selectedBackup;
+                  return (
+                    <article
+                      className={`backupItem${isSelected ? " selected" : ""}`}
+                      key={backup.filename}
+                    >
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectedBackup(backup.filename);
+                          setBackupPreview(null);
+                          setBackupStatus("preview");
+                        }}
+                      >
+                        <span>{backup.filename}</span>
+                        <small>
+                          {backup.created_at || "unknown"} ·{" "}
+                          {backup.project_count ?? "unknown"} project(s) ·{" "}
+                          {formatBackupSize(backup.size)}
+                        </small>
+                      </button>
+                      <div className="registryActions">
+                        <button
+                          className="secondaryButton"
+                          type="button"
+                          disabled={Boolean(importExportAction)}
+                          onClick={() => void handleValidateBackup(backup.filename)}
+                        >
+                          Validate
+                        </button>
+                        <button
+                          type="button"
+                          disabled={
+                            Boolean(importExportAction) ||
+                            inlineApproval?.action === "restore_project_backup"
+                          }
+                          onClick={() => void handleRestoreBackup(backup.filename)}
+                        >
+                          {inlineApproval?.action === "restore_project_backup"
+                            ? "Pending approval"
+                            : "Restore"}
+                        </button>
+                        <button
+                          className="dangerButton"
+                          type="button"
+                          disabled={
+                            Boolean(importExportAction) ||
+                            inlineApproval?.action === "delete_project_backup"
+                          }
+                          onClick={() => void handleDeleteBackup(backup.filename)}
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    </article>
+                  );
+                })
+              )}
+            </div>
+            {backupPreview ? (
+              <div className="importPreviewGrid">
+                <article className="importPreviewBlock">
+                  <div className="sectionLabel">Backup</div>
+                  <p>{backupPreview.filename || selectedBackup || "unknown"}</p>
+                </article>
+                <article className="importPreviewBlock">
+                  <div className="sectionLabel">Created</div>
+                  <p>{backupPreview.created_at || "unknown"}</p>
+                </article>
+                <article className="importPreviewBlock">
+                  <div className="sectionLabel">Current project</div>
+                  <p>{backupPreview.current_project || "unknown"}</p>
+                </article>
+                <article className="importPreviewBlock importPreviewWide">
+                  <div className="sectionLabel">Projects that will exist</div>
+                  {backupPreview.projects.length === 0 ? (
+                    <p>none</p>
+                  ) : (
+                    <ul>
+                      {backupPreview.projects.map((project) => (
+                        <li key={project.id ?? project.name}>
+                          {project.name ?? project.id} ({project.id ?? "unknown"})
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </article>
+                <article className="importPreviewBlock">
+                  <div className="sectionLabel">Warnings</div>
+                  {backupPreview.warnings.length === 0 ? (
+                    <p>none</p>
+                  ) : (
+                    <ul>
+                      {backupPreview.warnings.map((warning) => (
+                        <li key={warning}>{warning}</li>
+                      ))}
+                    </ul>
+                  )}
+                </article>
+                <article className="importPreviewBlock importPreviewWide">
+                  <div className="sectionLabel">Validation errors</div>
+                  {backupPreview.errors.length === 0 ? (
+                    <p>none</p>
+                  ) : (
+                    <ul>
+                      {backupPreview.errors.map((validationError) => (
                         <li key={validationError}>{validationError}</li>
                       ))}
                     </ul>
@@ -3578,6 +3900,10 @@ function activityIcon(type: string | undefined) {
       return "GIT";
     case "scheduler_execution":
       return "TASK";
+    case "project_backup_created":
+    case "project_backup_restored":
+    case "project_backup_deleted":
+      return "BKP";
     case "project_switch":
       return "PROJ";
     default:
@@ -3651,6 +3977,16 @@ function metadataSummary(activity: Activity) {
   const mode = asText(metadata.mode);
   if (mode) {
     entries.push({ label: "Mode", value: mode });
+  }
+
+  const filename = asText(metadata.filename);
+  if (filename) {
+    entries.push({ label: "Backup", value: filename });
+  }
+
+  const projectCount = metadata.project_count;
+  if (typeof projectCount === "number" || typeof projectCount === "string") {
+    entries.push({ label: "Projects", value: String(projectCount) });
   }
 
   if (terminal) {

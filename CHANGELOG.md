@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.10.0
+
+### Added
+
+- Project Registry backup, validation, restore, listing, and deletion tools.
+- Backup and restore controls in the Projects Web UI.
+
+### Safety
+
+- Restore and delete require approval and revalidate before state changes.
+- Backup restore uses one registry save and one Activity History entry.
+
 ## 1.9.0
 
 ### Added

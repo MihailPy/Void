@@ -42,6 +42,7 @@ def temp_memory_dir(tmp_path, monkeypatch):
         memory_dir / "pending_clarification.json",
     )
     monkeypatch.setattr(project_context, "PROJECT_CONTEXT_PATH", memory_dir / "projects.json")
+    monkeypatch.setattr(project_context, "PROJECT_BACKUP_DIR", tmp_path / "void" / "backups" / "projects")
 
     monkeypatch.setattr(capabilities, "CAPABILITY_DIR", capabilities_dir)
     monkeypatch.setattr(capabilities, "INSTALLED_PATH", capabilities_dir / "installed.json")
