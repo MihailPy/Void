@@ -67,7 +67,7 @@ def _backup_payload(
         "backup": {
             "version": version,
             "created_at": created_at,
-            "void_version": "1.10.0",
+            "void_version": "1.11.0",
             "metadata": {
                 "project_count": project_count if project_count is not None else len(projects),
             },
@@ -115,8 +115,11 @@ def test_project_registry_create_requires_one_approval_write_and_activity(monkey
     assert len(save_calls) == 1
     assert project_context.get_project("api")["name"] == "API"
     activities = activity_history.list_recent()
-    assert len(activities) == 1
-    assert activities[0]["activity_type"] == "project_create"
+    assert [activity["activity_type"] for activity in activities] == [
+        "project_create",
+        "project_snapshot_created",
+    ]
+    assert activities[0]["metadata"]["snapshot_id"] == activities[1]["metadata"]["snapshot_id"]
 
 
 def test_project_registry_update_batches_and_preserves_unknown_fields(monkeypatch):
@@ -158,8 +161,11 @@ def test_project_registry_update_batches_and_preserves_unknown_fields(monkeypatc
     assert project["workspace"]["custom_target"] == {"enabled": True}
     assert project_context.load_project_context()["current_project"] == "void-renamed"
     activities = activity_history.list_recent()
-    assert len(activities) == 1
-    assert activities[0]["activity_type"] == "project_update"
+    assert [activity["activity_type"] for activity in activities] == [
+        "project_update",
+        "project_snapshot_created",
+    ]
+    assert activities[0]["metadata"]["snapshot_id"] == activities[1]["metadata"]["snapshot_id"]
 
 
 def test_project_registry_delete_rules_and_current_switch():
@@ -308,7 +314,7 @@ def test_project_backup_create_validate_list_and_delete(monkeypatch):
 
     backup = project_context.PROJECT_BACKUP_DIR / "2026-07-23_12-34-56_registry.json"
     payload = project_context.json.loads(backup.read_text(encoding="utf-8"))
-    assert payload["backup"]["void_version"] == "1.10.0"
+    assert payload["backup"]["void_version"] == "1.11.0"
     assert payload["backup"]["metadata"]["project_count"] == 2
     assert payload["registry"]["projects"][0]["unknown_project"] == {"keep": True}
     assert payload["registry"]["projects"][0]["workspace"]["terminal"]["custom_flag"] == "keep"
@@ -725,7 +731,7 @@ def test_project_backup_validation_rejects_invalid_payloads():
             "backup": {
                 "version": 1,
                 "created_at": "2026-07-23T12:00:00",
-                "void_version": "1.10.0",
+                "void_version": "1.11.0",
                 "metadata": {"project_count": 1},
             },
             "registry": [],
@@ -734,7 +740,7 @@ def test_project_backup_validation_rejects_invalid_payloads():
             "backup": {
                 "version": 1,
                 "created_at": "2026-07-23T12:00:00",
-                "void_version": "1.10.0",
+                "void_version": "1.11.0",
                 "metadata": [],
             },
             "registry": {

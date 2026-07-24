@@ -8,7 +8,7 @@ import httpx
 from void.api.server import app
 from void.__version__ import __version__
 from void.core import activity_history
-from void.core import project_commands, project_context
+from void.core import project_commands, project_context, project_snapshots
 
 
 async def _request(
@@ -445,6 +445,80 @@ def test_project_import_api_exposes_alias_updates_in_validation_and_approval():
     assert "Alias ownership changes:" in approval["reason"]
     assert 'Remove alias "shared" from alpha; assign to beta' in approval["reason"]
 
+
+def test_project_snapshot_api_approval_and_read_endpoints():
+    _save_projects(
+        [
+            _void_project(commands={"verify": "make verify"}),
+            {"id": "docs", "name": "Docs", "aliases": ["manual"], "root_path": "docs"},
+        ]
+    )
+
+    create_response = request(
+        "POST",
+        "/projects/snapshots",
+        json={"reason": "before api test"},
+    )
+    assert create_response.status_code == 200
+    assert create_response.json()["result_type"] == "approval"
+    approval = _approval_for("create_project_snapshot")
+    approved = request("POST", f"/approvals/{approval['id']}/approve")
+    assert approved.status_code == 200
+    snapshot_id = approved.json()["data"]["id"]
+
+    listed = request("GET", "/projects/snapshots")
+    assert listed.status_code == 200
+    assert listed.json()["snapshots"][0]["id"] == snapshot_id
+    assert listed.json()["snapshots"][0]["valid"] is True
+
+    validation = request(
+        "POST",
+        "/projects/snapshots/validate",
+        json={"id": snapshot_id},
+    )
+    assert validation.status_code == 200
+    assert validation.json()["ok"] is True
+    assert validation.json()["preview"]["snapshot"]["id"] == snapshot_id
+
+    project_context.save_project_context(
+        {
+            "current_project": "api",
+            "projects": [{"id": "api", "name": "API", "root_path": "api"}],
+        }
+    )
+    diff = request("POST", "/projects/snapshots/diff", json={"id": snapshot_id})
+    assert diff.status_code == 200
+    assert diff.json()["diff"]["counts"]["added"] == 1
+    assert diff.json()["diff"]["counts"]["removed"] == 2
+
+    restore_response = request(
+        "POST",
+        "/projects/snapshots/restore",
+        json={"id": snapshot_id},
+    )
+    assert restore_response.status_code == 200
+    assert restore_response.json()["result_type"] == "approval"
+    approval = _approval_for("restore_project_snapshot")
+    restored = request("POST", f"/approvals/{approval['id']}/approve")
+    assert restored.json()["ok"] is True
+    assert project_context.load_project_context()["current_project"] == "void"
+
+    prune_preview = request(
+        "POST",
+        "/projects/snapshots/prune",
+        json={"keep_latest": 100, "max_age_days": 90, "dry_run": True},
+    )
+    assert prune_preview.status_code == 200
+    assert prune_preview.json()["ok"] is True
+    assert prune_preview.json()["data"]["deleted"] == []
+
+    delete_response = request("DELETE", f"/projects/snapshots/{snapshot_id}")
+    assert delete_response.status_code == 200
+    assert delete_response.json()["result_type"] == "approval"
+    approval = _approval_for("delete_project_snapshot")
+    deleted = request("POST", f"/approvals/{approval['id']}/approve")
+    assert deleted.json()["ok"] is True
+    assert not (project_snapshots.PROJECT_SNAPSHOT_DIR / f"{snapshot_id}.json").exists()
 
 def test_project_import_api_validation_returns_rename_resolved_projects():
     _save_projects(
