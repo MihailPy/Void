@@ -14,7 +14,8 @@
 - Snapshot writes are local JSON files in a separate snapshot directory from backups.
 - Registry mutations now include replayable pre-mutation snapshot IDs in Activity History.
 - Restore creates a pre-restore snapshot before replacing the registry.
-- Snapshot delete and prune require approval; prune verifies planned file size and hash.
+- Snapshot delete and prune require approval; prune execution uses the approved
+  immutable plan and aborts if snapshot inventory, size, or SHA-256 data changed.
 
 ## 1.10.0
 

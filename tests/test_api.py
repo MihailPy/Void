@@ -520,6 +520,44 @@ def test_project_snapshot_api_approval_and_read_endpoints():
     assert deleted.json()["ok"] is True
     assert not (project_snapshots.PROJECT_SNAPSHOT_DIR / f"{snapshot_id}.json").exists()
 
+
+def test_project_snapshot_prune_api_approval_stores_immutable_plan():
+    _save_projects([_void_project()])
+    registry_payload = project_context._read_project_context_raw()
+    snapshots = [
+        project_snapshots.create_snapshot(registry_payload, reason="api-prune-a"),
+        project_snapshots.create_snapshot(registry_payload, reason="api-prune-b"),
+        project_snapshots.create_snapshot(registry_payload, reason="api-prune-c"),
+    ]
+
+    response = request(
+        "POST",
+        "/projects/snapshots/prune",
+        json={"keep_latest": 1, "max_age_days": None},
+    )
+    assert response.status_code == 200
+    assert response.json()["result_type"] == "approval"
+    approval = _approval_for("prune_project_snapshots")
+    plan = approval["arguments"]["plan"]
+    planned = [item["filename"] for item in plan["deleted"]]
+    assert planned == [snapshots[1]["filename"], snapshots[0]["filename"]]
+    assert all("sha256" in item and "hash" not in item for item in plan["deleted"])
+    assert planned[0] in approval["reason"]
+    assert response.json()["data"]["preview"]["deleted"] == plan["deleted"]
+
+    project_snapshots.create_snapshot(registry_payload, reason="api-prune-d")
+    before = {path.name for path in project_snapshots.PROJECT_SNAPSHOT_DIR.glob("*.json")}
+    approved = request("POST", f"/approvals/{approval['id']}/approve")
+    assert approved.status_code == 200
+    assert approved.json()["ok"] is False
+    assert "inventory changed" in approved.json()["message"]
+    assert {path.name for path in project_snapshots.PROJECT_SNAPSHOT_DIR.glob("*.json")} == before
+    assert not any(
+        item.get("activity_type") == "project_snapshots_pruned"
+        for item in activity_history.list_recent(100)
+    )
+
+
 def test_project_import_api_validation_returns_rename_resolved_projects():
     _save_projects(
         [

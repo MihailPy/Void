@@ -314,6 +314,39 @@ def validate_snapshot(snapshot_id: str | None = None, filename: str | None = Non
     }
 
 
+def _parse_snapshot_created_at(value: Any) -> datetime | None:
+    try:
+        return datetime.fromisoformat(str(value or ""))
+    except ValueError:
+        return None
+
+
+def _filename_parts(filename: str) -> tuple[datetime | None, str, int]:
+    stem = Path(filename).stem
+    suffix = 1
+    suffix_match = re.fullmatch(r"(.+)-(\d+)", stem)
+    if suffix_match:
+        stem = suffix_match.group(1)
+        suffix = int(suffix_match.group(2))
+    timestamp = None
+    timestamp_match = re.match(r"^(\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}-\d{6})", stem)
+    if timestamp_match:
+        try:
+            timestamp = datetime.strptime(timestamp_match.group(1), "%Y-%m-%d_%H-%M-%S-%f").astimezone()
+        except ValueError:
+            timestamp = None
+    return timestamp, stem, suffix
+
+
+def _snapshot_sort_key(item: dict[str, Any]) -> tuple[float, float, str, int, str]:
+    filename = str(item.get("filename") or "")
+    created = _parse_snapshot_created_at(item.get("created_at"))
+    filename_created, base, suffix = _filename_parts(filename)
+    created_ts = created.timestamp() if created is not None else float("-inf")
+    filename_ts = filename_created.timestamp() if filename_created is not None else float("-inf")
+    return (created_ts, filename_ts, base, suffix, filename)
+
+
 def list_snapshots() -> list[dict[str, Any]]:
     PROJECT_SNAPSHOT_DIR.mkdir(parents=True, exist_ok=True)
     items: list[dict[str, Any]] = []
@@ -335,13 +368,7 @@ def list_snapshots() -> list[dict[str, Any]]:
             }
         )
 
-    def sort_key(item: dict[str, Any]) -> tuple[str, int, str]:
-        filename = str(item.get("filename") or "")
-        match = re.fullmatch(r".+-(\d+)\.json", filename)
-        suffix = int(match.group(1)) if match else 1
-        return (str(item.get("created_at") or ""), suffix, filename)
-
-    return sorted(items, key=sort_key, reverse=True)
+    return sorted(items, key=_snapshot_sort_key, reverse=True)
 
 
 def _project_map(payload: dict[str, Any]) -> dict[str, dict[str, Any]]:
@@ -494,41 +521,83 @@ def _file_hash(path: Path) -> str:
     return digest.hexdigest()
 
 
-def plan_prune(
+def _file_identity(path: Path) -> dict[str, Any]:
+    confined = _confined(path)
+    if not confined.exists():
+        raise ValueError(f"Snapshot file not found: {confined.name}")
+    if not confined.is_file():
+        raise ValueError(f"Snapshot path is not a regular file: {confined.name}")
+    if confined.suffix != ".json":
+        raise ValueError("Snapshot file must be a JSON file.")
+    stat = confined.stat()
+    return {"filename": confined.name, "size": stat.st_size, "sha256": _file_hash(confined)}
+
+
+def _snapshot_inventory() -> list[dict[str, Any]]:
+    PROJECT_SNAPSHOT_DIR.mkdir(parents=True, exist_ok=True)
+    return [_file_identity(path) for path in sorted(PROJECT_SNAPSHOT_DIR.glob("*.json"), key=lambda item: item.name)]
+
+
+def _with_identity(item: dict[str, Any]) -> dict[str, Any]:
+    planned = dict(item)
+    identity = _file_identity(snapshot_path(filename=str(item.get("filename") or "")))
+    planned.update(identity)
+    return planned
+
+
+def plan_prune_snapshots(
     *,
-    keep_latest: int = 50,
+    keep_latest: int | None = 50,
     max_age_days: int | None = 90,
     include_invalid: bool = False,
     now: datetime | None = None,
 ) -> dict[str, Any]:
-    keep = max(0, int(keep_latest))
+    keep = None if keep_latest is None else max(0, int(keep_latest))
+    age_days = None if max_age_days is None else max(0, int(max_age_days))
     listed = list_snapshots()
-    cutoff = None if max_age_days is None else (now or _now()) - timedelta(days=max(0, int(max_age_days)))
-    retained_names = {item["filename"] for item in listed[:keep]}
+    inventory = _snapshot_inventory()
+    plan_now = now or _now()
+    created_at = plan_now.isoformat(timespec="microseconds")
+    cutoff = None if age_days is None else plan_now - timedelta(days=age_days)
     deleted: list[dict[str, Any]] = []
     retained: list[dict[str, Any]] = []
     warnings: list[str] = []
-    for item in listed:
-        path = snapshot_path(filename=item["filename"])
+    if keep is None and cutoff is None:
+        warnings.append("No snapshot prune policy was provided; no snapshots will be deleted.")
+    for index, item in enumerate(listed):
         valid = bool(item.get("valid"))
         if not valid and not include_invalid:
             warnings.append(f"Retained malformed snapshot {item['filename']}.")
             retained.append(item)
             continue
-        created_raw = str(item.get("created_at") or "")
-        try:
-            created = datetime.fromisoformat(created_raw)
-        except ValueError:
-            created = None
-        should_delete = item["filename"] not in retained_names and cutoff is not None and created is not None and created < cutoff
-        if should_delete:
-            planned = dict(item)
-            planned["hash"] = _file_hash(path)
-            planned["size"] = path.stat().st_size
-            deleted.append(planned)
+        protected_by_count = keep is not None and index < keep
+        created = _parse_snapshot_created_at(item.get("created_at"))
+        if created is None:
+            filename_created, _, _ = _filename_parts(str(item.get("filename") or ""))
+            created = filename_created
+        expired_by_age = cutoff is not None and created is not None and created < cutoff
+        overflow_by_count = keep is not None and not protected_by_count
+        if keep is None:
+            should_delete = expired_by_age
+        elif cutoff is None:
+            should_delete = overflow_by_count
         else:
+            should_delete = overflow_by_count and expired_by_age
+        if should_delete:
+            deleted.append(_with_identity(item))
+        else:
+            if not valid and include_invalid and cutoff is not None and created is None:
+                warnings.append(f"Retained malformed snapshot {item['filename']} because its age is unknown.")
             retained.append(item)
     return {
+        "version": 1,
+        "created_at": created_at,
+        "policy": {
+            "keep_latest": keep,
+            "max_age_days": age_days,
+            "include_invalid": include_invalid,
+        },
+        "inventory": inventory,
         "deleted": deleted,
         "retained": retained,
         "warnings": warnings,
@@ -536,39 +605,121 @@ def plan_prune(
     }
 
 
+def plan_prune(
+    *,
+    keep_latest: int | None = 50,
+    max_age_days: int | None = 90,
+    include_invalid: bool = False,
+    now: datetime | None = None,
+) -> dict[str, Any]:
+    return plan_prune_snapshots(
+        keep_latest=keep_latest,
+        max_age_days=max_age_days,
+        include_invalid=include_invalid,
+        now=now,
+    )
+
+
+def _inventory_signature(inventory: Any) -> list[tuple[str, int, str]]:
+    if not isinstance(inventory, list):
+        raise ValueError("Snapshot prune plan inventory is invalid.")
+    signature = []
+    for item in inventory:
+        if not isinstance(item, dict):
+            raise ValueError("Snapshot prune plan inventory is invalid.")
+        filename = str(item.get("filename") or "")
+        size = item.get("size")
+        sha256 = str(item.get("sha256") or "")
+        if not filename or not filename.endswith(".json") or not isinstance(size, int) or not sha256:
+            raise ValueError("Snapshot prune plan inventory is invalid.")
+        snapshot_path(filename=filename)
+        signature.append((filename, size, sha256))
+    return sorted(signature)
+
+
+def _verify_prune_plan(plan: dict[str, Any]) -> list[dict[str, Any]]:
+    if not isinstance(plan, dict) or plan.get("version") != 1:
+        raise ValueError("Snapshot prune plan is invalid or unsupported.")
+    expected_inventory = _inventory_signature(plan.get("inventory"))
+    current_inventory = _inventory_signature(_snapshot_inventory())
+    if current_inventory != expected_inventory:
+        raise ValueError("Snapshot prune plan is stale; snapshot inventory changed before pruning.")
+    deleted = plan.get("deleted")
+    if not isinstance(deleted, list):
+        raise ValueError("Snapshot prune plan deleted list is invalid.")
+    planned_files: list[dict[str, Any]] = []
+    for item in deleted:
+        if not isinstance(item, dict):
+            raise ValueError("Snapshot prune plan deleted list is invalid.")
+        filename = str(item.get("filename") or "")
+        size = item.get("size")
+        sha256 = str(item.get("sha256") or "")
+        if not filename or not filename.endswith(".json") or not isinstance(size, int) or not sha256:
+            raise ValueError("Snapshot prune plan deleted item is invalid.")
+        path = snapshot_path(filename=filename)
+        if path.name != filename:
+            raise ValueError("Snapshot prune plan filename changed.")
+        if not path.exists():
+            raise ValueError(f"Planned snapshot disappeared: {filename}")
+        if not path.is_file():
+            raise ValueError(f"Planned snapshot is not a regular file: {filename}")
+        identity = _file_identity(path)
+        if identity["size"] != size or identity["sha256"] != sha256:
+            raise ValueError(f"Planned snapshot changed before pruning: {filename}")
+        planned_files.append(item)
+    return planned_files
+
+
+def execute_prune_snapshot_plan(plan: dict[str, Any]) -> dict[str, Any]:
+    planned_files = _verify_prune_plan(plan)
+    for item in planned_files:
+        snapshot_path(filename=item["filename"]).unlink()
+    policy = plan.get("policy") if isinstance(plan.get("policy"), dict) else {}
+    result = deepcopy(plan)
+    activity_history.log_activity(
+        "project_snapshots_pruned",
+        "success",
+        f"Pruned {len(planned_files)} project registry snapshot(s)",
+        {
+            "deleted": [item["filename"] for item in planned_files],
+            "deleted_count": len(planned_files),
+            "freed_bytes": result.get("freed_bytes", 0),
+            "keep_latest": policy.get("keep_latest"),
+            "max_age_days": policy.get("max_age_days"),
+            "include_invalid": policy.get("include_invalid", False),
+        },
+    )
+    return result
+
+
 def prune_snapshots(
     *,
-    keep_latest: int = 50,
+    plan: dict[str, Any] | None = None,
+    keep_latest: int | None = 50,
     max_age_days: int | None = 90,
     dry_run: bool = False,
     include_invalid: bool = False,
 ) -> dict[str, Any]:
-    plan = plan_prune(
+    if dry_run:
+        return plan_prune_snapshots(
+            keep_latest=keep_latest,
+            max_age_days=max_age_days,
+            include_invalid=include_invalid,
+        )
+    if plan is None:
+        raise ValueError("Approved snapshot prune execution requires an immutable plan.")
+    return execute_prune_snapshot_plan(plan)
+
+
+def prune_snapshots_immediate(
+    *,
+    keep_latest: int | None = 50,
+    max_age_days: int | None = 90,
+    include_invalid: bool = False,
+) -> dict[str, Any]:
+    plan = plan_prune_snapshots(
         keep_latest=keep_latest,
         max_age_days=max_age_days,
         include_invalid=include_invalid,
     )
-    if dry_run:
-        return plan
-    for item in plan["deleted"]:
-        path = snapshot_path(filename=item["filename"])
-        if not path.exists():
-            raise ValueError(f"Planned snapshot disappeared: {item['filename']}")
-        if path.stat().st_size != item["size"] or _file_hash(path) != item["hash"]:
-            raise ValueError(f"Planned snapshot changed before pruning: {item['filename']}")
-    for item in plan["deleted"]:
-        snapshot_path(filename=item["filename"]).unlink()
-    activity_history.log_activity(
-        "project_snapshots_pruned",
-        "success",
-        f"Pruned {len(plan['deleted'])} project registry snapshot(s)",
-        {
-            "deleted": [item["filename"] for item in plan["deleted"]],
-            "deleted_count": len(plan["deleted"]),
-            "freed_bytes": plan["freed_bytes"],
-            "keep_latest": keep_latest,
-            "max_age_days": max_age_days,
-            "include_invalid": include_invalid,
-        },
-    )
-    return plan
+    return execute_prune_snapshot_plan(plan)

@@ -286,7 +286,7 @@ export type ProjectSnapshotDiffResponse = {
 };
 
 export type ProjectSnapshotPruneRequest = {
-  keep_latest?: number;
+  keep_latest?: number | null;
   max_age_days?: number | null;
   dry_run?: boolean;
   include_invalid?: boolean;

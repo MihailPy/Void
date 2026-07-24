@@ -65,6 +65,28 @@ def _snapshot_payload(registry_payload: dict[str, Any], *, snapshot_id: str = "s
     }
 
 
+def _create_snapshots(monkeypatch, count: int, *, base: datetime | None = None, step_days: int = 1) -> list[dict[str, Any]]:
+    base = base or datetime(2026, 7, 24, 12, 0, 0).astimezone()
+    snapshots = []
+    for index in range(count):
+        monkeypatch.setattr(project_snapshots, "_now", lambda index=index: base - timedelta(days=index * step_days))
+        snapshots.append(project_snapshots.create_snapshot(project_context._read_project_context_raw(), reason=f"s{index}"))
+    monkeypatch.setattr(project_snapshots, "_now", lambda: base)
+    return snapshots
+
+
+def _snapshot_filenames() -> set[str]:
+    return {path.name for path in project_snapshots.PROJECT_SNAPSHOT_DIR.glob("*.json")}
+
+
+def _prune_success_activities() -> list[dict[str, Any]]:
+    return [
+        item
+        for item in activity_history.list_recent(100)
+        if item.get("activity_type") == "project_snapshots_pruned" and item.get("status") == "success"
+    ]
+
+
 def test_manual_snapshot_requires_approval_and_preserves_exact_registry(monkeypatch):
     _save_registry()
     registry = build_registry()
@@ -359,12 +381,183 @@ def test_snapshot_delete_requires_approval_and_prune_policies(monkeypatch):
     ]
     assert any("malformed" in warning for warning in preview["warnings"])
     changed = project_snapshots.PROJECT_SNAPSHOT_DIR / preview["deleted"][0]["filename"]
-    plan = project_snapshots.plan_prune(keep_latest=1, max_age_days=15)
     changed.write_text(changed.read_text(encoding="utf-8") + "\n", encoding="utf-8")
-    monkeypatch.setattr(project_snapshots, "plan_prune", lambda **kwargs: plan)
     try:
-        project_snapshots.prune_snapshots(keep_latest=1, max_age_days=15)
+        project_snapshots.prune_snapshots(plan=preview, keep_latest=1, max_age_days=15)
     except ValueError as error:
-        assert "changed before pruning" in str(error)
+        assert "inventory changed" in str(error) or "changed before pruning" in str(error)
     else:
         raise AssertionError("Changed planned file should fail safely")
+
+
+def test_snapshot_prune_approval_fails_when_inventory_changes(monkeypatch):
+    _save_registry()
+    registry = build_registry()
+    _create_snapshots(monkeypatch, 3)
+    request = registry.execute(
+        AgentAction("prune_project_snapshots", {"keep_latest": 1, "max_age_days": None}, "Prune.")
+    )
+    assert request.ok is True
+    approval = list_approvals()[0]
+    planned = [item["filename"] for item in approval["arguments"]["plan"]["deleted"]]
+    assert len(planned) == 2
+    project_snapshots.create_snapshot(project_context._read_project_context_raw(), reason="new")
+    before = _snapshot_filenames()
+
+    result = _approve_latest(registry)
+
+    assert result.ok is False
+    assert "inventory changed" in result.content
+    assert _snapshot_filenames() == before
+    assert _prune_success_activities() == []
+
+
+def test_snapshot_prune_approval_fails_when_planned_file_changes(monkeypatch):
+    _save_registry()
+    registry = build_registry()
+    _create_snapshots(monkeypatch, 4)
+    request = registry.execute(
+        AgentAction("prune_project_snapshots", {"keep_latest": 2, "max_age_days": None}, "Prune.")
+    )
+    assert request.ok is True
+    approval = list_approvals()[0]
+    planned = [item["filename"] for item in approval["arguments"]["plan"]["deleted"]]
+    changed = project_snapshots.PROJECT_SNAPSHOT_DIR / planned[-1]
+    before = _snapshot_filenames()
+    changed.write_text(changed.read_text(encoding="utf-8") + "\n", encoding="utf-8")
+
+    result = _approve_latest(registry)
+
+    assert result.ok is False
+    assert "inventory changed" in result.content
+    assert _snapshot_filenames() == before
+    assert _prune_success_activities() == []
+
+
+def test_snapshot_prune_approval_fails_when_planned_file_disappears(monkeypatch):
+    _save_registry()
+    registry = build_registry()
+    _create_snapshots(monkeypatch, 4)
+    request = registry.execute(
+        AgentAction("prune_project_snapshots", {"keep_latest": 2, "max_age_days": None}, "Prune.")
+    )
+    assert request.ok is True
+    approval = list_approvals()[0]
+    planned = [item["filename"] for item in approval["arguments"]["plan"]["deleted"]]
+    removed = project_snapshots.PROJECT_SNAPSHOT_DIR / planned[-1]
+    before = _snapshot_filenames()
+    removed.unlink()
+
+    result = _approve_latest(registry)
+
+    assert result.ok is False
+    assert "inventory changed" in result.content
+    assert _snapshot_filenames() == before - {removed.name}
+    assert _prune_success_activities() == []
+
+
+def test_snapshot_prune_approval_deletes_exact_preview_set(monkeypatch):
+    _save_registry()
+    registry = build_registry()
+    snapshots = _create_snapshots(monkeypatch, 5)
+    request = registry.execute(
+        AgentAction("prune_project_snapshots", {"keep_latest": 2, "max_age_days": None}, "Prune.")
+    )
+    assert request.ok is True
+    approval = list_approvals()[0]
+    planned = [item["filename"] for item in approval["arguments"]["plan"]["deleted"]]
+    assert planned == [snapshot["filename"] for snapshot in snapshots[2:]]
+
+    result = _approve_latest(registry)
+
+    assert result.ok is True
+    assert planned == [item["filename"] for item in result.data["deleted"]]
+    assert _snapshot_filenames() == {snapshots[0]["filename"], snapshots[1]["filename"]}
+    activities = _prune_success_activities()
+    assert len(activities) == 1
+    assert activities[0]["metadata"]["deleted"] == planned
+    assert activities[0]["metadata"]["freed_bytes"] == result.data["freed_bytes"]
+
+
+def test_snapshot_prune_keep_latest_standalone_and_zero(monkeypatch):
+    _save_registry()
+    snapshots = _create_snapshots(monkeypatch, 5)
+
+    plan = project_snapshots.plan_prune_snapshots(keep_latest=2, max_age_days=None)
+    assert [item["filename"] for item in plan["retained"]] == [snapshots[0]["filename"], snapshots[1]["filename"]]
+    assert [item["filename"] for item in plan["deleted"]] == [snapshot["filename"] for snapshot in snapshots[2:]]
+
+    zero = project_snapshots.plan_prune_snapshots(keep_latest=0, max_age_days=None)
+    assert [item["filename"] for item in zero["deleted"]] == [snapshot["filename"] for snapshot in snapshots]
+
+
+def test_snapshot_prune_age_only_and_combined_policy(monkeypatch):
+    _save_registry()
+    base = datetime(2026, 7, 24, 12, 0, 0).astimezone()
+    snapshots = _create_snapshots(monkeypatch, 5, base=base, step_days=20)
+
+    age_only = project_snapshots.plan_prune_snapshots(keep_latest=None, max_age_days=30, now=base)
+    assert [item["filename"] for item in age_only["deleted"]] == [snapshot["filename"] for snapshot in snapshots[2:]]
+
+    combined = project_snapshots.plan_prune_snapshots(keep_latest=4, max_age_days=30, now=base)
+    assert [item["filename"] for item in combined["deleted"]] == [snapshots[4]["filename"]]
+    assert snapshots[2]["filename"] in [item["filename"] for item in combined["retained"]]
+    assert snapshots[3]["filename"] in [item["filename"] for item in combined["retained"]]
+
+
+def test_snapshot_prune_neither_policy_warns(monkeypatch):
+    _save_registry()
+    _create_snapshots(monkeypatch, 3)
+
+    plan = project_snapshots.plan_prune_snapshots(keep_latest=None, max_age_days=None)
+
+    assert plan["deleted"] == []
+    assert any("No snapshot prune policy" in warning for warning in plan["warnings"])
+
+
+def test_snapshot_prune_malformed_files(monkeypatch):
+    _save_registry()
+    _create_snapshots(monkeypatch, 2)
+    invalid = project_snapshots.PROJECT_SNAPSHOT_DIR / "invalid.json"
+    invalid.write_text("{", encoding="utf-8")
+
+    retained = project_snapshots.plan_prune_snapshots(keep_latest=0, max_age_days=None, include_invalid=False)
+    assert "invalid.json" not in [item["filename"] for item in retained["deleted"]]
+    assert any("Retained malformed snapshot invalid.json" in warning for warning in retained["warnings"])
+
+    included = project_snapshots.plan_prune_snapshots(keep_latest=0, max_age_days=None, include_invalid=True)
+    assert "invalid.json" in [item["filename"] for item in included["deleted"]]
+
+
+def test_snapshot_deterministic_suffix_ordering():
+    items = [
+        {"filename": "snapshot-10.json", "created_at": ""},
+        {"filename": "snapshot.json", "created_at": ""},
+        {"filename": "snapshot-2.json", "created_at": ""},
+    ]
+
+    ordered = sorted(items, key=project_snapshots._snapshot_sort_key, reverse=True)
+
+    assert [item["filename"] for item in ordered] == [
+        "snapshot-10.json",
+        "snapshot-2.json",
+        "snapshot.json",
+    ]
+
+
+def test_snapshot_prune_all_or_nothing_verification(monkeypatch):
+    _save_registry()
+    snapshots = _create_snapshots(monkeypatch, 5)
+    plan = project_snapshots.plan_prune_snapshots(keep_latest=1, max_age_days=None)
+    changed = project_snapshots.PROJECT_SNAPSHOT_DIR / plan["deleted"][-1]["filename"]
+    changed.write_text(changed.read_text(encoding="utf-8") + "\n", encoding="utf-8")
+
+    try:
+        project_snapshots.execute_prune_snapshot_plan(plan)
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("Mutated final planned file should abort the whole prune")
+
+    assert _snapshot_filenames() == {snapshot["filename"] for snapshot in snapshots}
+    assert _prune_success_activities() == []

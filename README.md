@@ -480,11 +480,15 @@ no-op, Void does not create another snapshot or save the registry.
 Snapshot deletion and non-dry prune require approval. Prune is explicit only;
 there is no background retention worker. The default retention policy is
 conservative: keep the newest 100 snapshots, with no automatic age cutoff unless
-requested. Combined prune behavior keeps snapshots among the newest
-`keep_latest` even when older than `max_age_days`; other snapshots older than
-the cutoff may be removed. Malformed snapshots are retained by default and
-reported as warnings unless `include_invalid` is explicitly enabled. Approved
-prune verifies the planned filename, size, and content hash before deleting.
+requested. With `keep_latest` only, prune deletes every valid snapshot after the
+newest N. With `max_age_days` only, prune deletes valid snapshots older than the
+cutoff. With both settings, prune always protects the newest N snapshots, then
+deletes only older overflow snapshots. Malformed snapshots are retained by
+default and reported as warnings unless `include_invalid` is explicitly enabled.
+Approved prune stores the exact immutable plan, including filenames, sizes,
+SHA-256 hashes, and snapshot-directory inventory. Execution aborts without
+deleting anything if the inventory or any planned file changed after approval
+preview.
 
 Snapshots are local JSON files and may contain project paths, repository URLs,
 commands, workspace configuration, and other registry metadata.

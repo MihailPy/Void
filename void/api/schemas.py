@@ -156,7 +156,7 @@ class ProjectSnapshotDiffResponse(BaseModel):
 
 
 class ProjectSnapshotPruneRequest(BaseModel):
-    keep_latest: int = 50
+    keep_latest: int | None = 50
     max_age_days: int | None = 90
     dry_run: bool = False
     include_invalid: bool = False

@@ -1475,8 +1475,8 @@ function ProjectTab() {
   const [snapshotStatus, setSnapshotStatus] = useState<
     "preview" | "pending" | "completed" | "rejected"
   >("preview");
-  const [pruneKeepLatest, setPruneKeepLatest] = useState(50);
-  const [pruneMaxAgeDays, setPruneMaxAgeDays] = useState(90);
+  const [pruneKeepLatest, setPruneKeepLatest] = useState<number | null>(50);
+  const [pruneMaxAgeDays, setPruneMaxAgeDays] = useState<number | null>(90);
   const [prunePreview, setPrunePreview] = useState<Record<string, unknown> | null>(null);
   const [exportOutput, setExportOutput] = useState("");
   const [inlineApproval, setInlineApproval] = useState<Approval | null>(null);
@@ -3223,18 +3223,36 @@ function ProjectTab() {
                 <input
                   type="number"
                   min={0}
-                  value={pruneKeepLatest}
+                  disabled={pruneKeepLatest === null}
+                  value={pruneKeepLatest ?? 0}
                   onChange={(event) => setPruneKeepLatest(Number(event.target.value))}
                 />
+              </label>
+              <label className="checkboxLabel">
+                <input
+                  type="checkbox"
+                  checked={pruneKeepLatest !== null}
+                  onChange={(event) => setPruneKeepLatest(event.target.checked ? 50 : null)}
+                />
+                Use keep latest
               </label>
               <label>
                 Max age days
                 <input
                   type="number"
                   min={0}
-                  value={pruneMaxAgeDays}
+                  disabled={pruneMaxAgeDays === null}
+                  value={pruneMaxAgeDays ?? 0}
                   onChange={(event) => setPruneMaxAgeDays(Number(event.target.value))}
                 />
+              </label>
+              <label className="checkboxLabel">
+                <input
+                  type="checkbox"
+                  checked={pruneMaxAgeDays !== null}
+                  onChange={(event) => setPruneMaxAgeDays(event.target.checked ? 90 : null)}
+                />
+                Use max age
               </label>
             </div>
             <div className="buttonRow">
@@ -3484,6 +3502,26 @@ function ProjectTab() {
             ) : null}
             {prunePreview ? (
               <div className="importPreviewGrid">
+                <article className="importPreviewBlock">
+                  <div className="sectionLabel">Policy</div>
+                  <p>
+                    keep{" "}
+                    {asRecord(prunePreview.policy)?.keep_latest === null
+                      ? "none"
+                      : String(asRecord(prunePreview.policy)?.keep_latest ?? "unknown")}{" "}
+                    · age{" "}
+                    {asRecord(prunePreview.policy)?.max_age_days === null
+                      ? "none"
+                      : `${String(asRecord(prunePreview.policy)?.max_age_days ?? "unknown")} days`}
+                  </p>
+                </article>
+                <article className="importPreviewBlock">
+                  <div className="sectionLabel">Counts</div>
+                  <p>
+                    delete {Array.isArray(prunePreview.deleted) ? prunePreview.deleted.length : 0} · retain{" "}
+                    {Array.isArray(prunePreview.retained) ? prunePreview.retained.length : 0}
+                  </p>
+                </article>
                 <article className="importPreviewBlock importPreviewWide">
                   <div className="sectionLabel">Prune files</div>
                   {Array.isArray(prunePreview.deleted) && prunePreview.deleted.length > 0 ? (
@@ -3493,7 +3531,8 @@ function ProjectTab() {
                         return (
                           <li key={asText(record.filename, JSON.stringify(record))}>
                             {asText(record.filename, "unknown")} ·{" "}
-                            {formatBackupSize(Number(record.size ?? 0))}
+                            {formatBackupSize(Number(record.size ?? 0))} ·{" "}
+                            {asText(record.sha256, "").slice(0, 12)}
                           </li>
                         );
                       })}

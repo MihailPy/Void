@@ -811,16 +811,37 @@ def prune_project_snapshots(
             result_type="message",
             data=preview_result.data,
         )
-    filenames = [item.get("filename", "") for item in (preview_result.data or {}).get("deleted", [])]
+    plan = preview_result.data or {}
+    deleted = plan.get("deleted", []) if isinstance(plan, dict) else []
+    retained = plan.get("retained", []) if isinstance(plan, dict) else []
+    warnings = plan.get("warnings", []) if isinstance(plan, dict) else []
+    policy = plan.get("policy", {}) if isinstance(plan.get("policy"), dict) else {}
+    filenames = [str(item.get("filename", "")) for item in deleted if isinstance(item, dict)]
+    summary_lines = [
+        "Prune project registry snapshots",
+        "",
+        f"Delete {len(filenames)} snapshot(s)",
+        f"Free {int(plan.get('freed_bytes') or 0)} bytes",
+        f"Retain {len(retained)} snapshot(s)",
+        "",
+        f"Keep latest: {policy.get('keep_latest') if policy.get('keep_latest') is not None else 'none'}",
+        f"Max age: {policy.get('max_age_days') if policy.get('max_age_days') is not None else 'none'}",
+    ]
+    if filenames:
+        summary_lines.extend(["", "Files:"])
+        summary_lines.extend(f"- {name}" for name in filenames)
+    if warnings:
+        summary_lines.extend(["", "Warnings:"])
+        summary_lines.extend(f"- {warning}" for warning in warnings)
     response = _execute_api_tool(
         registry,
         "prune_project_snapshots",
-        arguments,
-        "Prune project registry snapshots:\n\n" + "\n".join(f"- {name}" for name in filenames),
+        {**arguments, "plan": plan},
+        "\n".join(summary_lines),
     )
     if isinstance(response, ApprovalResponse):
         data = dict(response.data or {})
-        data["preview"] = preview_result.data
+        data["preview"] = plan
         response.data = data
     return response
 

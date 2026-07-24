@@ -488,13 +488,15 @@ def validate_delete_project_snapshot(
 
 
 def prune_project_snapshots(
-    keep_latest: int = 50,
+    plan: dict[str, Any] | None = None,
+    keep_latest: int | None = 50,
     max_age_days: int | None = 90,
     dry_run: bool = False,
     include_invalid: bool = False,
 ) -> ToolResult:
     try:
         result = project_snapshots.prune_snapshots(
+            plan=plan,
             keep_latest=keep_latest,
             max_age_days=max_age_days,
             dry_run=dry_run,
@@ -511,16 +513,32 @@ def prune_project_snapshots(
 
 
 def validate_prune_project_snapshots(
-    keep_latest: int = 50,
+    plan: dict[str, Any] | None = None,
+    keep_latest: int | None = 50,
     max_age_days: int | None = 90,
     dry_run: bool = False,
     include_invalid: bool = False,
-) -> None:
-    project_snapshots.plan_prune(
+) -> dict[str, Any]:
+    if plan is not None:
+        return {
+            "plan": plan,
+            "keep_latest": keep_latest,
+            "max_age_days": max_age_days,
+            "dry_run": dry_run,
+            "include_invalid": include_invalid,
+        }
+    planned = project_snapshots.plan_prune_snapshots(
         keep_latest=keep_latest,
         max_age_days=max_age_days,
         include_invalid=include_invalid,
     )
+    return {
+        "plan": planned,
+        "keep_latest": keep_latest,
+        "max_age_days": max_age_days,
+        "dry_run": dry_run,
+        "include_invalid": include_invalid,
+    }
 
 
 def get_current_project() -> ToolResult:
