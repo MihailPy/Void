@@ -10,6 +10,7 @@ import {
   parseProjectImportJson,
   projectEditorForRefresh,
   projectEditorFromProject,
+  snapshotPreviewStatus,
 } from "../src/projectRegistry.js";
 
 function assert(condition: unknown, message: string): asserts condition {
@@ -243,6 +244,46 @@ function testBackupSizeFormatting() {
   assert(formatBackupSize(null) === "unknown", "missing backup size should be unknown");
 }
 
+function testSnapshotPreviewStatusAndErrors() {
+  assert(snapshotPreviewStatus(null) === "Preview", "missing snapshot preview should be preview");
+  assert(
+    snapshotPreviewStatus({
+      ok: false,
+      snapshot: {
+        id: "snap",
+        filename: "snap.json",
+        created_at: "2026-07-24T12:00:00.000001+03:00",
+        reason: "manual",
+        source_action: "manual",
+        project_count: 0,
+        current_project: "",
+      },
+      projects: [],
+      warnings: [],
+      errors: ["Invalid JSON"],
+    }) === "Preview has validation errors",
+    "snapshot validation errors should be surfaced",
+  );
+  assert(
+    snapshotPreviewStatus({
+      ok: true,
+      snapshot: {
+        id: "snap",
+        filename: "snap.json",
+        created_at: "2026-07-24T12:00:00.000001+03:00",
+        reason: "manual",
+        source_action: "manual",
+        project_count: 1,
+        current_project: "void",
+      },
+      projects: [{ id: "void", name: "Void" }],
+      warnings: [],
+      errors: [],
+    }) === "Preview ready for approval",
+    "valid snapshot preview should be ready",
+  );
+}
+
 testDirtyNormalRefreshPreservesDraft();
 testDirtyForcedRefreshReplacesDraft();
 testForcedRefreshWithPreferredProjectSelectsIt();
@@ -254,5 +295,6 @@ testImportPreviewAliasOwnershipChanges();
 testImportPreviewAliasRenames();
 testBackupPreviewStatusAndErrors();
 testBackupSizeFormatting();
+testSnapshotPreviewStatusAndErrors();
 
 console.log("Project Registry state selection tests passed.");

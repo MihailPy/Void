@@ -215,6 +215,83 @@ export type ProjectBackupValidationResponse = {
   preview: ProjectBackupPreview;
 };
 
+export type ProjectSnapshot = {
+  id: string;
+  filename: string;
+  created_at?: string;
+  reason?: string;
+  source_action?: string;
+  size: number;
+  project_count?: number | null;
+  current_project?: string;
+  valid: boolean;
+  errors?: string[];
+};
+
+export type ProjectSnapshotPreview = {
+  ok: boolean;
+  snapshot: {
+    id: string;
+    filename: string;
+    created_at: string;
+    reason: string;
+    source_action: string;
+    project_count: number;
+    current_project: string;
+  };
+  projects: Array<{ id?: string; name?: string }>;
+  warnings: string[];
+  errors: string[];
+  summary?: string;
+};
+
+export type ProjectSnapshotDiff = {
+  snapshot_id: string;
+  filename?: string;
+  current_project: { before: string; after: string; changed: boolean };
+  counts: { added: number; removed: number; updated: number; unchanged: number };
+  added: Project[];
+  removed: Project[];
+  updated: Array<{
+    id: string;
+    name?: { before?: unknown; after?: unknown };
+    changes: Array<{ path: string; before: unknown; after: unknown }>;
+  }>;
+  unchanged: Array<{ id: string; name?: unknown }>;
+  root_changes: Array<{ path: string; before: unknown; after: unknown }>;
+};
+
+export type ProjectSnapshotsResponse = {
+  ok: boolean;
+  snapshots: ProjectSnapshot[];
+};
+
+export type ProjectSnapshotRequest = {
+  id?: string | null;
+  filename?: string | null;
+};
+
+export type CreateProjectSnapshotRequest = {
+  reason?: string | null;
+};
+
+export type ProjectSnapshotValidationResponse = {
+  ok: boolean;
+  preview: ProjectSnapshotPreview;
+};
+
+export type ProjectSnapshotDiffResponse = {
+  ok: boolean;
+  diff: ProjectSnapshotDiff;
+};
+
+export type ProjectSnapshotPruneRequest = {
+  keep_latest?: number;
+  max_age_days?: number | null;
+  dry_run?: boolean;
+  include_invalid?: boolean;
+};
+
 export type DeleteProjectRequest = {
   confirm_current?: boolean;
 };
@@ -585,6 +662,52 @@ export function restoreProjectBackup(payload: ProjectBackupRequest) {
 export function deleteProjectBackup(payload: ProjectBackupRequest) {
   return request<ApprovalActionResponse>("/projects/backups", {
     method: "DELETE",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function listProjectSnapshots() {
+  return request<ProjectSnapshotsResponse>("/projects/snapshots");
+}
+
+export function createProjectSnapshot(payload: CreateProjectSnapshotRequest = {}) {
+  return request<ApprovalActionResponse>("/projects/snapshots", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function validateProjectSnapshot(payload: ProjectSnapshotRequest) {
+  return request<ProjectSnapshotValidationResponse>("/projects/snapshots/validate", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function diffProjectSnapshot(payload: ProjectSnapshotRequest) {
+  return request<ProjectSnapshotDiffResponse>("/projects/snapshots/diff", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function restoreProjectSnapshot(payload: ProjectSnapshotRequest) {
+  return request<ApprovalActionResponse>("/projects/snapshots/restore", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function deleteProjectSnapshot(snapshotId: string) {
+  return request<ApprovalActionResponse>(
+    `/projects/snapshots/${encodeURIComponent(snapshotId)}`,
+    { method: "DELETE" },
+  );
+}
+
+export function pruneProjectSnapshots(payload: ProjectSnapshotPruneRequest) {
+  return request<ApprovalActionResponse>("/projects/snapshots/prune", {
+    method: "POST",
     body: JSON.stringify(payload),
   });
 }

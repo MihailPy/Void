@@ -1,6 +1,7 @@
 import type {
   Project,
   ProjectBackupPreview,
+  ProjectSnapshotPreview,
   ProjectExportPayload,
   ProjectImportPreview,
 } from "./api";
@@ -218,4 +219,14 @@ export function formatBackupSize(size: number | null | undefined) {
     return `${bytes} B`;
   }
   return `${(bytes / 1024).toFixed(1)} KB`;
+}
+
+export function snapshotPreviewStatus(preview: ProjectSnapshotPreview | null) {
+  if (!preview) {
+    return "Preview";
+  }
+  if (preview.errors.length > 0) {
+    return "Preview has validation errors";
+  }
+  return "Preview ready for approval";
 }
