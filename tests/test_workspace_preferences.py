@@ -199,8 +199,11 @@ def test_workspace_preferences_batch_saves_once_and_logs_once(monkeypatch):
     assert project["workspace"]["terminal"]["open_mode"] == "tab"
     assert project["workspace"]["browser"]["app"] == "Safari"
     activities = activity_history.list_recent()
-    assert len(activities) == 1
-    assert activities[0]["activity_type"] == "workspace_preferences_update"
+    assert [activity["activity_type"] for activity in activities] == [
+        "workspace_preferences_update",
+        "project_snapshot_created",
+    ]
+    assert activities[0]["metadata"]["snapshot_id"] == activities[1]["metadata"]["snapshot_id"]
     assert activities[0]["metadata"]["changes"] == result["changes"]
 
 

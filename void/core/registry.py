@@ -30,7 +30,13 @@ class ToolRegistry:
         if tool.requires_confirmation and not bypass_confirmation:
             if tool.confirmation_validator is not None:
                 try:
-                    tool.confirmation_validator(**action.arguments)
+                    validated_arguments = tool.confirmation_validator(**action.arguments)
+                    if isinstance(validated_arguments, dict):
+                        action = AgentAction(
+                            action=action.action,
+                            arguments=validated_arguments,
+                            reason=action.reason,
+                        )
                 except TypeError as error:
                     return ToolResult(
                         ok=False,

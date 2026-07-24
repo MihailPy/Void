@@ -12,6 +12,7 @@ from void.core import activity_history
 from void.core import browser_sessions
 from void.core import project_commands
 from void.core import project_context
+from void.core import project_snapshots
 from void.core import terminal_runner
 from void.core import workspace as workspace_core
 from void.core import workspace_preferences
@@ -363,6 +364,184 @@ def validate_delete_project_backup(
     project_context.delete_project_backup_validation(filename, path)
 
 
+def create_project_snapshot(reason: str | None = None) -> ToolResult:
+    try:
+        registry_payload = project_context._read_project_context_raw()
+        result = project_snapshots.create_snapshot(
+            registry_payload,
+            reason=reason or "manual",
+            source_action="manual",
+            automatic=False,
+            log=True,
+        )
+    except ValueError as error:
+        return ToolResult(ok=False, content=str(error))
+    return ToolResult(
+        ok=True,
+        content=f"Created project snapshot {result['filename']}.",
+        data=result,
+    )
+
+
+def validate_create_project_snapshot(reason: str | None = None) -> None:
+    project_context._read_project_context_raw()
+
+
+def list_project_snapshots() -> ToolResult:
+    snapshots = project_snapshots.list_snapshots()
+    lines = ["Project registry snapshots", ""]
+    if snapshots:
+        lines.extend(
+            f"- {item['filename']} projects={item.get('project_count')} valid={item.get('valid')}"
+            for item in snapshots
+        )
+    else:
+        lines.append("- none")
+    return ToolResult(ok=True, content="\n".join(lines), data={"snapshots": snapshots})
+
+
+def validate_project_snapshot(
+    id: str | None = None,
+    filename: str | None = None,
+) -> ToolResult:
+    preview = project_snapshots.validate_snapshot(id, filename)
+    return ToolResult(
+        ok=bool(preview["ok"]),
+        content=preview["summary"],
+        data={"preview": preview, "snapshot": preview.get("snapshot")},
+    )
+
+
+def diff_project_snapshot(
+    id: str | None = None,
+    filename: str | None = None,
+) -> ToolResult:
+    try:
+        diff = project_snapshots.diff_snapshot(id, filename)
+    except ValueError as error:
+        return ToolResult(ok=False, content=str(error))
+    counts = diff["counts"]
+    return ToolResult(
+        ok=True,
+        content=(
+            f"Snapshot diff {diff['snapshot_id']}: "
+            f"{counts['added']} added, {counts['removed']} removed, "
+            f"{counts['updated']} updated."
+        ),
+        data={"diff": diff},
+    )
+
+
+def restore_project_snapshot(
+    id: str | None = None,
+    filename: str | None = None,
+) -> ToolResult:
+    try:
+        result = project_context.restore_project_snapshot(id, filename)
+    except ValueError as error:
+        return ToolResult(ok=False, content=str(error))
+    if not result["changed"]:
+        return ToolResult(
+            ok=True,
+            content="Snapshot restore is a no-op; registry is already identical.",
+            data=result,
+        )
+    return ToolResult(
+        ok=True,
+        content=(
+            "Restored project snapshot. "
+            f"Projects: {len(result['projects'])}; current project: {result['current_project']}."
+        ),
+        data=result,
+    )
+
+
+def validate_restore_project_snapshot(
+    id: str | None = None,
+    filename: str | None = None,
+) -> None:
+    plan = project_snapshots.plan_snapshot_restore(id, filename)
+    if plan["preview"]["errors"]:
+        raise ValueError("\n".join(plan["preview"]["errors"]))
+
+
+def delete_project_snapshot(
+    id: str | None = None,
+    filename: str | None = None,
+) -> ToolResult:
+    try:
+        result = project_snapshots.delete_snapshot(id, filename)
+    except ValueError as error:
+        return ToolResult(ok=False, content=str(error))
+    return ToolResult(
+        ok=True,
+        content=f"Deleted project snapshot {result['filename']}.",
+        data=result,
+    )
+
+
+def validate_delete_project_snapshot(
+    id: str | None = None,
+    filename: str | None = None,
+) -> None:
+    project_snapshots.delete_snapshot_validation(id, filename)
+
+
+def prune_project_snapshots(
+    plan: dict[str, Any] | None = None,
+    keep_latest: int | None = 50,
+    max_age_days: int | None = 90,
+    dry_run: bool = False,
+    include_invalid: bool = False,
+) -> ToolResult:
+    try:
+        result = project_snapshots.prune_snapshots(
+            plan=plan,
+            keep_latest=keep_latest,
+            max_age_days=max_age_days,
+            dry_run=dry_run,
+            include_invalid=include_invalid,
+        )
+    except ValueError as error:
+        return ToolResult(ok=False, content=str(error))
+    action = "Planned pruning" if dry_run else "Pruned"
+    return ToolResult(
+        ok=True,
+        content=f"{action} {len(result['deleted'])} project snapshot(s).",
+        data=result,
+    )
+
+
+def validate_prune_project_snapshots(
+    plan: dict[str, Any] | None = None,
+    keep_latest: int | None = 50,
+    max_age_days: int | None = 90,
+    dry_run: bool = False,
+    include_invalid: bool = False,
+) -> dict[str, Any]:
+    if plan is not None:
+        planned = project_snapshots.validate_prune_snapshot_plan(plan)
+        return {
+            "plan": planned,
+            "keep_latest": planned["policy"]["keep_latest"],
+            "max_age_days": planned["policy"]["max_age_days"],
+            "dry_run": dry_run,
+            "include_invalid": planned["policy"]["include_invalid"],
+        }
+    planned = project_snapshots.plan_prune_snapshots(
+        keep_latest=keep_latest,
+        max_age_days=max_age_days,
+        include_invalid=include_invalid,
+    )
+    return {
+        "plan": planned,
+        "keep_latest": planned["policy"]["keep_latest"],
+        "max_age_days": planned["policy"]["max_age_days"],
+        "dry_run": dry_run,
+        "include_invalid": planned["policy"]["include_invalid"],
+    }
+
+
 def get_current_project() -> ToolResult:
     try:
         project = project_context.get_current_project()
@@ -394,22 +573,10 @@ def set_current_project(project: str) -> ToolResult:
         return ToolResult(ok=False, content=result["error"])
 
     selected = result["project"]
-    activity_history.log_activity(
-        "project_switch",
-        "success",
-        f"Switched project to {selected['name']}",
-        {
-            "project": _activity_project(selected),
-            "replay": {
-                "action": "set_current_project",
-                "arguments": {"project": selected["id"]},
-            },
-        },
-    )
     return ToolResult(
         ok=True,
         content=f"Current project set to {selected['name']} ({selected['id']}).",
-        data={"project": selected},
+        data=result,
     )
 
 
@@ -1403,6 +1570,63 @@ def definitions() -> list[ToolDefinition]:
             category="project",
             risk_level="write",
             confirmation_validator=validate_delete_project_backup,
+        ),
+        ToolDefinition(
+            "create_project_snapshot",
+            "Create an internal project registry snapshot after approval.",
+            create_project_snapshot,
+            requires_confirmation=True,
+            category="project",
+            risk_level="write",
+            confirmation_validator=validate_create_project_snapshot,
+        ),
+        ToolDefinition(
+            "list_project_snapshots",
+            "List internal project registry snapshots.",
+            list_project_snapshots,
+            category="project",
+            risk_level="read",
+        ),
+        ToolDefinition(
+            "validate_project_snapshot",
+            "Validate an internal project registry snapshot without writing.",
+            validate_project_snapshot,
+            category="project",
+            risk_level="read",
+        ),
+        ToolDefinition(
+            "diff_project_snapshot",
+            "Compare an internal project snapshot with the current registry.",
+            diff_project_snapshot,
+            category="project",
+            risk_level="read",
+        ),
+        ToolDefinition(
+            "restore_project_snapshot",
+            "Restore an internal project registry snapshot after approval.",
+            restore_project_snapshot,
+            requires_confirmation=True,
+            category="project",
+            risk_level="write",
+            confirmation_validator=validate_restore_project_snapshot,
+        ),
+        ToolDefinition(
+            "delete_project_snapshot",
+            "Delete one internal project registry snapshot after approval.",
+            delete_project_snapshot,
+            requires_confirmation=True,
+            category="project",
+            risk_level="write",
+            confirmation_validator=validate_delete_project_snapshot,
+        ),
+        ToolDefinition(
+            "prune_project_snapshots",
+            "Prune old internal project registry snapshots after approval.",
+            prune_project_snapshots,
+            requires_confirmation=True,
+            category="project",
+            risk_level="write",
+            confirmation_validator=validate_prune_project_snapshots,
         ),
         ToolDefinition(
             "get_current_project",

@@ -279,6 +279,136 @@ def match(text: str, lowered: str) -> RouteResult | None:
             "filename",
         )
 
+    if lowered in {
+        "create project snapshot",
+        "create projects snapshot",
+        "создай снимок проектов",
+        "создай снимок проекта",
+    }:
+        return RouteResult(
+            matched=True,
+            confidence=0.95,
+            action=AgentAction(
+                "create_project_snapshot",
+                {"reason": "manual"},
+                "User asks to create a project registry snapshot.",
+            ),
+        )
+
+    if lowered in {
+        "list project snapshots",
+        "show project snapshots",
+        "project snapshots",
+        "покажи снимки проектов",
+        "покажи историю проектов",
+    }:
+        return RouteResult(
+            matched=True,
+            confidence=0.95,
+            action=AgentAction(
+                "list_project_snapshots",
+                {},
+                "User asks to list project registry snapshots.",
+            ),
+        )
+
+    snapshot_action_patterns = [
+        (
+            r"^validate\s+snapshot\s+(.+)$",
+            "validate_project_snapshot",
+            "User asks to validate a project registry snapshot.",
+        ),
+        (
+            r"^compare\s+snapshot\s+(.+?)(?:\s+with\s+current\s+state)?$",
+            "diff_project_snapshot",
+            "User asks to compare a project registry snapshot with the current state.",
+        ),
+        (
+            r"^restore\s+snapshot\s+(.+)$",
+            "restore_project_snapshot",
+            "User asks to restore a project registry snapshot.",
+        ),
+        (
+            r"^delete\s+snapshot\s+(.+)$",
+            "delete_project_snapshot",
+            "User asks to delete a project registry snapshot.",
+        ),
+        (
+            r"^проверь\s+снимок\s+(.+)$",
+            "validate_project_snapshot",
+            "User asks to validate a project registry snapshot.",
+        ),
+        (
+            r"^сравни\s+снимок\s+(.+?)(?:\s+с\s+текущим\s+состоянием)?$",
+            "diff_project_snapshot",
+            "User asks to compare a project registry snapshot with the current state.",
+        ),
+        (
+            r"^(?:восстанови|откати\s+проекты\s+к)\s+снимок\s+(.+)$",
+            "restore_project_snapshot",
+            "User asks to restore a project registry snapshot.",
+        ),
+        (
+            r"^удали\s+снимок\s+(.+)$",
+            "delete_project_snapshot",
+            "User asks to delete a project registry snapshot.",
+        ),
+    ]
+    for pattern, action, reason in snapshot_action_patterns:
+        snapshot_match = re.match(pattern, text, re.IGNORECASE | re.DOTALL)
+        if snapshot_match:
+            return RouteResult(
+                matched=True,
+                confidence=0.95,
+                action=AgentAction(
+                    action,
+                    {"id": clean(snapshot_match.group(1))},
+                    reason,
+                ),
+            )
+
+    if lowered in {
+        "validate snapshot",
+        "compare snapshot",
+        "restore snapshot",
+        "delete snapshot",
+        "проверь снимок",
+        "сравни снимок",
+        "восстанови снимок",
+        "удали снимок",
+    }:
+        verb = lowered.split(" ", 1)[0]
+        action = {
+            "validate": "validate_project_snapshot",
+            "compare": "diff_project_snapshot",
+            "restore": "restore_project_snapshot",
+            "delete": "delete_project_snapshot",
+            "проверь": "validate_project_snapshot",
+            "сравни": "diff_project_snapshot",
+            "восстанови": "restore_project_snapshot",
+            "удали": "delete_project_snapshot",
+        }.get(verb, "validate_project_snapshot")
+        return _project_registry_clarification(
+            action,
+            "Which snapshot id should I use?",
+            "id",
+        )
+
+    if lowered in {
+        "prune project snapshots",
+        "clean old project snapshots",
+        "очисти старые снимки проектов",
+    }:
+        return RouteResult(
+            matched=True,
+            confidence=0.95,
+            action=AgentAction(
+                "prune_project_snapshots",
+                {},
+                "User asks to prune old project registry snapshots.",
+            ),
+        )
+
     create_named_match = re.match(
         r"^(?:create|add|new)\s+project\s+named\s+(.+)$",
         text,

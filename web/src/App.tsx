@@ -10,6 +10,9 @@ import {
   Project,
   ProjectBackup,
   ProjectBackupPreview,
+  ProjectSnapshot,
+  ProjectSnapshotDiff,
+  ProjectSnapshotPreview,
   ProjectImportPreview,
   SchedulerStatusResponse,
   ScheduledTask,
@@ -22,15 +25,18 @@ import {
   closeAllBrowserSessions,
   closeBrowserSession,
   createProjectBackup,
+  createProjectSnapshot,
   createProject,
   createGitCommit,
   createTask,
   deleteProjectBackup,
+  deleteProjectSnapshot,
   deleteProject,
   deleteTask,
   describeCurrentProject,
   disableTask,
   duplicateProject,
+  diffProjectSnapshot,
   enableTask,
   exportAllProjects,
   exportCurrentProject,
@@ -64,13 +70,16 @@ import {
   health,
   importProjects,
   listProjectBackups,
+  listProjectSnapshots,
   listBrowserSessions,
   openBrowserSession,
   openProjectRepo,
   openProjectWorkspace,
   reject,
+  pruneProjectSnapshots,
   replayActivity,
   restoreProjectBackup,
+  restoreProjectSnapshot,
   respondToClarification,
   runBrowserTask,
   runDueTasksNow,
@@ -87,6 +96,7 @@ import {
   updateWorkspacePreferences,
   validateProjectImport,
   validateProjectBackup,
+  validateProjectSnapshot,
   waitForBrowserSession,
   waitForBrowserSelector,
 } from "./api";
@@ -99,6 +109,7 @@ import {
   importPreviewAliasOwnershipChanges,
   importPreviewAliasRenames,
   importPreviewStatus,
+  snapshotPreviewStatus,
   parseProjectImportJson,
   projectEditorForRefresh,
   projectEditorFromProject,
@@ -1455,6 +1466,18 @@ function ProjectTab() {
   const [backupStatus, setBackupStatus] = useState<
     "preview" | "pending" | "completed" | "rejected"
   >("preview");
+  const [snapshots, setSnapshots] = useState<ProjectSnapshot[]>([]);
+  const [selectedSnapshot, setSelectedSnapshot] = useState("");
+  const [snapshotReason, setSnapshotReason] = useState("manual");
+  const [snapshotPreview, setSnapshotPreview] =
+    useState<ProjectSnapshotPreview | null>(null);
+  const [snapshotDiff, setSnapshotDiff] = useState<ProjectSnapshotDiff | null>(null);
+  const [snapshotStatus, setSnapshotStatus] = useState<
+    "preview" | "pending" | "completed" | "rejected"
+  >("preview");
+  const [pruneKeepLatest, setPruneKeepLatest] = useState<number | null>(50);
+  const [pruneMaxAgeDays, setPruneMaxAgeDays] = useState<number | null>(90);
+  const [prunePreview, setPrunePreview] = useState<Record<string, unknown> | null>(null);
   const [exportOutput, setExportOutput] = useState("");
   const [inlineApproval, setInlineApproval] = useState<Approval | null>(null);
   const [inlineClarification, setInlineClarification] =
@@ -1481,12 +1504,14 @@ function ProjectTab() {
         commandsResponse,
         workspacePreferencesResponse,
         backupsResponse,
+        snapshotsResponse,
       ] = await Promise.all([
         getProjects(),
         describeCurrentProject(),
         getProjectCommands(),
         getWorkspacePreferences(),
         listProjectBackups(),
+        listProjectSnapshots(),
       ]);
       const clarificationResponse = await getClarification();
       setProjects(projectsResponse.projects);
@@ -1498,10 +1523,16 @@ function ProjectTab() {
         workspaceFormFromPreferences(workspacePreferencesResponse.preferences),
       );
       setBackups(backupsResponse.backups);
+      setSnapshots(snapshotsResponse.snapshots);
       setSelectedBackup((current) =>
         current && backupsResponse.backups.some((backup) => backup.filename === current)
           ? current
           : backupsResponse.backups[0]?.filename ?? "",
+      );
+      setSelectedSnapshot((current) =>
+        current && snapshotsResponse.snapshots.some((snapshot) => snapshot.id === current)
+          ? current
+          : snapshotsResponse.snapshots[0]?.id ?? "",
       );
       setDescription(descriptionResponse.description);
       setEditor((current) =>
@@ -1528,7 +1559,11 @@ function ProjectTab() {
           approval.action === "import_projects" ||
           approval.action === "create_project_backup" ||
           approval.action === "restore_project_backup" ||
-          approval.action === "delete_project_backup",
+          approval.action === "delete_project_backup" ||
+          approval.action === "create_project_snapshot" ||
+          approval.action === "restore_project_snapshot" ||
+          approval.action === "delete_project_snapshot" ||
+          approval.action === "prune_project_snapshots",
       );
       setInlineApproval(pendingApproval);
     } catch (currentError) {
@@ -1943,6 +1978,187 @@ function ProjectTab() {
     }
   }
 
+  async function handleRefreshSnapshots() {
+    setError("");
+    setImportExportAction("refresh-snapshots");
+    try {
+      const response = await listProjectSnapshots();
+      setSnapshots(response.snapshots);
+      setSelectedSnapshot((current) =>
+        current && response.snapshots.some((snapshot) => snapshot.id === current)
+          ? current
+          : response.snapshots[0]?.id ?? "",
+      );
+    } catch (currentError) {
+      setError(getErrorMessage(currentError));
+    } finally {
+      setImportExportAction("");
+    }
+  }
+
+  async function handleCreateSnapshot() {
+    setError("");
+    setMessage(null);
+    setInlineApproval(null);
+    setSnapshotStatus("preview");
+    setImportExportAction("create-snapshot");
+    try {
+      const response = await createProjectSnapshot({ reason: snapshotReason.trim() || "manual" });
+      setMessage(toStructuredResult(response));
+      const pendingApproval = await fetchInlineApproval(
+        (approval) =>
+          approval.id === response.data?.approval_id ||
+          approval.action === "create_project_snapshot",
+      );
+      setInlineApproval(pendingApproval);
+      setSnapshotStatus("pending");
+    } catch (currentError) {
+      setError(getErrorMessage(currentError));
+    } finally {
+      setImportExportAction("");
+    }
+  }
+
+  async function handleValidateSnapshot(id = selectedSnapshot) {
+    if (!id) {
+      setError("Select a snapshot.");
+      return;
+    }
+    setError("");
+    setMessage(null);
+    setSnapshotPreview(null);
+    setSnapshotStatus("preview");
+    setImportExportAction("validate-snapshot");
+    try {
+      const response = await validateProjectSnapshot({ id });
+      setSelectedSnapshot(id);
+      setSnapshotPreview(response.preview);
+      setMessage({ message: response.preview.summary || "Project snapshot preview." });
+    } catch (currentError) {
+      setError(getErrorMessage(currentError));
+    } finally {
+      setImportExportAction("");
+    }
+  }
+
+  async function handleDiffSnapshot(id = selectedSnapshot) {
+    if (!id) {
+      setError("Select a snapshot.");
+      return;
+    }
+    setError("");
+    setMessage(null);
+    setSnapshotDiff(null);
+    setImportExportAction("diff-snapshot");
+    try {
+      const response = await diffProjectSnapshot({ id });
+      setSelectedSnapshot(id);
+      setSnapshotDiff(response.diff);
+      setMessage({ message: `Snapshot diff ready: ${response.diff.snapshot_id}.` });
+    } catch (currentError) {
+      setError(getErrorMessage(currentError));
+    } finally {
+      setImportExportAction("");
+    }
+  }
+
+  async function handleRestoreSnapshot(id = selectedSnapshot) {
+    if (!id) {
+      setError("Select a snapshot.");
+      return;
+    }
+    setError("");
+    setMessage(null);
+    setInlineApproval(null);
+    setSnapshotStatus("preview");
+    setImportExportAction("restore-snapshot");
+    try {
+      const [previewResponse, diffResponse] = await Promise.all([
+        validateProjectSnapshot({ id }),
+        diffProjectSnapshot({ id }),
+      ]);
+      setSelectedSnapshot(id);
+      setSnapshotPreview(previewResponse.preview);
+      setSnapshotDiff(diffResponse.diff);
+      if (previewResponse.preview.errors.length > 0) {
+        setMessage({ message: previewResponse.preview.summary || "Validation failed." });
+        return;
+      }
+      const response = await restoreProjectSnapshot({ id });
+      setMessage(toStructuredResult(response));
+      const pendingApproval = await fetchInlineApproval(
+        (approval) =>
+          approval.id === response.data?.approval_id ||
+          approval.action === "restore_project_snapshot",
+      );
+      setInlineApproval(pendingApproval);
+      setSnapshotStatus("pending");
+    } catch (currentError) {
+      setError(getErrorMessage(currentError));
+    } finally {
+      setImportExportAction("");
+    }
+  }
+
+  async function handleDeleteSnapshot(id = selectedSnapshot) {
+    if (!id) {
+      setError("Select a snapshot.");
+      return;
+    }
+    if (!window.confirm(`Delete snapshot ${id}?`)) {
+      return;
+    }
+    setError("");
+    setMessage(null);
+    setInlineApproval(null);
+    setImportExportAction("delete-snapshot");
+    try {
+      const response = await deleteProjectSnapshot(id);
+      setMessage(toStructuredResult(response));
+      const pendingApproval = await fetchInlineApproval(
+        (approval) =>
+          approval.id === response.data?.approval_id ||
+          approval.action === "delete_project_snapshot",
+      );
+      setInlineApproval(pendingApproval);
+      setSnapshotStatus("pending");
+    } catch (currentError) {
+      setError(getErrorMessage(currentError));
+    } finally {
+      setImportExportAction("");
+    }
+  }
+
+  async function handlePruneSnapshots(dryRun: boolean) {
+    setError("");
+    setMessage(null);
+    setInlineApproval(null);
+    setImportExportAction(dryRun ? "preview-prune-snapshots" : "prune-snapshots");
+    try {
+      const response = await pruneProjectSnapshots({
+        keep_latest: pruneKeepLatest,
+        max_age_days: pruneMaxAgeDays,
+        dry_run: dryRun,
+      });
+      const preview = (response.data?.preview ?? response.data) as Record<string, unknown> | null;
+      setPrunePreview(preview);
+      setMessage(toStructuredResult(response));
+      if (!dryRun) {
+        const pendingApproval = await fetchInlineApproval(
+          (approval) =>
+            approval.id === response.data?.approval_id ||
+            approval.action === "prune_project_snapshots",
+        );
+        setInlineApproval(pendingApproval);
+        setSnapshotStatus("pending");
+      }
+    } catch (currentError) {
+      setError(getErrorMessage(currentError));
+    } finally {
+      setImportExportAction("");
+    }
+  }
+
   async function handleRunCommand(commandKey: string) {
     setError("");
     setMessage(null);
@@ -2147,7 +2363,11 @@ function ProjectTab() {
       approvedAction === "import_projects" ||
       approvedAction === "create_project_backup" ||
       approvedAction === "restore_project_backup" ||
-      approvedAction === "delete_project_backup";
+      approvedAction === "delete_project_backup" ||
+      approvedAction === "create_project_snapshot" ||
+      approvedAction === "restore_project_snapshot" ||
+      approvedAction === "delete_project_snapshot" ||
+      approvedAction === "prune_project_snapshots";
     try {
       const response = await resolveInlineApproval(id, action);
       if (
@@ -2172,6 +2392,15 @@ function ProjectTab() {
       ) {
         setBackupStatus("rejected");
       }
+      if (
+        (approvedAction === "create_project_snapshot" ||
+          approvedAction === "restore_project_snapshot" ||
+          approvedAction === "delete_project_snapshot" ||
+          approvedAction === "prune_project_snapshots") &&
+        action === "reject"
+      ) {
+        setSnapshotStatus("rejected");
+      }
       setInlineApproval(null);
       if (action === "approve" && isProjectRegistryApproval) {
         setEditorDirty(false);
@@ -2181,7 +2410,11 @@ function ProjectTab() {
           approvedAction === "import_projects" ||
           approvedAction === "restore_project_backup" ||
           approvedAction === "delete_project_backup" ||
-          approvedAction === "create_project_backup"
+          approvedAction === "create_project_backup" ||
+          approvedAction === "create_project_snapshot" ||
+          approvedAction === "restore_project_snapshot" ||
+          approvedAction === "delete_project_snapshot" ||
+          approvedAction === "prune_project_snapshots"
             ? null
             : asText(resultProject?.id, "");
         await loadProjectContext({
@@ -2197,6 +2430,14 @@ function ProjectTab() {
           approvedAction === "delete_project_backup"
         ) {
           setBackupStatus("completed");
+        }
+        if (
+          approvedAction === "create_project_snapshot" ||
+          approvedAction === "restore_project_snapshot" ||
+          approvedAction === "delete_project_snapshot" ||
+          approvedAction === "prune_project_snapshots"
+        ) {
+          setSnapshotStatus("completed");
         }
         return;
       }
@@ -2248,7 +2489,11 @@ function ProjectTab() {
             approval.action === "import_projects" ||
             approval.action === "create_project_backup" ||
             approval.action === "restore_project_backup" ||
-            approval.action === "delete_project_backup",
+            approval.action === "delete_project_backup" ||
+            approval.action === "create_project_snapshot" ||
+            approval.action === "restore_project_snapshot" ||
+            approval.action === "delete_project_snapshot" ||
+            approval.action === "prune_project_snapshots",
         );
         setInlineApproval(pendingApproval);
       } else {
@@ -2950,6 +3195,363 @@ function ProjectTab() {
                         <li key={validationError}>{validationError}</li>
                       ))}
                     </ul>
+                  )}
+                </article>
+              </div>
+            ) : null}
+          </section>
+
+          <section>
+            <div className="sectionHeader compact">
+              <div>
+                <h3>Snapshots</h3>
+                <p>{snapshotPreviewStatus(snapshotPreview)}</p>
+              </div>
+              <span className={`importStatus ${snapshotStatus}`}>{snapshotStatus}</span>
+            </div>
+            <div className="registryFormGrid">
+              <label>
+                Manual reason
+                <input
+                  value={snapshotReason}
+                  onChange={(event) => setSnapshotReason(event.target.value)}
+                  placeholder="manual"
+                />
+              </label>
+              <label>
+                Keep latest
+                <input
+                  type="number"
+                  min={0}
+                  disabled={pruneKeepLatest === null}
+                  value={pruneKeepLatest ?? 0}
+                  onChange={(event) => setPruneKeepLatest(Number(event.target.value))}
+                />
+              </label>
+              <label className="checkboxLabel">
+                <input
+                  type="checkbox"
+                  checked={pruneKeepLatest !== null}
+                  onChange={(event) => setPruneKeepLatest(event.target.checked ? 50 : null)}
+                />
+                Use keep latest
+              </label>
+              <label>
+                Max age days
+                <input
+                  type="number"
+                  min={0}
+                  disabled={pruneMaxAgeDays === null}
+                  value={pruneMaxAgeDays ?? 0}
+                  onChange={(event) => setPruneMaxAgeDays(Number(event.target.value))}
+                />
+              </label>
+              <label className="checkboxLabel">
+                <input
+                  type="checkbox"
+                  checked={pruneMaxAgeDays !== null}
+                  onChange={(event) => setPruneMaxAgeDays(event.target.checked ? 90 : null)}
+                />
+                Use max age
+              </label>
+            </div>
+            <div className="buttonRow">
+              <button
+                type="button"
+                disabled={Boolean(importExportAction)}
+                onClick={() => void handleCreateSnapshot()}
+              >
+                {importExportAction === "create-snapshot" ? "Requesting..." : "Create Snapshot"}
+              </button>
+              <button
+                className="secondaryButton"
+                type="button"
+                disabled={Boolean(importExportAction)}
+                onClick={() => void handleRefreshSnapshots()}
+              >
+                {importExportAction === "refresh-snapshots" ? "Refreshing..." : "Refresh List"}
+              </button>
+              <button
+                className="secondaryButton"
+                type="button"
+                disabled={Boolean(importExportAction)}
+                onClick={() => void handlePruneSnapshots(true)}
+              >
+                Preview Prune
+              </button>
+              <button
+                className="dangerButton"
+                type="button"
+                disabled={Boolean(importExportAction)}
+                onClick={() => void handlePruneSnapshots(false)}
+              >
+                Prune
+              </button>
+            </div>
+            <div className="backupList">
+              {snapshots.length === 0 ? (
+                <EmptyState>No snapshots found.</EmptyState>
+              ) : (
+                snapshots.map((snapshot) => {
+                  const isSelected = snapshot.id === selectedSnapshot;
+                  return (
+                    <article
+                      className={`backupItem${isSelected ? " selected" : ""}`}
+                      key={snapshot.filename}
+                    >
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectedSnapshot(snapshot.id);
+                          setSnapshotPreview(null);
+                          setSnapshotDiff(null);
+                          setSnapshotStatus("preview");
+                        }}
+                      >
+                        <span>{snapshot.filename}</span>
+                        <small>
+                          {snapshot.created_at || "unknown"} ·{" "}
+                          {snapshot.reason || "unknown"} ·{" "}
+                          {snapshot.project_count ?? "unknown"} project(s) · current{" "}
+                          {snapshot.current_project || "unknown"} ·{" "}
+                          {snapshot.valid ? "valid" : "invalid"}
+                        </small>
+                      </button>
+                      <div className="registryActions">
+                        <button
+                          className="secondaryButton"
+                          type="button"
+                          disabled={Boolean(importExportAction)}
+                          onClick={() => void handleValidateSnapshot(snapshot.id)}
+                        >
+                          Validate
+                        </button>
+                        <button
+                          className="secondaryButton"
+                          type="button"
+                          disabled={Boolean(importExportAction) || !snapshot.valid}
+                          onClick={() => void handleDiffSnapshot(snapshot.id)}
+                        >
+                          Diff
+                        </button>
+                        <button
+                          type="button"
+                          disabled={
+                            Boolean(importExportAction) ||
+                            !snapshot.valid ||
+                            inlineApproval?.action === "restore_project_snapshot"
+                          }
+                          onClick={() => void handleRestoreSnapshot(snapshot.id)}
+                        >
+                          {inlineApproval?.action === "restore_project_snapshot"
+                            ? "Pending approval"
+                            : "Restore"}
+                        </button>
+                        <button
+                          className="dangerButton"
+                          type="button"
+                          disabled={
+                            Boolean(importExportAction) ||
+                            inlineApproval?.action === "delete_project_snapshot"
+                          }
+                          onClick={() => void handleDeleteSnapshot(snapshot.id)}
+                        >
+                          Delete
+                        </button>
+                      </div>
+                      {!snapshot.valid && snapshot.errors?.length ? (
+                        <ul className="compactList">
+                          {snapshot.errors.map((snapshotError) => (
+                            <li key={snapshotError}>{snapshotError}</li>
+                          ))}
+                        </ul>
+                      ) : null}
+                    </article>
+                  );
+                })
+              )}
+            </div>
+            {snapshotPreview ? (
+              <div className="importPreviewGrid">
+                <article className="importPreviewBlock">
+                  <div className="sectionLabel">Snapshot</div>
+                  <p>{snapshotPreview.snapshot.filename || selectedSnapshot || "unknown"}</p>
+                </article>
+                <article className="importPreviewBlock">
+                  <div className="sectionLabel">Created</div>
+                  <p>{snapshotPreview.snapshot.created_at || "unknown"}</p>
+                </article>
+                <article className="importPreviewBlock">
+                  <div className="sectionLabel">Reason</div>
+                  <p>{snapshotPreview.snapshot.reason || "unknown"}</p>
+                </article>
+                <article className="importPreviewBlock">
+                  <div className="sectionLabel">Current project</div>
+                  <p>{snapshotPreview.snapshot.current_project || "unknown"}</p>
+                </article>
+                <article className="importPreviewBlock importPreviewWide">
+                  <div className="sectionLabel">Projects that will exist</div>
+                  <p>
+                    Restoring creates a pre-restore snapshot of the current registry first.
+                  </p>
+                  {snapshotPreview.projects.length === 0 ? (
+                    <p>none</p>
+                  ) : (
+                    <ul>
+                      {snapshotPreview.projects.map((project) => (
+                        <li key={project.id ?? project.name}>
+                          {project.name ?? project.id} ({project.id ?? "unknown"})
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </article>
+                <article className="importPreviewBlock">
+                  <div className="sectionLabel">Warnings</div>
+                  {snapshotPreview.warnings.length === 0 ? (
+                    <p>none</p>
+                  ) : (
+                    <ul>
+                      {snapshotPreview.warnings.map((warning) => (
+                        <li key={warning}>{warning}</li>
+                      ))}
+                    </ul>
+                  )}
+                </article>
+                <article className="importPreviewBlock importPreviewWide">
+                  <div className="sectionLabel">Validation errors</div>
+                  {snapshotPreview.errors.length === 0 ? (
+                    <p>none</p>
+                  ) : (
+                    <ul>
+                      {snapshotPreview.errors.map((validationError) => (
+                        <li key={validationError}>{validationError}</li>
+                      ))}
+                    </ul>
+                  )}
+                </article>
+              </div>
+            ) : null}
+            {snapshotDiff ? (
+              <div className="importPreviewGrid">
+                <article className="importPreviewBlock">
+                  <div className="sectionLabel">Current-project change</div>
+                  <p>
+                    {snapshotDiff.current_project.before || "none"} →{" "}
+                    {snapshotDiff.current_project.after || "none"}
+                  </p>
+                </article>
+                <article className="importPreviewBlock">
+                  <div className="sectionLabel">Counts</div>
+                  <p>
+                    +{snapshotDiff.counts.added} · -{snapshotDiff.counts.removed} ·{" "}
+                    {snapshotDiff.counts.updated} updated ·{" "}
+                    {snapshotDiff.counts.unchanged} unchanged
+                  </p>
+                </article>
+                <article className="importPreviewBlock">
+                  <div className="sectionLabel">Added projects</div>
+                  {snapshotDiff.added.length === 0 ? (
+                    <p>none</p>
+                  ) : (
+                    <ul>{snapshotDiff.added.map((project) => <li key={project.id}>{project.name ?? project.id}</li>)}</ul>
+                  )}
+                </article>
+                <article className="importPreviewBlock">
+                  <div className="sectionLabel">Removed projects</div>
+                  {snapshotDiff.removed.length === 0 ? (
+                    <p>none</p>
+                  ) : (
+                    <ul>{snapshotDiff.removed.map((project) => <li key={project.id}>{project.name ?? project.id}</li>)}</ul>
+                  )}
+                </article>
+                <article className="importPreviewBlock importPreviewWide">
+                  <div className="sectionLabel">Updated projects</div>
+                  {snapshotDiff.updated.length === 0 ? (
+                    <p>none</p>
+                  ) : (
+                    <ul>
+                      {snapshotDiff.updated.flatMap((project) =>
+                        project.changes.map((change) => (
+                          <li key={`${project.id}-${change.path}`}>
+                            {project.id}: {change.path}{" "}
+                            <code>{JSON.stringify(change.before)}</code> →{" "}
+                            <code>{JSON.stringify(change.after)}</code>
+                          </li>
+                        )),
+                      )}
+                    </ul>
+                  )}
+                </article>
+                <article className="importPreviewBlock importPreviewWide">
+                  <div className="sectionLabel">Unknown/root field changes</div>
+                  {snapshotDiff.root_changes.length === 0 ? (
+                    <p>none</p>
+                  ) : (
+                    <ul>
+                      {snapshotDiff.root_changes.map((change) => (
+                        <li key={change.path}>
+                          {change.path} <code>{JSON.stringify(change.before)}</code> →{" "}
+                          <code>{JSON.stringify(change.after)}</code>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </article>
+              </div>
+            ) : null}
+            {prunePreview ? (
+              <div className="importPreviewGrid">
+                <article className="importPreviewBlock">
+                  <div className="sectionLabel">Policy</div>
+                  <p>
+                    keep{" "}
+                    {asRecord(prunePreview.policy)?.keep_latest === null
+                      ? "none"
+                      : String(asRecord(prunePreview.policy)?.keep_latest ?? "unknown")}{" "}
+                    · age{" "}
+                    {asRecord(prunePreview.policy)?.max_age_days === null
+                      ? "none"
+                      : `${String(asRecord(prunePreview.policy)?.max_age_days ?? "unknown")} days`}
+                  </p>
+                </article>
+                <article className="importPreviewBlock">
+                  <div className="sectionLabel">Counts</div>
+                  <p>
+                    delete {Array.isArray(prunePreview.deleted) ? prunePreview.deleted.length : 0} · retain{" "}
+                    {Array.isArray(prunePreview.retained) ? prunePreview.retained.length : 0}
+                  </p>
+                </article>
+                <article className="importPreviewBlock importPreviewWide">
+                  <div className="sectionLabel">Prune files</div>
+                  {Array.isArray(prunePreview.deleted) && prunePreview.deleted.length > 0 ? (
+                    <ul>
+                      {prunePreview.deleted.map((item) => {
+                        const record = asRecord(item) ?? {};
+                        return (
+                          <li key={asText(record.filename, JSON.stringify(record))}>
+                            {asText(record.filename, "unknown")} ·{" "}
+                            {formatBackupSize(Number(record.size ?? 0))} ·{" "}
+                            {asText(record.sha256, "").slice(0, 12)}
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  ) : (
+                    <p>none</p>
+                  )}
+                  <p>Total: {formatBackupSize(Number(prunePreview.freed_bytes ?? 0))}</p>
+                </article>
+                <article className="importPreviewBlock importPreviewWide">
+                  <div className="sectionLabel">Warnings</div>
+                  {Array.isArray(prunePreview.warnings) && prunePreview.warnings.length > 0 ? (
+                    <ul>
+                      {prunePreview.warnings.map((warning) => (
+                        <li key={String(warning)}>{String(warning)}</li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p>none</p>
                   )}
                 </article>
               </div>

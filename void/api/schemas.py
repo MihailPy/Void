@@ -131,6 +131,37 @@ class ProjectBackupValidationResponse(BaseModel):
     preview: dict[str, Any]
 
 
+class ProjectSnapshotRequest(BaseModel):
+    id: str | None = None
+    filename: str | None = None
+
+
+class CreateProjectSnapshotRequest(BaseModel):
+    reason: str | None = None
+
+
+class ProjectSnapshotsResponse(BaseModel):
+    ok: bool
+    snapshots: list[dict[str, Any]]
+
+
+class ProjectSnapshotValidationResponse(BaseModel):
+    ok: bool
+    preview: dict[str, Any]
+
+
+class ProjectSnapshotDiffResponse(BaseModel):
+    ok: bool
+    diff: dict[str, Any]
+
+
+class ProjectSnapshotPruneRequest(BaseModel):
+    keep_latest: int | None = 50
+    max_age_days: int | None = 90
+    dry_run: bool = False
+    include_invalid: bool = False
+
+
 class DeleteProjectRequest(BaseModel):
     confirm_current: bool = False
 
