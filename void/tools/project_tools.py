@@ -520,12 +520,13 @@ def validate_prune_project_snapshots(
     include_invalid: bool = False,
 ) -> dict[str, Any]:
     if plan is not None:
+        planned = project_snapshots.validate_prune_snapshot_plan(plan)
         return {
-            "plan": plan,
-            "keep_latest": keep_latest,
-            "max_age_days": max_age_days,
+            "plan": planned,
+            "keep_latest": planned["policy"]["keep_latest"],
+            "max_age_days": planned["policy"]["max_age_days"],
             "dry_run": dry_run,
-            "include_invalid": include_invalid,
+            "include_invalid": planned["policy"]["include_invalid"],
         }
     planned = project_snapshots.plan_prune_snapshots(
         keep_latest=keep_latest,
@@ -534,10 +535,10 @@ def validate_prune_project_snapshots(
     )
     return {
         "plan": planned,
-        "keep_latest": keep_latest,
-        "max_age_days": max_age_days,
+        "keep_latest": planned["policy"]["keep_latest"],
+        "max_age_days": planned["policy"]["max_age_days"],
         "dry_run": dry_run,
-        "include_invalid": include_invalid,
+        "include_invalid": planned["policy"]["include_invalid"],
     }
 
 

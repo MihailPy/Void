@@ -16,6 +16,8 @@
 - Restore creates a pre-restore snapshot before replacing the registry.
 - Snapshot delete and prune require approval; prune execution uses the approved
   immutable plan and aborts if snapshot inventory, size, or SHA-256 data changed.
+- Snapshot prune plans reject duplicate or inconsistent inventory, deleted, and
+  retained entries before approval or deletion.
 
 ## 1.10.0
 

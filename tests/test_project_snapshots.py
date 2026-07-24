@@ -561,3 +561,191 @@ def test_snapshot_prune_all_or_nothing_verification(monkeypatch):
 
     assert _snapshot_filenames() == {snapshot["filename"] for snapshot in snapshots}
     assert _prune_success_activities() == []
+
+
+def test_prune_rejects_duplicate_deleted_filenames_without_writes(monkeypatch):
+    _save_registry()
+    snapshots = _create_snapshots(monkeypatch, 4)
+    plan = project_snapshots.plan_prune_snapshots(keep_latest=1, max_age_days=None)
+    plan["deleted"].append(deepcopy(plan["deleted"][0]))
+    before = _snapshot_filenames()
+
+    try:
+        project_snapshots.execute_prune_snapshot_plan(plan)
+    except ValueError as error:
+        assert "duplicate filename" in str(error)
+    else:
+        raise AssertionError("Duplicate deleted filename should fail before pruning")
+
+    assert before == {snapshot["filename"] for snapshot in snapshots}
+    assert _snapshot_filenames() == before
+    assert _prune_success_activities() == []
+
+
+def test_prune_rejects_duplicate_deleted_filename_before_approval(monkeypatch):
+    _save_registry()
+    registry = build_registry()
+    snapshots = _create_snapshots(monkeypatch, 4)
+    plan = project_snapshots.plan_prune_snapshots(keep_latest=1, max_age_days=None)
+    plan["deleted"].append(deepcopy(plan["deleted"][0]))
+    before = _snapshot_filenames()
+
+    response = registry.execute(AgentAction("prune_project_snapshots", {"plan": plan}, "Prune."))
+
+    assert response.ok is False
+    assert "duplicate filename" in response.content
+    assert list_approvals() == []
+    assert before == {snapshot["filename"] for snapshot in snapshots}
+    assert _snapshot_filenames() == before
+    assert _prune_success_activities() == []
+
+
+def test_prune_rejects_deleted_file_outside_inventory_without_writes(monkeypatch):
+    _save_registry()
+    snapshots = _create_snapshots(monkeypatch, 4)
+    plan = project_snapshots.plan_prune_snapshots(keep_latest=2, max_age_days=None)
+    outside = project_snapshots.create_snapshot(project_context._read_project_context_raw(), reason="outside")
+    plan["deleted"].append(deepcopy(project_snapshots._with_identity(outside)))
+    before = _snapshot_filenames()
+
+    try:
+        project_snapshots.execute_prune_snapshot_plan(plan)
+    except ValueError as error:
+        assert "outside the approved inventory" in str(error)
+    else:
+        raise AssertionError("Deleted file outside inventory should fail before pruning")
+
+    assert before == {snapshot["filename"] for snapshot in snapshots} | {outside["filename"]}
+    assert _snapshot_filenames() == before
+    assert _prune_success_activities() == []
+
+
+def test_prune_rejects_deleted_identity_mismatch_without_writes(monkeypatch):
+    _save_registry()
+    snapshots = _create_snapshots(monkeypatch, 4)
+    plan = project_snapshots.plan_prune_snapshots(keep_latest=1, max_age_days=None)
+    plan["deleted"][0]["size"] += 1
+    before = _snapshot_filenames()
+
+    try:
+        project_snapshots.execute_prune_snapshot_plan(plan)
+    except ValueError as error:
+        assert "identity does not match inventory" in str(error)
+    else:
+        raise AssertionError("Deleted identity mismatch should fail before pruning")
+
+    assert before == {snapshot["filename"] for snapshot in snapshots}
+    assert _snapshot_filenames() == before
+    assert _prune_success_activities() == []
+
+
+def test_prune_rejects_duplicate_inventory_filename_without_writes(monkeypatch):
+    _save_registry()
+    snapshots = _create_snapshots(monkeypatch, 4)
+    plan = project_snapshots.plan_prune_snapshots(keep_latest=1, max_age_days=None)
+    plan["inventory"].append(deepcopy(plan["inventory"][0]))
+    before = _snapshot_filenames()
+
+    try:
+        project_snapshots.execute_prune_snapshot_plan(plan)
+    except ValueError as error:
+        assert "inventory contains duplicate filename" in str(error)
+    else:
+        raise AssertionError("Duplicate inventory filename should fail before pruning")
+
+    assert before == {snapshot["filename"] for snapshot in snapshots}
+    assert _snapshot_filenames() == before
+    assert _prune_success_activities() == []
+
+
+def test_prune_rejects_duplicate_retained_filename_without_writes(monkeypatch):
+    _save_registry()
+    snapshots = _create_snapshots(monkeypatch, 4)
+    plan = project_snapshots.plan_prune_snapshots(keep_latest=2, max_age_days=None)
+    plan["retained"].append(deepcopy(plan["retained"][0]))
+    before = _snapshot_filenames()
+
+    try:
+        project_snapshots.execute_prune_snapshot_plan(plan)
+    except ValueError as error:
+        assert "duplicate filename" in str(error)
+    else:
+        raise AssertionError("Duplicate retained filename should fail before pruning")
+
+    assert before == {snapshot["filename"] for snapshot in snapshots}
+    assert _snapshot_filenames() == before
+    assert _prune_success_activities() == []
+
+
+def test_prune_rejects_deleted_retained_overlap_without_writes(monkeypatch):
+    _save_registry()
+    snapshots = _create_snapshots(monkeypatch, 4)
+    plan = project_snapshots.plan_prune_snapshots(keep_latest=2, max_age_days=None)
+    plan["retained"].append(deepcopy(plan["deleted"][0]))
+    before = _snapshot_filenames()
+
+    try:
+        project_snapshots.execute_prune_snapshot_plan(plan)
+    except ValueError as error:
+        assert "both deleted and retained" in str(error)
+    else:
+        raise AssertionError("Deleted/retained overlap should fail before pruning")
+
+    assert before == {snapshot["filename"] for snapshot in snapshots}
+    assert _snapshot_filenames() == before
+    assert _prune_success_activities() == []
+
+
+def test_prune_rejects_inventory_partition_omission_without_writes(monkeypatch):
+    _save_registry()
+    snapshots = _create_snapshots(monkeypatch, 4)
+    plan = project_snapshots.plan_prune_snapshots(keep_latest=2, max_age_days=None)
+    omitted = plan["retained"].pop(0)
+    before = _snapshot_filenames()
+
+    try:
+        project_snapshots.execute_prune_snapshot_plan(plan)
+    except ValueError as error:
+        assert omitted["filename"] in str(error)
+        assert "neither deleted nor retained" in str(error)
+    else:
+        raise AssertionError("Inventory partition omission should fail before pruning")
+
+    assert before == {snapshot["filename"] for snapshot in snapshots}
+    assert _snapshot_filenames() == before
+    assert _prune_success_activities() == []
+
+
+def test_prune_rejects_tampered_freed_bytes_before_approval(monkeypatch):
+    _save_registry()
+    registry = build_registry()
+    snapshots = _create_snapshots(monkeypatch, 4)
+    plan = project_snapshots.plan_prune_snapshots(keep_latest=1, max_age_days=None)
+    assert plan["freed_bytes"] != 1
+    plan["freed_bytes"] = 1
+    before = _snapshot_filenames()
+
+    response = registry.execute(AgentAction("prune_project_snapshots", {"plan": plan}, "Prune."))
+
+    assert response.ok is False
+    assert "freed_bytes" in response.content
+    assert list_approvals() == []
+    assert before == {snapshot["filename"] for snapshot in snapshots}
+    assert _snapshot_filenames() == before
+    assert _prune_success_activities() == []
+
+
+def test_prune_activity_uses_computed_freed_bytes(monkeypatch):
+    _save_registry()
+    snapshots = _create_snapshots(monkeypatch, 4)
+    plan = project_snapshots.plan_prune_snapshots(keep_latest=2, max_age_days=None)
+    expected_freed_bytes = sum(item["size"] for item in plan["deleted"])
+    del plan["freed_bytes"]
+
+    result = project_snapshots.execute_prune_snapshot_plan(plan)
+
+    assert result["freed_bytes"] == expected_freed_bytes
+    assert _snapshot_filenames() == {snapshots[0]["filename"], snapshots[1]["filename"]}
+    activities = _prune_success_activities()
+    assert len(activities) == 1
+    assert activities[0]["metadata"]["freed_bytes"] == expected_freed_bytes

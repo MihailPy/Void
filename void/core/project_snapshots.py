@@ -620,62 +620,210 @@ def plan_prune(
     )
 
 
-def _inventory_signature(inventory: Any) -> list[tuple[str, int, str]]:
+def _normalize_plan_filename(value: Any, *, context: str) -> str:
+    filename = str(value or "").strip()
+    if not filename or not filename.endswith(".json"):
+        raise ValueError(f"Snapshot prune plan {context} filename is invalid.")
+    path = snapshot_path(filename=filename)
+    if path.name != filename:
+        raise ValueError("Snapshot prune plan filename changed.")
+    return path.name
+
+
+def _normalize_inventory_item(item: Any) -> dict[str, Any]:
+    if not isinstance(item, dict):
+        raise ValueError("Snapshot prune plan inventory is invalid.")
+    filename = _normalize_plan_filename(item.get("filename"), context="inventory")
+    size = item.get("size")
+    sha256 = str(item.get("sha256") or "")
+    if type(size) is not int or size < 0 or not sha256:
+        raise ValueError("Snapshot prune plan inventory is invalid.")
+    normalized = deepcopy(item)
+    normalized["filename"] = filename
+    normalized["size"] = size
+    normalized["sha256"] = sha256
+    return normalized
+
+
+def _normalize_inventory(inventory: Any) -> tuple[list[dict[str, Any]], dict[str, dict[str, Any]]]:
     if not isinstance(inventory, list):
         raise ValueError("Snapshot prune plan inventory is invalid.")
-    signature = []
+    normalized: list[dict[str, Any]] = []
+    by_filename: dict[str, dict[str, Any]] = {}
     for item in inventory:
-        if not isinstance(item, dict):
-            raise ValueError("Snapshot prune plan inventory is invalid.")
-        filename = str(item.get("filename") or "")
-        size = item.get("size")
-        sha256 = str(item.get("sha256") or "")
-        if not filename or not filename.endswith(".json") or not isinstance(size, int) or not sha256:
-            raise ValueError("Snapshot prune plan inventory is invalid.")
-        snapshot_path(filename=filename)
-        signature.append((filename, size, sha256))
+        normalized_item = _normalize_inventory_item(item)
+        filename = normalized_item["filename"]
+        if filename in by_filename:
+            raise ValueError(f"Snapshot prune plan inventory contains duplicate filename: {filename}")
+        by_filename[filename] = {
+            "filename": filename,
+            "size": normalized_item["size"],
+            "sha256": normalized_item["sha256"],
+        }
+        normalized.append(normalized_item)
+    return normalized, by_filename
+
+
+def _inventory_signature(inventory: Any) -> list[tuple[str, int, str]]:
+    normalized, _ = _normalize_inventory(inventory)
+    signature = []
+    for item in normalized:
+        signature.append((item["filename"], item["size"], item["sha256"]))
     return sorted(signature)
 
 
-def _verify_prune_plan(plan: dict[str, Any]) -> list[dict[str, Any]]:
+def _normalize_deleted_item(item: Any, inventory_by_filename: dict[str, dict[str, Any]]) -> dict[str, Any]:
+    if not isinstance(item, dict):
+        raise ValueError("Snapshot prune plan deleted list is invalid.")
+    filename = _normalize_plan_filename(item.get("filename"), context="deleted")
+    inventory_item = inventory_by_filename.get(filename)
+    if inventory_item is None:
+        raise ValueError(f"Snapshot prune plan references a file outside the approved inventory: {filename}")
+    size = item.get("size")
+    sha256 = str(item.get("sha256") or "")
+    if type(size) is not int or size < 0 or not sha256:
+        raise ValueError("Snapshot prune plan deleted item is invalid.")
+    if size != inventory_item["size"] or sha256 != inventory_item["sha256"]:
+        raise ValueError(f"Snapshot prune plan deleted identity does not match inventory: {filename}")
+    normalized = deepcopy(item)
+    normalized["filename"] = filename
+    normalized["size"] = inventory_item["size"]
+    normalized["sha256"] = inventory_item["sha256"]
+    return normalized
+
+
+def _normalize_retained_item(item: Any, inventory_by_filename: dict[str, dict[str, Any]]) -> dict[str, Any]:
+    if not isinstance(item, dict):
+        raise ValueError("Snapshot prune plan retained list is invalid.")
+    filename = _normalize_plan_filename(item.get("filename"), context="retained")
+    inventory_item = inventory_by_filename.get(filename)
+    if inventory_item is None:
+        raise ValueError(f"Snapshot prune plan retained file is outside the approved inventory: {filename}")
+    size = item.get("size")
+    sha256 = item.get("sha256")
+    if size is not None and (type(size) is not int or size < 0 or size != inventory_item["size"]):
+        raise ValueError(f"Snapshot prune plan retained identity does not match inventory: {filename}")
+    if sha256 is not None and (not str(sha256) or str(sha256) != inventory_item["sha256"]):
+        raise ValueError(f"Snapshot prune plan retained identity does not match inventory: {filename}")
+    normalized = deepcopy(item)
+    normalized["filename"] = filename
+    return normalized
+
+
+def _normalize_plan_items(
+    items: Any,
+    *,
+    name: str,
+    inventory_by_filename: dict[str, dict[str, Any]],
+) -> tuple[list[dict[str, Any]], set[str]]:
+    if not isinstance(items, list):
+        raise ValueError(f"Snapshot prune plan {name} list is invalid.")
+    normalized: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for item in items:
+        if name == "deleted":
+            normalized_item = _normalize_deleted_item(item, inventory_by_filename)
+        else:
+            normalized_item = _normalize_retained_item(item, inventory_by_filename)
+        filename = normalized_item["filename"]
+        if filename in seen:
+            raise ValueError(f"Snapshot prune plan contains duplicate filename: {filename}")
+        seen.add(filename)
+        normalized.append(normalized_item)
+    return normalized, seen
+
+
+def validate_prune_snapshot_plan(plan: dict[str, Any]) -> dict[str, Any]:
     if not isinstance(plan, dict) or plan.get("version") != 1:
         raise ValueError("Snapshot prune plan is invalid or unsupported.")
-    expected_inventory = _inventory_signature(plan.get("inventory"))
+    policy = plan.get("policy")
+    if not isinstance(policy, dict):
+        raise ValueError("Snapshot prune plan policy is invalid.")
+    warnings = plan.get("warnings")
+    if not isinstance(warnings, list):
+        raise ValueError("Snapshot prune plan warnings list is invalid.")
+
+    inventory, inventory_by_filename = _normalize_inventory(plan.get("inventory"))
+    deleted, deleted_names = _normalize_plan_items(
+        plan.get("deleted"),
+        name="deleted",
+        inventory_by_filename=inventory_by_filename,
+    )
+    retained, retained_names = _normalize_plan_items(
+        plan.get("retained"),
+        name="retained",
+        inventory_by_filename=inventory_by_filename,
+    )
+    if not deleted_names.isdisjoint(retained_names):
+        overlap = sorted(deleted_names & retained_names)[0]
+        raise ValueError(f"Snapshot prune plan contains filename in both deleted and retained: {overlap}")
+    inventory_names = set(inventory_by_filename)
+    planned_names = deleted_names | retained_names
+    if inventory_names != planned_names:
+        missing = sorted(inventory_names - planned_names)
+        extra = sorted(planned_names - inventory_names)
+        if missing:
+            raise ValueError(f"Snapshot prune plan inventory file is neither deleted nor retained: {missing[0]}")
+        raise ValueError(f"Snapshot prune plan references a file outside the approved inventory: {extra[0]}")
+
+    actual_freed_bytes = sum(item["size"] for item in deleted)
+    if "freed_bytes" in plan:
+        freed_bytes = plan.get("freed_bytes")
+        if type(freed_bytes) is not int or freed_bytes != actual_freed_bytes:
+            raise ValueError("Snapshot prune plan freed_bytes does not match deleted file sizes.")
+
+    normalized = deepcopy(plan)
+    normalized["policy"] = deepcopy(policy)
+    normalized["inventory"] = inventory
+    normalized["deleted"] = deleted
+    normalized["retained"] = retained
+    normalized["warnings"] = deepcopy(warnings)
+    normalized["freed_bytes"] = actual_freed_bytes
+    return normalized
+
+
+def _verify_prune_plan(plan: dict[str, Any]) -> tuple[dict[str, Any], list[dict[str, Any]], int]:
+    normalized_plan = validate_prune_snapshot_plan(plan)
+    expected_inventory = _inventory_signature(normalized_plan.get("inventory"))
     current_inventory = _inventory_signature(_snapshot_inventory())
     if current_inventory != expected_inventory:
         raise ValueError("Snapshot prune plan is stale; snapshot inventory changed before pruning.")
-    deleted = plan.get("deleted")
-    if not isinstance(deleted, list):
-        raise ValueError("Snapshot prune plan deleted list is invalid.")
+    inventory_by_filename = {
+        item["filename"]: {
+            "size": item["size"],
+            "sha256": item["sha256"],
+        }
+        for item in normalized_plan["inventory"]
+    }
     planned_files: list[dict[str, Any]] = []
-    for item in deleted:
-        if not isinstance(item, dict):
-            raise ValueError("Snapshot prune plan deleted list is invalid.")
-        filename = str(item.get("filename") or "")
-        size = item.get("size")
-        sha256 = str(item.get("sha256") or "")
-        if not filename or not filename.endswith(".json") or not isinstance(size, int) or not sha256:
-            raise ValueError("Snapshot prune plan deleted item is invalid.")
+    for item in normalized_plan["deleted"]:
+        filename = item["filename"]
+        inventory_item = inventory_by_filename.get(filename)
+        if inventory_item is None:
+            raise ValueError(f"Snapshot prune plan references a file outside the approved inventory: {filename}")
+        if item["size"] != inventory_item["size"] or item["sha256"] != inventory_item["sha256"]:
+            raise ValueError(f"Snapshot prune plan deleted identity does not match inventory: {filename}")
         path = snapshot_path(filename=filename)
-        if path.name != filename:
-            raise ValueError("Snapshot prune plan filename changed.")
         if not path.exists():
             raise ValueError(f"Planned snapshot disappeared: {filename}")
         if not path.is_file():
             raise ValueError(f"Planned snapshot is not a regular file: {filename}")
         identity = _file_identity(path)
-        if identity["size"] != size or identity["sha256"] != sha256:
+        if identity["size"] != item["size"] or identity["sha256"] != item["sha256"]:
             raise ValueError(f"Planned snapshot changed before pruning: {filename}")
         planned_files.append(item)
-    return planned_files
+    actual_freed_bytes = sum(item["size"] for item in planned_files)
+    normalized_plan["freed_bytes"] = actual_freed_bytes
+    return normalized_plan, planned_files, actual_freed_bytes
 
 
 def execute_prune_snapshot_plan(plan: dict[str, Any]) -> dict[str, Any]:
-    planned_files = _verify_prune_plan(plan)
+    normalized_plan, planned_files, actual_freed_bytes = _verify_prune_plan(plan)
     for item in planned_files:
         snapshot_path(filename=item["filename"]).unlink()
-    policy = plan.get("policy") if isinstance(plan.get("policy"), dict) else {}
-    result = deepcopy(plan)
+    policy = normalized_plan["policy"]
+    result = deepcopy(normalized_plan)
+    result["freed_bytes"] = actual_freed_bytes
     activity_history.log_activity(
         "project_snapshots_pruned",
         "success",
@@ -683,7 +831,7 @@ def execute_prune_snapshot_plan(plan: dict[str, Any]) -> dict[str, Any]:
         {
             "deleted": [item["filename"] for item in planned_files],
             "deleted_count": len(planned_files),
-            "freed_bytes": result.get("freed_bytes", 0),
+            "freed_bytes": actual_freed_bytes,
             "keep_latest": policy.get("keep_latest"),
             "max_age_days": policy.get("max_age_days"),
             "include_invalid": policy.get("include_invalid", False),
