@@ -20,6 +20,7 @@ def temp_memory_dir(tmp_path, monkeypatch):
         clarification,
         permissions,
         project_context,
+        project_snapshots,
         safety,
         scheduler,
     )
@@ -43,6 +44,7 @@ def temp_memory_dir(tmp_path, monkeypatch):
     )
     monkeypatch.setattr(project_context, "PROJECT_CONTEXT_PATH", memory_dir / "projects.json")
     monkeypatch.setattr(project_context, "PROJECT_BACKUP_DIR", tmp_path / "void" / "backups" / "projects")
+    monkeypatch.setattr(project_snapshots, "PROJECT_SNAPSHOT_DIR", tmp_path / "void" / "project-snapshots")
 
     monkeypatch.setattr(capabilities, "CAPABILITY_DIR", capabilities_dir)
     monkeypatch.setattr(capabilities, "INSTALLED_PATH", capabilities_dir / "installed.json")

@@ -5,7 +5,7 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any
 
-from void.core import activity_history, project_context
+from void.core import project_context
 
 EDITABLE_FIELDS: dict[str, set[str]] = {
     "terminal": {
@@ -171,7 +171,8 @@ def update_workspace_preferences(
     if len(changes) > MAX_CHANGES:
         raise ValueError(f"changes must contain at most {MAX_CHANGES} items.")
 
-    payload = project_context.load_project_context()
+    previous_payload = project_context._read_project_context_raw()
+    payload = project_context._validate_payload(previous_payload)
     project_needle = str(project).strip() if project is not None and str(project).strip() else None
     if project_needle is None:
         project_needle = str(payload.get("current_project", "")).strip()
@@ -250,7 +251,24 @@ def update_workspace_preferences(
     if updated_project is None:
         raise ValueError(f"Project not found: {project or selected_id}")
 
-    saved = project_context.save_project_context(updated_payload)
+    committed = project_context.commit_project_registry_mutation(
+        action="update_workspace_preferences",
+        previous_payload=previous_payload,
+        final_payload=updated_payload,
+        activity_type="workspace_preferences_update",
+        activity_summary=(
+            f"Updated {len(applied_changes)} workspace preference(s) "
+            f"for {updated_project.get('name', selected_id)}"
+        ),
+        activity_metadata={
+            "project": {
+                "id": updated_project.get("id", ""),
+                "name": updated_project.get("name", updated_project.get("id", "")),
+            },
+            "changes": deepcopy(applied_changes),
+        },
+    )
+    saved = committed["payload"]
     saved_project = next(
         project for project in saved["projects"] if str(project.get("id", "")).casefold() == selected_id.casefold()
     )
@@ -258,18 +276,10 @@ def update_workspace_preferences(
         "id": saved_project.get("id", ""),
         "name": saved_project.get("name", saved_project.get("id", "")),
     }
-
-    activity_history.log_activity(
-        "workspace_preferences_update",
-        "success",
-        f"Updated {len(applied_changes)} workspace preference(s) for {saved_project.get('name', selected_id)}",
-        {
-            "project": activity_project,
-            "changes": deepcopy(applied_changes),
-        },
-    )
     return {
         "project": activity_project,
         "changes": deepcopy(applied_changes),
         "preferences": deepcopy(saved_project.get("workspace", {})),
+        "changed": committed["changed"],
+        "snapshot": committed["snapshot"],
     }

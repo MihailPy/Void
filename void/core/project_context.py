@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any
 
 from void.core import activity_history
+from void.core import project_snapshots
 from void.__version__ import __version__
 from void.core.safety import PROJECT_ROOT
 
@@ -1027,20 +1028,25 @@ def restore_project_backup(
     if final_errors:
         raise ValueError("\n".join(final_errors))
 
-    saved = save_project_context(restored_payload)
-    preview = _preview_for_saved_restore(preview, saved)
-    activity_history.log_activity(
-        "project_backup_restored",
-        "success",
-        f"Restored project registry backup {backup_path.name}",
-        {
+    previous_payload = _read_project_context_raw()
+    committed = commit_project_registry_mutation(
+        action="restore_project_backup",
+        previous_payload=previous_payload,
+        final_payload=restored_payload,
+        activity_type="project_backup_restored",
+        activity_summary=f"Restored project registry backup {backup_path.name}",
+        activity_metadata={
             "filename": backup_path.name,
             "path": str(backup_path),
-            "project_count": len(saved["projects"]),
-            "current_project": saved["current_project"],
+            "project_count": len(_validate_payload(restored_payload)["projects"]),
+            "current_project": _validate_payload(restored_payload)["current_project"],
         },
     )
+    saved = committed["payload"]
+    preview = _preview_for_saved_restore(preview, saved)
     return {
+        "changed": committed["changed"],
+        "snapshot": committed["snapshot"],
         "preview": preview,
         "projects": saved["projects"],
         "current_project": saved["current_project"],
@@ -1054,6 +1060,73 @@ def restore_project_backup_validation(
     preview = validate_project_backup(filename, path)
     if preview["errors"]:
         raise ValueError("\n".join(preview["errors"]))
+
+
+def plan_project_snapshot_restore(
+    snapshot_id: str | None = None,
+    filename: str | None = None,
+) -> dict[str, Any]:
+    return project_snapshots.plan_snapshot_restore(snapshot_id, filename)
+
+
+def restore_project_snapshot(
+    snapshot_id: str | None = None,
+    filename: str | None = None,
+) -> dict[str, Any]:
+    plan = plan_project_snapshot_restore(snapshot_id, filename)
+    preview = plan["preview"]
+    if preview["errors"]:
+        raise ValueError("\n".join(preview["errors"]))
+
+    restored_payload = deepcopy(plan["restored_payload"])
+    final_errors = _strict_registry_errors(restored_payload)
+    if final_errors:
+        raise ValueError("\n".join(final_errors))
+
+    previous_payload = _read_project_context_raw()
+    restored_preview = project_snapshots.diff_registries(restored_payload, previous_payload)
+    if _validate_payload(previous_payload) == _validate_payload(restored_payload):
+        saved = _validate_payload(previous_payload)
+        return {
+            "changed": False,
+            "restored_snapshot": {
+                "id": preview["id"],
+                "filename": preview["filename"],
+            },
+            "pre_restore_snapshot": None,
+            "preview": restored_preview,
+            "projects": saved["projects"],
+            "current_project": saved["current_project"],
+        }
+
+    committed = commit_project_registry_mutation(
+        action="restore_project_snapshot",
+        previous_payload=previous_payload,
+        final_payload=restored_payload,
+        activity_type="project_snapshot_restored",
+        activity_summary=f"Restored project registry snapshot {preview['filename']}",
+        activity_metadata={
+            "restored_snapshot_id": preview["id"],
+            "restored_filename": preview["filename"],
+            "project_count": len(_validate_payload(restored_payload)["projects"]),
+            "current_project": _validate_payload(restored_payload)["current_project"],
+        },
+    )
+    saved = committed["payload"]
+    return {
+        "changed": True,
+        "restored_snapshot": {
+            "id": preview["id"],
+            "filename": preview["filename"],
+        },
+        "pre_restore_snapshot": {
+            "id": committed["snapshot"]["id"],
+            "filename": committed["snapshot"]["filename"],
+        },
+        "preview": restored_preview,
+        "projects": saved["projects"],
+        "current_project": saved["current_project"],
+    }
 
 
 def delete_project_backup(
@@ -1384,17 +1457,19 @@ def import_projects(
     final_errors = _final_payload_errors(updated_payload)
     if final_errors:
         raise ValueError("\n".join(final_errors))
-    saved = save_project_context(updated_payload)
+    previous_payload = _read_project_context_raw()
 
     counts = preview["counts"]
-    activity_history.log_activity(
-        "project_import",
-        "success",
-        (
+    committed = commit_project_registry_mutation(
+        action="import_projects",
+        previous_payload=previous_payload,
+        final_payload=updated_payload,
+        activity_type="project_import",
+        activity_summary=(
             "Imported projects: "
             f"{counts['creates']} create(s), {counts['updates']} update(s), {counts['skips']} skip(s)"
         ),
-        {
+        activity_metadata={
             "project_count": counts["projects"],
             "creates": counts["creates"],
             "updates": counts["updates"],
@@ -1411,7 +1486,10 @@ def import_projects(
             ],
         },
     )
+    saved = committed["payload"]
     return {
+        "changed": committed["changed"],
+        "snapshot": committed["snapshot"],
         "preview": preview,
         "projects": saved["projects"],
         "current_project": saved["current_project"],
@@ -1445,6 +1523,57 @@ def save_project_context(payload: dict[str, Any]) -> dict[str, Any]:
     return clean_payload
 
 
+def commit_project_registry_mutation(
+    *,
+    action: str,
+    previous_payload: dict[str, Any],
+    final_payload: dict[str, Any],
+    activity_type: str,
+    activity_summary: str,
+    activity_metadata: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Snapshot, save, and audit one project registry mutation."""
+    clean_previous = _validate_payload(previous_payload)
+    clean_final = _validate_payload(final_payload)
+    if clean_previous == clean_final:
+        return {
+            "changed": False,
+            "snapshot": None,
+            "payload": clean_previous,
+            "activity": None,
+        }
+
+    snapshot = None
+    if action == "restore_project_snapshot" or project_snapshots.retention_config(previous_payload)["automatic"]:
+        snapshot = project_snapshots.create_snapshot(
+            deepcopy(previous_payload),
+            reason=action,
+            source_action=action,
+            automatic=True,
+            log=True,
+        )
+    saved = save_project_context(clean_final)
+    metadata = dict(activity_metadata or {})
+    if snapshot is not None:
+        metadata["snapshot_id"] = snapshot["id"]
+        metadata["snapshot_filename"] = snapshot["filename"]
+        if action == "restore_project_snapshot":
+            metadata["pre_restore_snapshot_id"] = snapshot["id"]
+            metadata["pre_restore_filename"] = snapshot["filename"]
+    activity = activity_history.log_activity(
+        activity_type,
+        "success",
+        activity_summary,
+        metadata,
+    )
+    return {
+        "changed": True,
+        "snapshot": snapshot,
+        "payload": saved,
+        "activity": activity,
+    }
+
+
 def list_projects() -> list[dict[str, Any]]:
     return load_project_context()["projects"]
 
@@ -1457,13 +1586,13 @@ def get_project(project: str) -> dict[str, Any]:
 
 
 def create_project(project: dict[str, Any], duplicate_source_id: str | None = None) -> dict[str, Any]:
-    payload = load_project_context()
+    previous_payload = _read_project_context_raw()
+    payload = _validate_payload(previous_payload)
     clean_project = _project_payload(project)
     _validate_unique_project_id(payload, clean_project["id"])
     updated_payload = deepcopy(payload)
     updated_payload["projects"].append(clean_project)
-    saved = save_project_context(updated_payload)
-    saved_project = get_project_from_payload(saved, clean_project["id"])
+    saved_project = get_project_from_payload(_validate_payload(updated_payload), clean_project["id"])
     activity_type = "project_duplicate" if duplicate_source_id else "project_create"
     summary = (
         f"Duplicated project {duplicate_source_id} to {saved_project['name']}"
@@ -1473,8 +1602,16 @@ def create_project(project: dict[str, Any], duplicate_source_id: str | None = No
     metadata = {"project": activity_history.compact_project(saved_project)}
     if duplicate_source_id:
         metadata["source_project_id"] = duplicate_source_id
-    activity_history.log_activity(activity_type, "success", summary, metadata)
-    return {"project": saved_project}
+    committed = commit_project_registry_mutation(
+        action="duplicate_project" if duplicate_source_id else "create_project",
+        previous_payload=previous_payload,
+        final_payload=updated_payload,
+        activity_type=activity_type,
+        activity_summary=summary,
+        activity_metadata=metadata,
+    )
+    saved_project = get_project_from_payload(committed["payload"], clean_project["id"])
+    return {"project": saved_project, "changed": committed["changed"], "snapshot": committed["snapshot"]}
 
 
 def create_project_validation(project: dict[str, Any], duplicate_source_id: str | None = None) -> None:
@@ -1486,7 +1623,8 @@ def create_project_validation(project: dict[str, Any], duplicate_source_id: str 
 
 
 def update_project(project_id: str, project: dict[str, Any]) -> dict[str, Any]:
-    payload = load_project_context()
+    previous_payload = _read_project_context_raw()
+    payload = _validate_payload(previous_payload)
     index = _project_index(payload, project_id)
     if index is None:
         raise ValueError(f"Project not found: {project_id}")
@@ -1504,15 +1642,17 @@ def update_project(project_id: str, project: dict[str, Any]) -> dict[str, Any]:
     updated_payload["projects"][index] = updated_project
     if _normalize(str(updated_payload.get("current_project", ""))) == _normalize(project_id):
         updated_payload["current_project"] = updated_project["id"]
-    saved = save_project_context(updated_payload)
-    saved_project = get_project_from_payload(saved, updated_project["id"])
-    activity_history.log_activity(
-        "project_update",
-        "success",
-        f"Updated project {saved_project['name']}",
-        {"project": activity_history.compact_project(saved_project)},
+    planned_project = get_project_from_payload(_validate_payload(updated_payload), updated_project["id"])
+    committed = commit_project_registry_mutation(
+        action="update_project",
+        previous_payload=previous_payload,
+        final_payload=updated_payload,
+        activity_type="project_update",
+        activity_summary=f"Updated project {planned_project['name']}",
+        activity_metadata={"project": activity_history.compact_project(planned_project)},
     )
-    return {"project": saved_project}
+    saved_project = get_project_from_payload(committed["payload"], updated_project["id"])
+    return {"project": saved_project, "changed": committed["changed"], "snapshot": committed["snapshot"]}
 
 
 def update_project_validation(project_id: str, project: dict[str, Any]) -> None:
@@ -1524,7 +1664,8 @@ def update_project_validation(project_id: str, project: dict[str, Any]) -> None:
 
 
 def delete_project(project_id: str, confirm_current: bool = False) -> dict[str, Any]:
-    payload = load_project_context()
+    previous_payload = _read_project_context_raw()
+    payload = _validate_payload(previous_payload)
     if len(payload["projects"]) <= 1:
         raise ValueError("Cannot delete the last project.")
     index = _project_index(payload, project_id)
@@ -1539,17 +1680,25 @@ def delete_project(project_id: str, confirm_current: bool = False) -> dict[str, 
     next_project = updated_payload["projects"][0]
     if is_current:
         updated_payload["current_project"] = next_project["id"]
-    saved = save_project_context(updated_payload)
-    activity_history.log_activity(
-        "project_delete",
-        "success",
-        f"Deleted project {deleted['name']}",
-        {
+    planned = _validate_payload(updated_payload)
+    committed = commit_project_registry_mutation(
+        action="delete_project",
+        previous_payload=previous_payload,
+        final_payload=updated_payload,
+        activity_type="project_delete",
+        activity_summary=f"Deleted project {deleted['name']}",
+        activity_metadata={
             "project": activity_history.compact_project(deleted),
-            "current_project": saved["current_project"],
+            "current_project": planned["current_project"],
         },
     )
-    return {"project": deleted, "current_project": saved["current_project"]}
+    saved = committed["payload"]
+    return {
+        "project": deleted,
+        "current_project": saved["current_project"],
+        "changed": committed["changed"],
+        "snapshot": committed["snapshot"],
+    }
 
 
 def delete_project_validation(project_id: str, confirm_current: bool = False) -> None:
@@ -1626,10 +1775,24 @@ def set_current_project(project_id_or_alias: str) -> dict[str, Any]:
             "error": f"Project not found: {project_id_or_alias}",
         }
 
-    payload = load_project_context()
+    previous_payload = _read_project_context_raw()
+    payload = _validate_payload(previous_payload)
     payload["current_project"] = project["id"]
-    save_project_context(payload)
-    return {"ok": True, "project": project}
+    committed = commit_project_registry_mutation(
+        action="set_current_project",
+        previous_payload=previous_payload,
+        final_payload=payload,
+        activity_type="project_switch",
+        activity_summary=f"Switched project to {project['name']}",
+        activity_metadata={
+            "project": activity_history.compact_project(project),
+            "replay": {
+                "action": "set_current_project",
+                "arguments": {"project": project["id"]},
+            },
+        },
+    )
+    return {"ok": True, "project": project, "changed": committed["changed"], "snapshot": committed["snapshot"]}
 
 
 def describe_current_project() -> str:
