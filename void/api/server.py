@@ -47,6 +47,12 @@ from void.api.schemas import (
     ProjectBackupRequest,
     ProjectBackupsResponse,
     ProjectBackupValidationResponse,
+    CreateProjectSnapshotRequest,
+    ProjectSnapshotDiffResponse,
+    ProjectSnapshotPruneRequest,
+    ProjectSnapshotRequest,
+    ProjectSnapshotsResponse,
+    ProjectSnapshotValidationResponse,
     ProjectExportResponse,
     ProjectImportRequest,
     ProjectImportValidationResponse,
@@ -653,6 +659,170 @@ def delete_project_backup(
         {"filename": request.filename, "path": request.path},
         f"Delete project registry backup:\n\nBackup: {target}",
     )
+
+
+@app.get("/projects/snapshots", response_model=ProjectSnapshotsResponse | ErrorResponse)
+def project_snapshots(
+    _: None = Depends(require_api_token),
+    registry: ToolRegistry = Depends(get_tool_registry),
+) -> ProjectSnapshotsResponse | ErrorResponse:
+    try:
+        result = _execute_read_api_tool(registry, "list_project_snapshots")
+        return ProjectSnapshotsResponse(ok=True, snapshots=(result.data or {}).get("snapshots", []))
+    except Exception as error:
+        return _error(error)
+
+
+@app.post("/projects/snapshots", response_model=ApprovalResponse | ErrorResponse)
+def create_project_snapshot(
+    request: CreateProjectSnapshotRequest,
+    _: None = Depends(require_api_token),
+    registry: ToolRegistry = Depends(get_tool_registry),
+) -> ApprovalResponse | ErrorResponse:
+    reason = request.reason or "manual"
+    return _execute_api_tool(
+        registry,
+        "create_project_snapshot",
+        {"reason": reason},
+        f"Create project registry snapshot:\n\nReason: {reason}",
+    )
+
+
+@app.post(
+    "/projects/snapshots/validate",
+    response_model=ProjectSnapshotValidationResponse | ErrorResponse,
+)
+def validate_project_snapshot(
+    request: ProjectSnapshotRequest,
+    _: None = Depends(require_api_token),
+    registry: ToolRegistry = Depends(get_tool_registry),
+) -> ProjectSnapshotValidationResponse | ErrorResponse:
+    try:
+        arguments = {"id": request.id, "filename": request.filename}
+        result = registry.execute(
+            AgentAction("validate_project_snapshot", arguments, "API request.")
+        )
+        return ProjectSnapshotValidationResponse(
+            ok=result.ok,
+            preview=(result.data or {}).get("preview", {}),
+        )
+    except Exception as error:
+        return _error(error)
+
+
+@app.post(
+    "/projects/snapshots/diff",
+    response_model=ProjectSnapshotDiffResponse | ErrorResponse,
+)
+def diff_project_snapshot(
+    request: ProjectSnapshotRequest,
+    _: None = Depends(require_api_token),
+    registry: ToolRegistry = Depends(get_tool_registry),
+) -> ProjectSnapshotDiffResponse | ErrorResponse:
+    try:
+        result = _execute_read_api_tool(
+            registry,
+            "diff_project_snapshot",
+            {"id": request.id, "filename": request.filename},
+        )
+        return ProjectSnapshotDiffResponse(ok=True, diff=(result.data or {}).get("diff", {}))
+    except Exception as error:
+        return _error(error)
+
+
+@app.post("/projects/snapshots/restore", response_model=ApprovalResponse | ErrorResponse)
+def restore_project_snapshot(
+    request: ProjectSnapshotRequest,
+    _: None = Depends(require_api_token),
+    registry: ToolRegistry = Depends(get_tool_registry),
+) -> ApprovalResponse | ErrorResponse:
+    arguments = {"id": request.id, "filename": request.filename}
+    preview_result = registry.execute(
+        AgentAction("validate_project_snapshot", arguments, "API request.")
+    )
+    preview = (preview_result.data or {}).get("preview", {})
+    if not preview_result.ok:
+        return ApprovalResponse(
+            ok=False,
+            message=preview_result.content,
+            result_type="message",
+            data={"preview": preview},
+        )
+    response = _execute_api_tool(
+        registry,
+        "restore_project_snapshot",
+        arguments,
+        (
+            "Restore project registry snapshot:\n\n"
+            f"Snapshot: {preview.get('snapshot', {}).get('filename') or request.filename or request.id or ''}\n"
+            f"Created: {preview.get('snapshot', {}).get('created_at') or 'unknown'}\n"
+            f"Reason: {preview.get('snapshot', {}).get('reason') or 'unknown'}\n"
+            f"Projects: {preview.get('snapshot', {}).get('project_count', 0)}\n"
+            "The current registry will first be snapshotted."
+        ),
+    )
+    if isinstance(response, ApprovalResponse):
+        data = dict(response.data or {})
+        data["preview"] = preview
+        response.data = data
+    return response
+
+
+@app.delete("/projects/snapshots/{snapshot_id}", response_model=ApprovalResponse | ErrorResponse)
+def delete_project_snapshot(
+    snapshot_id: str,
+    _: None = Depends(require_api_token),
+    registry: ToolRegistry = Depends(get_tool_registry),
+) -> ApprovalResponse | ErrorResponse:
+    return _execute_api_tool(
+        registry,
+        "delete_project_snapshot",
+        {"id": snapshot_id},
+        f"Delete project registry snapshot:\n\nSnapshot: {snapshot_id}",
+    )
+
+
+@app.post("/projects/snapshots/prune", response_model=ApprovalResponse | ErrorResponse)
+def prune_project_snapshots(
+    request: ProjectSnapshotPruneRequest,
+    _: None = Depends(require_api_token),
+    registry: ToolRegistry = Depends(get_tool_registry),
+) -> ApprovalResponse | ErrorResponse:
+    arguments = request.model_dump()
+    preview_result = registry.execute(
+        AgentAction(
+            "prune_project_snapshots",
+            {**arguments, "dry_run": True},
+            "API request.",
+        ),
+        bypass_confirmation=True,
+    )
+    if not preview_result.ok:
+        return ApprovalResponse(
+            ok=False,
+            message=preview_result.content,
+            result_type="message",
+            data=preview_result.data,
+        )
+    if request.dry_run:
+        return ApprovalResponse(
+            ok=True,
+            message=preview_result.content,
+            result_type="message",
+            data=preview_result.data,
+        )
+    filenames = [item.get("filename", "") for item in (preview_result.data or {}).get("deleted", [])]
+    response = _execute_api_tool(
+        registry,
+        "prune_project_snapshots",
+        arguments,
+        "Prune project registry snapshots:\n\n" + "\n".join(f"- {name}" for name in filenames),
+    )
+    if isinstance(response, ApprovalResponse):
+        data = dict(response.data or {})
+        data["preview"] = preview_result.data
+        response.data = data
+    return response
 
 
 @app.get("/projects/{project_id}/export", response_model=ProjectExportResponse | ErrorResponse)
