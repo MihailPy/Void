@@ -367,7 +367,7 @@ Each backup uses an explicit JSON envelope. Backup metadata is stored under
   "backup": {
     "version": 1,
     "created_at": "2026-07-23T12:00:00",
-    "void_version": "1.10.0",
+    "void_version": "1.11.0",
     "metadata": {
       "project_count": 1
     }
@@ -414,6 +414,80 @@ validate_project_backup filename=2026-07-23_12-00-00_registry.json
 restore_project_backup filename=2026-07-23_12-00-00_registry.json
 delete_project_backup filename=2026-07-23_12-00-00_registry.json
 ```
+
+### Project Snapshots
+
+Backups and snapshots are separate. A backup is a user-created portable registry
+copy stored under `void/backups/projects/`. A snapshot is an internal rollback
+point stored under:
+
+```text
+void/project-snapshots/
+```
+
+Void automatically creates one pre-mutation snapshot before each real project
+registry write, including create, update, duplicate save, delete, current
+project switch, import, backup restore, snapshot restore, and workspace
+preference updates. Rejected approvals, failed validation, read-only previews,
+exports, backup creation, snapshot listing, and no-op mutations do not create
+snapshots or save the registry.
+
+Snapshot filenames include microseconds and a safe reason/action slug:
+
+```text
+YYYY-MM-DD_HH-MM-SS-microseconds_update-project.json
+YYYY-MM-DD_HH-MM-SS-microseconds_update-project-2.json
+```
+
+Snapshot files never share storage with backups and are never overwritten.
+Creation uses exclusive file creation with deterministic numeric suffixes. Each
+file contains a `snapshot` metadata envelope and an exact deep copy of the
+persisted registry under `registry`, so unknown root fields, unknown project
+fields, and nested workspace fields survive:
+
+```text
+current registry -> snapshot -> restore
+```
+
+Manual snapshots require approval and log `project_snapshot_created` with
+`automatic: false`. Automatic snapshots are created inside the already approved
+registry write and log `project_snapshot_created` with `automatic: true`. The
+following tool commands are available:
+
+```text
+create_project_snapshot reason="before experimenting"
+list_project_snapshots
+validate_project_snapshot id=2026-07-24_12-30-45-123456_update-project
+diff_project_snapshot id=2026-07-24_12-30-45-123456_update-project
+restore_project_snapshot id=2026-07-24_12-30-45-123456_update-project
+delete_project_snapshot id=2026-07-24_12-30-45-123456_update-project
+prune_project_snapshots keep_latest=50 max_age_days=90
+```
+
+Diff preview is deterministic and structural. It compares the selected snapshot
+as `before` against the current registry as `after`, matches projects by
+normalized project ID, recursively compares dictionaries, treats lists as
+ordered values, includes unknown fields, and represents missing values as
+`{"missing": true}` instead of stringifying them.
+
+Snapshot restore requires approval. During approved execution Void reads the
+selected snapshot once, validates that exact payload, builds the diff preview
+from it, creates a pre-restore snapshot of the current registry, saves the
+historical registry once, and logs `project_snapshot_restored` with both the
+restored snapshot ID and the pre-restore snapshot ID. If restore would be a
+no-op, Void does not create another snapshot or save the registry.
+
+Snapshot deletion and non-dry prune require approval. Prune is explicit only;
+there is no background retention worker. The default retention policy is
+conservative: keep the newest 100 snapshots, with no automatic age cutoff unless
+requested. Combined prune behavior keeps snapshots among the newest
+`keep_latest` even when older than `max_age_days`; other snapshots older than
+the cutoff may be removed. Malformed snapshots are retained by default and
+reported as warnings unless `include_invalid` is explicitly enabled. Approved
+prune verifies the planned filename, size, and content hash before deleting.
+
+Snapshots are local JSON files and may contain project paths, repository URLs,
+commands, workspace configuration, and other registry metadata.
 
 The registry also exposes API and Tool Registry operations:
 
